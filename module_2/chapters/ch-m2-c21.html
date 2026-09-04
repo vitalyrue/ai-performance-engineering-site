@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>21&nbsp; KV Cache: Speeding Up Generation – Mathematical Foundations of LLM Training and Inference</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../parts/part-m2-p06.html" rel="next">
+<link href="../chapters/ch-m2-c20.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p05.html">Part V: Adapting and Running LLMs</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c21.html"><span class="chapter-number">21</span>&nbsp; <span class="chapter-title">KV Cache: Speeding Up Generation</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Mathematical Foundations of LLM Training and Inference</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Mathematical Foundations of LLM Training and Inference</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-roadmap.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Roadmap</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-notation.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Notation</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-library-map.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library Map</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: From Text to Mathematical Objects</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Prediction Targets: Defining What the Model Learns</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Token IDs: Discretizing Text into Numbers and Batches</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Subword Tokenization: Building Compact Vocabularies</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Count Vectors &amp; TF-IDF: Extracting Word Frequencies and Their Limits</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: From Scores to Loss</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Linear Hyperplanes: Scoring Features with Matrix Math</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Sigmoid &amp; Softmax: Turning Raw Scores into Probabilities</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Decoding Strategies: Generating Text Token by Token</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Cross-Entropy &amp; Perplexity: Measuring Prediction Error and Uncertainty</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Validation &amp; Testing: Catching Overfitting and Measuring Generalization</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: From Error to Learning</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">AdamW &amp; Momentum: Steering Parameter Updates</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Backpropagation: Tracing Error Gradients via the Chain Rule</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Activation Functions: Bending Decision Boundaries with MLPs</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Embedding Tables: Looking Up Dense Word Vectors</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c14.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">14</span>&nbsp; <span class="chapter-title">Word2Vec: Learning Word Geometry from Context</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part IV: Modeling Sequences</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c15.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">Recurrent Networks: Why Sequential Memory Hits a Wall</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c16.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">16</span>&nbsp; <span class="chapter-title">Attention Mathematics</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c17.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">17</span>&nbsp; <span class="chapter-title">Transformer Blocks: Building Deep, Order-Aware Networks</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c18.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">18</span>&nbsp; <span class="chapter-title">Transformer Topologies: Choosing the Right Architecture</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c19.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">19</span>&nbsp; <span class="chapter-title">Pretraining Data and Scaling</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part V: Adapting and Running LLMs</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c20.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">20</span>&nbsp; <span class="chapter-title">Low-Rank Adaptation and Preference Alignment</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c21.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">21</span>&nbsp; <span class="chapter-title">KV Cache: Speeding Up Generation</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part VI: Implementation and Extensions</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c22.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">22</span>&nbsp; <span class="chapter-title">Multimodal Transformers: Processing Images and Audio</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c24.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">24</span>&nbsp; <span class="chapter-title">Computational Labs: Verifying the Math in Code</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m2-dictionary.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Dictionary</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m2-c21-s01" id="toc-sec-m2-c21-s01" class="nav-link active" data-scroll-target="#sec-m2-c21-s01"><span class="header-section-number">21.1</span> Eliminating Redundant Attention Recomputations with the KV Cache</a></li>
+  <li><a href="#sec-m2-c21-s02" id="toc-sec-m2-c21-s02" class="nav-link" data-scroll-target="#sec-m2-c21-s02"><span class="header-section-number">21.2</span> Diagnosing Compute-Bound Prefill and Memory-Bound Decode Latency</a></li>
+  <li><a href="#sec-m2-c21-s03" id="toc-sec-m2-c21-s03" class="nav-link" data-scroll-target="#sec-m2-c21-s03"><span class="header-section-number">21.3</span> Maximizing Serving Throughput with Continuous Batching and Chunked Prefill</a></li>
+  <li><a href="#sec-m2-c21-s04" id="toc-sec-m2-c21-s04" class="nav-link" data-scroll-target="#sec-m2-c21-s04"><span class="header-section-number">21.4</span> Reusing Common Prompt States with Prefix Caching</a></li>
+  <li><a href="#sec-m2-c21-s05" id="toc-sec-m2-c21-s05" class="nav-link" data-scroll-target="#sec-m2-c21-s05"><span class="header-section-number">21.5</span> Managing Non-Contiguous GPU Memory with PagedAttention</a></li>
+  <li><a href="#sec-m2-c21-s06" id="toc-sec-m2-c21-s06" class="nav-link" data-scroll-target="#sec-m2-c21-s06"><span class="header-section-number">21.6</span> Inference-state trace</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p05.html">Part V: Adapting and Running LLMs</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c21.html"><span class="chapter-number">21</span>&nbsp; <span class="chapter-title">KV Cache: Speeding Up Generation</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m2-c21" class="quarto-section-identifier"><span class="chapter-number">21</span>&nbsp; <span class="chapter-title">KV Cache: Speeding Up Generation</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Autoregressive generation revisits the prompt and growing continuation for every new token. Storing prior attention keys and values avoids repeating that old work, at the cost of growing memory use.</p>
+<p>Generation repeatedly extends one sequence by one token. The KV cache stores attention state from earlier tokens, while batching and cache management determine latency, throughput, and memory use in a serving system.</p>
+<p>In code, <code>model.generate</code> exposes token generation and <code>past_key_values</code>; vLLM, SGLang, and TensorRT-LLM are supplementary engines for cache layout, batching, and scheduling.</p>
+<p>Chapter 21 develops one required stage of the guide’s computation.</p>
+<div id="fig-m2-c21-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 21 opener for Decoding, KV cache, batching, and latency, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c21-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c21-f01.png" class="img-fluid figure-img" style="width:5.9in" alt="Chapter 21 opener for Decoding, KV cache, batching, and latency, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c21-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;21.1: Prefill creates reusable attention state; decode appends one token while a scheduler batches active requests.
+</figcaption>
+</figure>
+</div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
+<section id="sec-m2-c21-s01" class="level2" data-number="21.1">
+<h2 data-number="21.1" class="anchored" data-anchor-id="sec-m2-c21-s01"><span class="header-section-number">21.1</span> Eliminating Redundant Attention Recomputations with the KV Cache</h2>
+<p>Transformer inference has two phases. Prefill processes the prompt and builds attention state; decode generates one new token at a time while reusing cached keys and values.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill:</strong></span> The forward pass over the existing prompt tokens.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode:</strong></span> The repeated step that produces one new token per sequence.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>KV cache:</strong></span> Stored attention keys and values reused during autoregressive decoding.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefix cache:</strong></span> A cache for shared prompt prefixes across requests.</li>
+</ul>
+<p>Without a KV cache, each new token would require recomputing keys and values for all previous tokens. The cache saves computation by storing them once and appending new entries.</p>
+<p>The cache is mathematically tied to causal self-attention: future decode steps need previous keys and values, but previous tokens do not need to be recomputed.</p>
+<p><strong>Origin note:</strong> KV caching is a systems memoization idea applied to transformer attention: store reusable keys and values so future decode steps do not repeat the same computation.</p>
+<p>A KV cache is a collection of key and value tensors stored for every completed token, layer, and key/value head. It is not a cache of logits or complete hidden states. A new decode step still computes a new query, key, and value for the newly generated token.</p>
+<p>During prefill, the model processes all prompt tokens and stores their keys and values. During decode, the new query compares with the stored keys and the newly appended key; the resulting attention weights mix the stored values and the new value. Earlier prompt keys and values are reused because they do not change after the prompt has been processed.</p>
+<p>During autoregressive token generation, previous token keys and values are stored in GPU memory (the KV cache), avoiding the O(<span class="math inline">\(T^{2}\)</span>) recomputation of past attention states.</p>
+<p>This reduces the per-step generation cost to O(T) FLOPs, transforming the computational bottleneck from compute-bound FLOPs to memory-bandwidth-bound tensor transfers.</p>
+<p>Each layer stores keys and values by batch, KV head, sequence position, and head dimension.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>KV cache dimensions:</strong></span></p>
+<p><span id="eq-m2-c21-e01"><span class="math display">\[
+K,V\in\mathbb{R}^{B\times H_{\mathrm{KV}}\times T\times d_h}
+\tag{21.1}\]</span></span></p>
+<p>The factor 2 counts keys and values; s is bytes per stored scalar.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>KV cache bytes:</strong></span></p>
+<p><span id="eq-m2-c21-e02"><span class="math display">\[
+\mathrm{bytes}=2\cdot\mathrm{layers}\cdot B\cdot H_{\mathrm{KV}}\cdot T\cdot d_h\cdot s
+\tag{21.2}\]</span></span></p>
+<p>where 2 is keys plus values; layers, <span class="math inline">\(H_{KV}\)</span>, <span class="math inline">\(d_{h}\)</span> is transformer depth, KV-head count, and head width; T is cached sequence length; s is bytes per stored scalar.</p>
+<p>Each layer stores one key and one value vector for every batch item, KV head, token position, and head dimension. In grouped-query or multi-query attention, the number of KV heads can be smaller than the number of query heads.</p>
+<p>KV cache speeds decoding by spending memory proportional to context length.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>KV cache size sketch:</strong></span></p>
+<p><span id="eq-m2-c21-e03"><span class="math display">\[
+\mathrm{bytes}\approx2\cdot\mathrm{layers}\cdot\mathrm{batch}\cdot\mathrm{kv\,heads}\cdot\mathrm{sequence\,length}\cdot\mathrm{head\,dim}\cdot\mathrm{bytes\,per\,value}
+\tag{21.3}\]</span></span></p>
+<p>where L is number of layers; B is batch size; <span class="math inline">\(H_{KV}\)</span> is key/value heads; T is cached positions; <span class="math inline">\(d_{h}\)</span> is head width.</p>
+<p>Each position stores both a key and a value for every layer, batch item, head, and head coordinate.</p>
+<p>Cache memory grows linearly with context length and can dominate inference memory.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Appending one token to a small key-value cache</strong></p>
+<p>Use one request, one layer, one key/value head, head width two, and a prompt of three tokens.</p>
+<p><strong>After prefill:</strong></p>
+<p>K and V each have dimensions [1,1,3,2].</p>
+<p>The cache contains one key and one value vector for each prompt token.</p>
+<p><strong>Decode one token:</strong></p>
+<p>Compute a new query, key, and value for token four.</p>
+<p>Append the new key and value, so K and V become [1,1,4,2].</p>
+<p><strong>Reuse:</strong></p>
+<p>The query for token four attends to four stored key positions.</p>
+<p>The keys and values for tokens one through three are reused rather than recomputed.</p>
+<p><strong>Memory growth:</strong></p>
+<p>With two bytes per stored value, prefill uses 2(1)(1)(3)(2)(2) = 24 bytes.</p>
+<p>After one decoded token, the cache uses 2(1)(1)(4)(2)(2) = 32 bytes.</p>
+<p>Each generated token adds one position to the cache, which saves repeated computation but increases memory use linearly with sequence length.</p>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> A simple KV-cache memory estimate.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c21-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c21-c01-1"><a href="#lst-m2-c21-c01-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> kv_cache_gb(</span>
+<span id="lst-m2-c21-c01-2"><a href="#lst-m2-c21-c01-2" aria-hidden="true" tabindex="-1"></a>    layers, batch, kv_heads, seq_len, head_dim,</span>
+<span id="lst-m2-c21-c01-3"><a href="#lst-m2-c21-c01-3" aria-hidden="true" tabindex="-1"></a>    bytes_per_value<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="lst-m2-c21-c01-4"><a href="#lst-m2-c21-c01-4" aria-hidden="true" tabindex="-1"></a>):</span>
+<span id="lst-m2-c21-c01-5"><a href="#lst-m2-c21-c01-5" aria-hidden="true" tabindex="-1"></a>    bytes_total <span class="op">=</span> (</span>
+<span id="lst-m2-c21-c01-6"><a href="#lst-m2-c21-c01-6" aria-hidden="true" tabindex="-1"></a>        <span class="dv">2</span> <span class="op">*</span> layers <span class="op">*</span> batch <span class="op">*</span> kv_heads <span class="op">*</span> seq_len</span>
+<span id="lst-m2-c21-c01-7"><a href="#lst-m2-c21-c01-7" aria-hidden="true" tabindex="-1"></a>        <span class="op">*</span> head_dim <span class="op">*</span> bytes_per_value</span>
+<span id="lst-m2-c21-c01-8"><a href="#lst-m2-c21-c01-8" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m2-c21-c01-9"><a href="#lst-m2-c21-c01-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> bytes_total <span class="op">/</span> <span class="dv">1024</span><span class="op">**</span><span class="dv">3</span></span>
+<span id="lst-m2-c21-c01-10"><a href="#lst-m2-c21-c01-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c21-c01-11"><a href="#lst-m2-c21-c01-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(</span>
+<span id="lst-m2-c21-c01-12"><a href="#lst-m2-c21-c01-12" aria-hidden="true" tabindex="-1"></a>    kv_cache_gb(</span>
+<span id="lst-m2-c21-c01-13"><a href="#lst-m2-c21-c01-13" aria-hidden="true" tabindex="-1"></a>        layers<span class="op">=</span><span class="dv">32</span>, batch<span class="op">=</span><span class="dv">1</span>, kv_heads<span class="op">=</span><span class="dv">8</span>,</span>
+<span id="lst-m2-c21-c01-14"><a href="#lst-m2-c21-c01-14" aria-hidden="true" tabindex="-1"></a>        seq_len<span class="op">=</span><span class="dv">8192</span>, head_dim<span class="op">=</span><span class="dv">128</span>,</span>
+<span id="lst-m2-c21-c01-15"><a href="#lst-m2-c21-c01-15" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m2-c21-c01-16"><a href="#lst-m2-c21-c01-16" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>For 32 layers, 8 KV heads, 8,192 positions, head width 128, and two-byte values, the keys and values require 1.0 GiB for one request.</p>
+<p>The estimate excludes allocator overhead, cache block fragmentation, temporary activations, model parameters, and other serving state.</p>
+<p>Caching avoids recomputing old keys and values, but it creates a memory footprint that grows with request length.</p>
+</section>
+<section id="sec-m2-c21-s02" class="level2" data-number="21.2">
+<h2 data-number="21.2" class="anchored" data-anchor-id="sec-m2-c21-s02"><span class="header-section-number">21.2</span> Diagnosing Compute-Bound Prefill and Memory-Bound Decode Latency</h2>
+<p>Time to first token (TTFT) measures queueing and prompt processing before generation begins; time per output token (TPOT) measures the repeated decode steps that follow.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>TTFT:</strong></span> Time to first token: queueing plus prompt prefill before the first generated token appears.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>TPOT:</strong></span> Time per output token during the decode phase after the first token.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Head-of-line blocking:</strong></span> A long request delays other requests because a shared schedule waits behind it.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Continuous batching:</strong></span> A serving policy that admits and removes requests while decode steps continue.</li>
+</ul>
+<p>Prefill processes many prompt positions in parallel and builds the initial KV cache. Decode usually adds one token per request per step, so it is more sensitive to memory bandwidth, scheduling, and the number of active requests.</p>
+<p>Static batching waits for a fixed group, while continuous batching can keep the batch populated as requests finish or arrive. Chunked prefill limits how much prompt work enters one scheduling interval, which can reduce interference with decode work.</p>
+<p>TTFT decomposes the delay before the first generated token.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>First-token latency:</strong></span></p>
+<p><span id="eq-m2-c21-e04"><span class="math display">\[
+\mathrm{TTFT}=\mathrm{queue\,time}+\mathrm{prefill\,time}+\mathrm{first\,decode\,time}
+\tag{21.4}\]</span></span></p>
+<p>where <span class="math inline">\(queue_{time}\)</span> is time waiting for a scheduling slot; <span class="math inline">\(prefill_{time}\)</span> is time to process prompt tokens; <span class="math inline">\(first_{decode,time}\)</span> is time for the first decode step.</p>
+<p>The first token is visible only after the request waits, all prompt positions are processed, and one decode step produces the next-token logits.</p>
+<p>Reducing prefill time does not necessarily reduce queueing time; the serving scheduler and batch composition also matter.</p>
+<p>TPOT is the average time spent per generated token during a decode interval.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Decode throughput:</strong></span></p>
+<p><span id="eq-m2-c21-e05"><span class="math display">\[
+\mathrm{TPOT}=\frac{\mathrm{decode\,time}}{\mathrm{generated\,tokens}}
+\tag{21.5}\]</span></span></p>
+<p>where <span class="math inline">\(decode_{time}\)</span> is time spent generating output tokens; <span class="math inline">\(generated_{tokens}\)</span> is number of generated tokens in that interval.</p>
+<p>Divide the elapsed decode time by the number of output tokens produced. This average hides per-request variation but gives a comparable serving measure.</p>
+<p>A lower TPOT improves streaming speed, while a scheduler may accept higher TPOT to increase aggregate throughput under load.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: First-token latency</strong></p>
+<p>If queueing takes 8 ms, prefill 20 ms, and the first decode step 5 ms, TTFT is 33 ms.</p>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Decode throughput</strong></p>
+<p>If a batch generates 40 tokens in 200 ms, the average TPOT is 5 ms per token.</p>
+</div>
+<p>Prefill and decode stress different hardware resources. Batching schedules them across several requests.</p>
+</section>
+<section id="sec-m2-c21-s03" class="level2" data-number="21.3">
+<h2 data-number="21.3" class="anchored" data-anchor-id="sec-m2-c21-s03"><span class="header-section-number">21.3</span> Maximizing Serving Throughput with Continuous Batching and Chunked Prefill</h2>
+<p>Inference serves many requests whose prompts and generated lengths differ. The mathematical token loop is simple, but the serving system must manage shared state, masks, and sampling decisions.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Request batch:</strong></span> A group of sequences processed together for hardware efficiency.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Stopping rule:</strong></span> A condition such as EOS token, max tokens, or application-specific stop string.</li>
+</ul>
+<p>The batch axis in inference is dynamic: requests enter and leave as users submit prompts and sequences finish. Each request has its own context, KV cache positions, and decoding state.</p>
+<p>This is where performance engineering begins. The mathematical objects are logits, probabilities, masks, and caches; the serving engine decides how to pack and schedule them.</p>
+<p>Static batching waits for every sequence in the batch, so one long request can leave completed rows occupying batch slots. Continuous batching removes finished requests and admits new ones between decoding steps, keeping more of the batch useful.</p>
+<p>Chunked prefill divides a long prompt into smaller pieces that can be interleaved with decode work. Smaller chunks can protect per-token latency for active requests, while larger chunks complete the new request’s prompt sooner. The scheduler chooses a balance between time to first token and time per output token.</p>
+<p>KV-cache offloading moves selected cache blocks away from accelerator memory when capacity is tight. It increases available sequence capacity but adds transfer latency, so it is useful only when the saved memory is worth the additional data movement.</p>
+<p>A serving system batches requests because matrix operations are more efficient when several active sequences are processed together. Unlike a training batch, requests can enter at different times, have different prompt lengths, and finish after different numbers of generated tokens.</p>
+<p>Continuous batching packs the currently active requests at each decode step. The engine must keep each request’s token history, attention mask, cache position, and sampling state separate even while it evaluates their logits together. Larger batches usually improve throughput but can increase waiting time for an individual request.</p>
+<p>Cache offloading is a capacity trade, not a different attention algorithm. A request’s old key and value blocks may be stored in CPU memory or another tier while the most immediately needed blocks remain on the accelerator. Before a later attention operation can use an offloaded block, the serving system transfers it back. The attention result is intended to be the same; the cost moves from accelerator memory capacity to transfer time and scheduling complexity.</p>
+<p>This trade is easiest to see with two long requests. If their combined caches no longer fit in accelerator memory, an engine can reject one request, shorten its usable context, or move colder blocks away from the accelerator. Offloading admits more context but may delay a decode step when an old block is needed again. The useful measurement is therefore not cache size alone, but cache size together with time to first token, time per output token, and the request mix.</p>
+<p>Chunked prefill and continuous batching address a related scheduling problem. A long incoming prompt can otherwise occupy the accelerator while already-active requests wait for their next token. Chunked prefill alternates short prompt chunks with decode steps. This protects the generation speed of active requests while managing first-token latency for new prompts.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Computation map</strong></span></p>
+<p>The computation starts with prompt and produces decode through the intermediate objects shown below.</p>
+<div id="fig-m2-c21-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Native computation diagram: Prefill creates reusable cache entries, while decoding appends one token and one new cache position at a time.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c21-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c21-f02.png" class="img-fluid figure-img" style="width:5.9in" alt="Native computation diagram: Prefill creates reusable cache entries, while decoding appends one token and one new cache position at a time.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c21-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;21.2: Prefill creates reusable cache entries, while decoding appends one token and one new cache position at a time.
+</figcaption>
+</figure>
+</div>
+<p>The output of prompt is the input required by decode; the intermediate stages name the stored objects that make the transition possible.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Interleaving a long prefill with active decoding</strong></p>
+<p>One request has a 12-token prompt while two requests are already decoding.</p>
+<p><strong>Without chunking:</strong></p>
+<p>Process all 12 prompt tokens before the active requests receive another decode step.</p>
+<p><strong>With chunks of 4:</strong></p>
+<p>prefill 4 tokens -&gt; decode active requests -&gt; prefill 4 -&gt; decode -&gt; prefill 4</p>
+<p>The new request reaches its first token later than an uninterrupted prefill, but active requests wait for shorter intervals.</p>
+<p>Chunk size trades prompt completion speed against interruption of ongoing decode work.</p>
+</div>
+<p>Batch scheduling helps requests share an accelerator. Prefix caching avoids repeating work when requests begin with the same token sequence.</p>
+</section>
+<section id="sec-m2-c21-s04" class="level2" data-number="21.4">
+<h2 data-number="21.4" class="anchored" data-anchor-id="sec-m2-c21-s04"><span class="header-section-number">21.4</span> Reusing Common Prompt States with Prefix Caching</h2>
+<p>A prefix cache stores reusable attention state for prompt tokens that appear again across requests.</p>
+<p>First-token latency is time until the first generated token appears.</p>
+<p>Prefill computes keys and values for every prompt position. If another request begins with the same prefix, a serving engine can reuse cached state instead of recomputing the prefix from the model weights.</p>
+<p>The benefit is latency and compute reduction for repeated prompts; the cost is memory pressure and cache-management complexity. Prefix caching therefore belongs to serving behavior, not to the abstract probability rule for sampling one token.</p>
+<p>Two requests with an identical system prompt or document prefix create the same key and value tensors for that shared prefix. A prefix cache stores those tensors once and lets later requests begin after the repeated prefix instead of recomputing its attention layers.</p>
+<p>This reuse is valid only when the model weights, tokenization, attention configuration, and prefix tokens match. It reduces prompt-processing work and first-token latency; it does not change the probability rule used to select later tokens.</p>
+<p>A reusable prefix must match the same token IDs, model weights, and cache interpretation. Cache-block management determines where that state is stored.</p>
+</section>
+<section id="sec-m2-c21-s05" class="level2" data-number="21.5">
+<h2 data-number="21.5" class="anchored" data-anchor-id="sec-m2-c21-s05"><span class="header-section-number">21.5</span> Managing Non-Contiguous GPU Memory with PagedAttention</h2>
+<p>A serving engine executes the same autoregressive probability calculation while choosing how requests, cache blocks, and kernels are organized on available hardware.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Hugging Face generate:</strong></span> A high-level Transformers API that repeatedly applies a model and decoding rule to produce token IDs.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>vLLM:</strong></span> A serving engine that manages paged KV-cache blocks and dynamic batching for transformer generation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>SGLang:</strong></span> A serving runtime that schedules structured generation and reuses prefixes across requests.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>TensorRT-LLM:</strong></span> An NVIDIA-oriented inference stack that builds optimized transformer execution paths.</li>
+</ul>
+<p><code>model.generate</code> is the clearest starting point because it exposes the familiar model inputs, decoding settings, generated token IDs, and optional <code>past_key_values</code>. It is appropriate for inspecting the mathematics and for small local experiments. A serving engine becomes useful when many requests must share an accelerator without treating every prompt as an isolated call.</p>
+<p>vLLM, SGLang, and TensorRT-LLM make different implementation choices, but their controls correspond to the same guide objects: request batches, token positions, causal masks, KV-cache storage, and sampling rules. A cache or batching option changes storage and scheduling. It does not alter the model’s output probabilities unless decoding settings or model computations also change.</p>
+<p>Engine flags are implementation-specific. For example, <code>--enable-prefix-caching</code> is a vLLM flag, not a generic transformer operation. The key serving questions are practical. Which prompt prefixes are reused? Where are key/value blocks stored? How do requests enter a batch? These choices determine time to first token (TTFT), time per output token (TPOT), and GPU memory capacity.</p>
+<p>Serving changes the schedule and storage of the same attention computation. The next part applies the representation pattern to non-text inputs.</p>
+</section>
+<section id="sec-m2-c21-s06" class="level2" data-number="21.6">
+<h2 data-number="21.6" class="anchored" data-anchor-id="sec-m2-c21-s06"><span class="header-section-number">21.6</span> Inference-state trace</h2>
+<p>Inference is a stateful loop. During prefill, the model processes the whole prompt and builds key/value tensors for every layer. During decode, it processes only the newly generated token, but it attends to the cached keys and values from all previous positions.</p>
+<p>The sampling decision starts from the last-position logits. Greedy decoding selects the largest logit. Temperature rescales the logits before softmax. Top-k keeps a fixed number of candidates, and top-p keeps the shortest sorted probability prefix whose cumulative mass reaches the threshold. These operations change the decoding distribution even though the model weights do not change.</p>
+<p>Autoregressive decoding is fast because previous keys and values are stored instead of recomputed.</p>
+<div id="fig-m2-c21-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram showing stored key and value vectors growing by one position during decoding.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c21-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c21-f03.png" class="img-fluid figure-img" style="width:5.9in" alt="Diagram showing stored key and value vectors growing by one position during decoding.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c21-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;21.3: Each generated token adds one key and one value per layer, making cache memory grow with context length.
+</figcaption>
+</figure>
+</div>
+<p>The cache grows with layers, heads, head dimension, batch size, and context length. Decode is fast only because these keys and values are reused.</p>
+<p>Serving systems can reuse prompt-prefix computation across requests when the token prefix is shared and cache blocks can be addressed safely.</p>
+<div id="fig-m2-c21-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Reconstructed prefix-cache slide showing shared prompt blocks reused across requests.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c21-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c21-f04.png" class="img-fluid figure-img" style="width:5.9in" alt="Reconstructed prefix-cache slide showing shared prompt blocks reused across requests.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c21-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;21.4: Requests with the same token prefix can reuse the same prefill work before their suffixes diverge.
+</figcaption>
+</figure>
+</div>
+<p>Prefix caching is cross-request reuse. It is distinct from the per-request KV cache, and it depends on prompt layout and exact token prefixes.</p>
+<p>Transformer inference state starts with prefill: the prompt is tokenized, embedded, and processed in parallel before one-token decode begins.</p>
+<div id="fig-m2-c21-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Reconstructed prefill phase slide describing tokenization, embedding conversion, and initial parallel processing.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c21-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c21-f05.png" class="img-fluid figure-img" style="width:5.9in" alt="Reconstructed prefill phase slide describing tokenization, embedding conversion, and initial parallel processing.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c21-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;21.5: Processing the prompt once creates keys and values that later decoding steps reuse.
+</figcaption>
+</figure>
+</div>
+<p>Prefill creates the initial keys and values that decoding later reuses.</p>
+<p>Inference repeatedly converts last-position logits into a next token while reusing cached attention state. Last-position logits have dimensions <span class="math inline">\([B,V]\)</span>; each layer stores <span class="math inline">\(K\)</span> and <span class="math inline">\(V\)</span> with dimensions <span class="math inline">\([B,H,T_{\mathrm{cache}},d_h]\)</span>. Prefill builds the cache from the prompt; decode appends one key and one value per generated token.</p>
+<p>In PyTorch, <code>generate(use_cache=True)</code> exposes cache reuse; vLLM and similar engines manage paged cache blocks and batching.</p>
+<p><strong>Performance note:</strong> Decode is often memory-bandwidth and latency limited because each new token reads the growing cache.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: KV cache growth</strong></p>
+<p>Model specification: <span class="math inline">\(L=2\)</span> layers, <span class="math inline">\(H_{\mathrm{KV}}=4\)</span> key-value heads, head width <span class="math inline">\(D_h=8\)</span>, batch size <span class="math inline">\(B=1\)</span>, and float16 storage at <span class="math inline">\(2\)</span> bytes per value.</p>
+<p><strong>After PREFILL:</strong></p>
+<p>K per layer: <span class="math inline">\(1\cdot4\cdot5\cdot8=160\)</span> values, requiring <span class="math inline">\(160\cdot2=320\)</span> bytes.</p>
+<p>V per layer: <span class="math inline">\(1\cdot4\cdot5\cdot8=160\)</span> values, requiring <span class="math inline">\(160\cdot2=320\)</span> bytes.</p>
+<p>Across two layers and both K and V, the total cache is <span class="math inline">\(2\cdot2\cdot320=1{,}280\)</span> bytes.</p>
+<p><strong>After DECODE step 1:</strong></p>
+<p>K per layer: [1, 4, 6, 8] = 192 values per tensor</p>
+<p>Total cache: <span class="math inline">\(2\cdot2\cdot192\cdot2=1{,}536\)</span> bytes.</p>
+<p><strong>After DECODE step 2:</strong></p>
+<p>Total cache: <span class="math inline">\(2\cdot2\cdot1\cdot4\cdot7\cdot8\cdot2=1{,}792\)</span> bytes.</p>
+<p><strong>After DECODE step 3:</strong></p>
+<p>Total cache: <span class="math inline">\(2\cdot2\cdot1\cdot4\cdot8\cdot8\cdot2=2{,}048\)</span> bytes.</p>
+<p>Each decode step adds one position to K and V in both layers, so growth is <span class="math inline">\(2\cdot2\cdot1\cdot4\cdot1\cdot8\cdot2=256\)</span> bytes.</p>
+<p><strong>At each decode step:</strong></p>
+<p>Input dimensions: <span class="math inline">\([B,1]=[1,1]\)</span> for one new token ID.</p>
+<p>Cache dimensions read by attention: <span class="math inline">\([B,H_{\mathrm{KV}},T_{\mathrm{cache}},D_h]=[1,4,T_{\mathrm{cache}},8]\)</span>.</p>
+<p>Output dimensions: <span class="math inline">\([B,V]=[1,V]\)</span> for the next-token logits.</p>
+<p>Without a cache, each decode step would re-attend to all <span class="math inline">\(T_{\mathrm{cache}}\)</span> tokens from scratch.</p>
+<p>With cache: only the new token’s K and V are computed; old ones are reused.</p>
+</div>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Temperature softmax:</strong></span></p>
+<p><span id="eq-m2-c21-e06"><span class="math display">\[
+P_i=\frac{\exp(z_i/\tau)}{\sum_j\exp(z_j/\tau)}
+\tag{21.6}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Greedy decoding:</strong></span></p>
+<p><span id="eq-m2-c21-e07"><span class="math display">\[
+\mathrm{next}=\operatorname*{arg\,max}_{i}z_i
+\tag{21.7}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>KV cache dimensions:</strong></span></p>
+<p><span id="eq-m2-c21-e08"><span class="math display">\[
+K,V\ \text{per layer}: [B,H_{\mathrm{KV}},T_{\mathrm{cache}},D_h]
+\tag{21.8}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Decode recurrence:</strong></span></p>
+<p><span id="eq-m2-c21-e09"><span class="math display">\[
+\mathrm{cache}_t=\operatorname{append}(\mathrm{cache}_{t-1},K_t,V_t)
+\tag{21.9}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
+<p>These dimensions appear in the computation in order.</p>
+<ul>
+<li>Prompt IDs: <span class="math inline">\([B,T_{\mathrm{prompt}}]\)</span>.</li>
+<li>Prefill logits: <span class="math inline">\([B,T_{\mathrm{prompt}},V]\)</span>.</li>
+<li>Next-token logits: [B, V].</li>
+<li>KV cache per layer: two tensors with dimensions <span class="math inline">\([B,H_{\mathrm{KV}},T_{\mathrm{cache}},D_h]\)</span>.</li>
+<li>Decode input: [B, 1] for one new token.</li>
+</ul>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
+<ul>
+<li>outputs.logits[:, -1, :] selects the distribution used for the next token.</li>
+<li><span class="math inline">\(use_{cache}=True\)</span> exposes the state reuse that makes decode cheaper than recomputing the prefix.</li>
+<li>Top-k filters logits by rank; top-p is computed from sorted probabilities and then renormalized before the random draw.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>It should now be clear how to draw cache length after prefill and after three decode steps.</strong></p>
+</div>
+<p>Transformer inference is stateful because generated tokens reuse keys and values from earlier positions.</p>
+<p>Modern variants and non-text modalities reuse representation and compute patterns with different input structures.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../chapters/ch-m2-c20.html" class="pagination-link" aria-label="Low-Rank Adaptation and Preference Alignment">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">20</span>&nbsp; <span class="chapter-title">Low-Rank Adaptation and Preference Alignment</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../parts/part-m2-p06.html" class="pagination-link" aria-label="Part VI: Implementation and Extensions">
+        <span class="nav-page-text">Part VI: Implementation and Extensions</span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

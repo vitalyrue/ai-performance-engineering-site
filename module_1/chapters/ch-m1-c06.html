@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>6&nbsp; RAG: preparing and retrieving external evidence – From AI Model to AI Product</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m1-c07.html" rel="next">
+<link href="../parts/part-m1-p03.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m1-p03.html">Part III - RAG: Supplying external evidence</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m1-c06.html"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">RAG: preparing and retrieving external evidence</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">From AI Model to AI Product</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">From AI Model to AI Product</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m1-front.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">How an AI model becomes an AI product</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m1-p01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I - The language-model interface</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Language models as application components</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Prompt design and structured output</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Request context: budget, evidence, and trust</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m1-p02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II - Evaluation-based system improvement</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Evaluation-based system improvement</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Measuring answer quality with metrics and judge models</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m1-p03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III - RAG: Supplying external evidence</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c06.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">RAG: preparing and retrieving external evidence</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Evaluating answers against retrieved evidence</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m1-p04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part IV - Controlled AI workflows and agents</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Controlled AI workflows</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Controlled tool use by agents</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Agent planning and tool connections</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Coordinating agents and managing persistent memory</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m1-p05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part V - System cases, diagnosis, and release decisions</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Integrated AI system cases</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m1-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Evidence for release decisions</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m1-appa.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">End-to-end trace dictionary</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m1-appb.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Linked concept dictionary</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m1-appc.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">C</span>&nbsp; <span class="chapter-title">Formula and measurement reference</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m1-appd.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">D</span>&nbsp; <span class="chapter-title">Component roles and responsibilities reference</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m1-appe.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">E</span>&nbsp; <span class="chapter-title">Practice questions</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m1-appf.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">F</span>&nbsp; <span class="chapter-title">Answer key</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m1-appg.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">G</span>&nbsp; <span class="chapter-title">External research and dated supplements</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m1-apph.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">H</span>&nbsp; <span class="chapter-title">Course sequence and study locations</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m1-c06-s01" id="toc-sec-m1-c06-s01" class="nav-link active" data-scroll-target="#sec-m1-c06-s01"><span class="header-section-number">6.1</span> When retrieval is necessary</a></li>
+  <li><a href="#sec-m1-c06-s02" id="toc-sec-m1-c06-s02" class="nav-link" data-scroll-target="#sec-m1-c06-s02"><span class="header-section-number">6.2</span> Offline ingestion and online answering</a></li>
+  <li><a href="#sec-m1-c06-s03" id="toc-sec-m1-c06-s03" class="nav-link" data-scroll-target="#sec-m1-c06-s03"><span class="header-section-number">6.3</span> Parsing preserves document structure and source information</a></li>
+  <li><a href="#sec-m1-c06-s04" id="toc-sec-m1-c06-s04" class="nav-link" data-scroll-target="#sec-m1-c06-s04"><span class="header-section-number">6.4</span> Chunk boundaries and complete claims</a></li>
+  <li><a href="#sec-m1-c06-s05" id="toc-sec-m1-c06-s05" class="nav-link" data-scroll-target="#sec-m1-c06-s05"><span class="header-section-number">6.5</span> Retrieval and ranking</a></li>
+  <li><a href="#sec-m1-c06-s06" id="toc-sec-m1-c06-s06" class="nav-link" data-scroll-target="#sec-m1-c06-s06"><span class="header-section-number">6.6</span> Staged retrieval pipeline</a></li>
+  <li><a href="#sec-m1-c06-s07" id="toc-sec-m1-c06-s07" class="nav-link" data-scroll-target="#sec-m1-c06-s07"><span class="header-section-number">6.7</span> Answering from retrieved evidence</a></li>
+  <li><a href="#sec-m1-c06-s08" id="toc-sec-m1-c06-s08" class="nav-link" data-scroll-target="#sec-m1-c06-s08"><span class="header-section-number">6.8</span> FinanceBench RAG: from documents to answers</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m1-p03.html">Part III - RAG: Supplying external evidence</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m1-c06.html"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">RAG: preparing and retrieving external evidence</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m1-c06" class="quarto-section-identifier"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">RAG: preparing and retrieving external evidence</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Chapters 4 and 5 defined how to compare system versions and interpret metrics, benchmarks, model-judge results, and human review. Many product questions still depend on private, detailed, or changing facts that are absent from model weights. A Retrieval-Augmented Generation (RAG) system parses and chunks source documents, indexes them, retrieves and reranks useful passages, and gives those passages to the model before it answers.</p>
+<div id="fig-m1-c06-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Retrieval moves external evidence through source tracking, chunking, candidate search, reranking, and an answer boundary tied to selected passages.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m1-c06-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m1-c06-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="Retrieval moves external evidence through source tracking, chunking, candidate search, reranking, and an answer boundary tied to selected passages.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m1-c06-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6.1: Retrieval moves external evidence through source tracking, chunking, candidate search, reranking, and an answer boundary tied to selected passages.
+</figcaption>
+</figure>
+</div>
+<p>The pipeline is split into offline preparation and online retrieval so source identity, chunk quality, ranking, and generation inputs remain traceable.</p>
+<section id="sec-m1-c06-s01" class="level2" data-number="6.1">
+<h2 data-number="6.1" class="anchored" data-anchor-id="sec-m1-c06-s01"><span class="header-section-number">6.1</span> When retrieval is necessary</h2>
+<p>A model checkpoint contains broad learned patterns and knowledge up to its training process. A product may need today’s policy, a customer’s private document, an exact financial value, or a source that must be cited. Retrieval supplies those facts at request time, while fine-tuning and long-context prompting solve different problems.</p>
+<p>RAG searches external data, places selected evidence in the current context, and asks the model to answer from that evidence. It is appropriate when knowledge changes, is private, must be attributable, or is too detailed to expect in weights. The model remains responsible for language generation; the retrieval system becomes responsible for evidence selection.</p>
+<div id="fig-m1-c06-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="RAG adds request-time evidence so answers can use current or private knowledge. Source: Week 3, PDF p. 14.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m1-c06-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m1-c06-f02.png" class="img-fluid figure-img" style="width:6.35in" alt="RAG adds request-time evidence so answers can use current or private knowledge. Source: Week 3, PDF p. 14.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m1-c06-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6.2: RAG adds request-time evidence so answers can use current or private knowledge. Source: Week 3, PDF p.&nbsp;14.
+</figcaption>
+</figure>
+</div>
+<p>RAG lowers unsupported-answer risk only when relevant evidence is retrieved and the generation step is instructed and evaluated to use it.</p>
+<div id="tbl-m1-c06-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m1-c06-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;6.1: Prompting, retrieval, fine-tuning, and long-context input modify different parts of the system.
+</figcaption>
+<div aria-describedby="tbl-m1-c06-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Changes</th>
+<th>Strong fit</th>
+<th>Main limitation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Prompting</td>
+<td>Current request text</td>
+<td>Task framing, output structure, a few supplied facts</td>
+<td>Cannot add a large or changing knowledge base</td>
+</tr>
+<tr class="even">
+<td>RAG</td>
+<td>Request-time context</td>
+<td>Current, private, citable, or large document collections</td>
+<td>Retrieval and context failures become new system risks</td>
+</tr>
+<tr class="odd">
+<td>Fine-tuning</td>
+<td>Model weights</td>
+<td>Behavior, style, task specialization, repeated patterns</td>
+<td>Poor fit for frequently changing factual storage</td>
+</tr>
+<tr class="even">
+<td>Long-context prompting</td>
+<td>One large current input</td>
+<td>Small document collection or one-off analysis</td>
+<td>Cost, latency, attention dilution, and access filtering</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Decision rule</strong></p>
+<p>If the failure is missing or stale evidence, change the evidence path. If the evidence is present but the model applies the task incorrectly, change the prompt, model, workflow, or training. Do not fine-tune merely because the corpus is large.</p>
+</div>
+</section>
+<section id="sec-m1-c06-s02" class="level2" data-number="6.2">
+<h2 data-number="6.2" class="anchored" data-anchor-id="sec-m1-c06-s02"><span class="header-section-number">6.2</span> Offline ingestion and online answering</h2>
+<p>Retrieval is the chosen mechanism for supplying external facts. One request should not repeatedly parse, clean, and embed an entire document collection. The pipeline therefore separates offline ingestion from online query, retrieval, and generation.</p>
+<p>Offline ingestion loads source files, parses their content, keeps source and page information, splits content into retrievable pieces, computes embeddings or lexical indexes, and stores the resulting records. Online processing turns a user question into one or more queries, retrieves candidates, filters and reranks them, puts selected passages into the request, generates an answer, and checks that its claims have support.</p>
+<div id="fig-m1-c06-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="RAG assigns document preparation, retrieval, and answer generation to separate stages with separate evidence.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m1-c06-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m1-c06-f03.png" class="img-fluid figure-img" style="width:6.25in" alt="RAG assigns document preparation, retrieval, and answer generation to separate stages with separate evidence.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m1-c06-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6.3: RAG assigns document preparation, retrieval, and answer generation to separate stages with separate evidence.
+</figcaption>
+</figure>
+</div>
+<p>A source can exist in the reference data but fail during parsing, chunking, indexing, query formation, ranking, context assembly, or generation. The separation makes each failure measurable.</p>
+<ul>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Corpus:</strong></span> The authorized collection of documents or records available to the retrieval system.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Index:</strong></span> A data structure that maps query representations to candidate source units. It may be lexical, vector-based, structured, or hybrid.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Metadata:</strong></span> Source identity and attributes stored with a chunk, such as document, page, section, date, company, permission, or content type.</p></li>
+</ul>
+<p>The two execution paths must preserve complementary evidence and a shared source identity:</p>
+<ul>
+<li><strong>Offline version evidence:</strong> parser, chunker, embedding model, index build time, source hashes, and access labels.</li>
+<li><strong>Online request evidence:</strong> query text, filters, retrieved identifiers and scores, reranker version, selected context, model output, and citations.</li>
+<li><strong>Data requirement:</strong> source identifiers must survive every stage so a generated citation can be checked against an actual retrieved unit.</li>
+</ul>
+<p>The offline path produces durable retrieval artifacts: normalized source units, provenance, chunk lineage, embeddings, index versions, and build-time quality checks. Its cadence follows source updates and index maintenance. The online path begins with one request and produces a query, filters, ranked candidates, selected context, an answer, citations, and a trace under a latency budget.</p>
+<p>The separation creates distinct service objectives. Offline quality concerns completeness, reproducibility, freshness, and deletion propagation. Online quality concerns retrieval relevance, authorization, latency, context capacity, and grounded generation. A shared source identifier connects the paths so an online citation can be traced to the exact indexed unit and original document.</p>
+</section>
+<section id="sec-m1-c06-s03" class="level2" data-number="6.3">
+<h2 data-number="6.3" class="anchored" data-anchor-id="sec-m1-c06-s03"><span class="header-section-number">6.3</span> Parsing preserves document structure and source information</h2>
+<p>The offline phase begins with authorized source files and must produce searchable text together with the document, page, and section where each piece came from. A parser can silently scramble multi-column pages, headers, tables, or right-to-left text, creating retrieval failures before embeddings are involved. Source inspection and layout-aware parsing therefore precede chunking.</p>
+<p>A loader should preserve page boundaries, document names, and available structural elements. PDF text extraction is not equivalent to reading order: visual columns, footnotes, tables, and scanned images can produce interleaved or missing text. Optical Character Recognition (OCR) is required for image-only pages, and layout-to-reading parsing may be necessary for complex documents.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Document:</strong></span> In common RAG libraries, a text payload plus metadata. It may represent a full file, one page, one section, or one record depending on the loader.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Parsing review</strong></p>
+<p>This method applies to raw document bytes, extracted text, page images, and structural metadata before chunk creation.. It is useful when the reference documents contain scans, multiple columns, tables, headers, footers, or mixed reading directions..</p>
+<p>It works by compare extracted text with representative rendered pages, measure empty or very short pages, and preserve page and section identifiers.. A retriever cannot return evidence the parser omitted or corrupted.</p>
+<p>A limit to keep in mind: A text-only check cannot detect incorrect reading order or lost diagram meaning.</p>
+</div>
+<p>Preprocessing can remove repeated headers, navigation elements, and boilerplate, but it should not erase qualifiers, units, dates, or section boundaries. Every transformation should be reproducible from the original source and recorded in the index build manifest.</p>
+<p>Parsing converts source files into text and structure that later stages can search. Native digital PDFs may still have incorrect reading order, multi-column interleaving, detached footnotes, or tables whose cells are flattened. Scanned pages require optical character recognition. Layout-sensitive documents often need block detection or table extraction to preserve reading order and table structure.</p>
+<p>Parser quality can be evaluated before embeddings are created. Representative pages are compared with extracted text; empty and unusually short pages are counted; headings, page numbers, tables, and identifiers are sampled; and transformations are linked to their parser version. This prevents retrieval tuning from compensating for evidence that was already lost during ingestion.</p>
+</section>
+<section id="sec-m1-c06-s04" class="level2" data-number="6.4">
+<h2 data-number="6.4" class="anchored" data-anchor-id="sec-m1-c06-s04"><span class="header-section-number">6.4</span> Chunk boundaries and complete claims</h2>
+<p>Parsing produces text with source boundaries and reading order. Retrieval rarely returns an entire long document; it needs units small enough to rank and large enough to preserve meaning. Chunking chooses those units, overlap, and metadata by the structure of the reference data and the questions users ask.</p>
+<p>A <strong>chunk</strong> is the unit placed in the index and later returned as evidence. Fixed token windows are simple and predictable. Recursive character splitting tries larger semantic separators before smaller ones. Structure-aware splitting uses headings, paragraphs, table rows, code functions, or legal clauses. Semantic splitting uses changes in embedding similarity as candidate boundaries.</p>
+<div id="fig-m1-c06-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chunking divides documents into retrievable units whose boundaries determine the context returned later. Source: Week 3, PDF p. 20.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m1-c06-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m1-c06-f04.png" class="img-fluid figure-img" style="width:6.35in" alt="Chunking divides documents into retrievable units whose boundaries determine the context returned later. Source: Week 3, PDF p. 20.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m1-c06-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6.4: Chunking divides documents into retrievable units whose boundaries determine the context returned later. Source: Week 3, PDF p.&nbsp;20.
+</figcaption>
+</figure>
+</div>
+<p>Chunk size is not a formatting preference. It determines whether one retrieved unit contains the full answer, irrelevant neighboring text, or only an incomplete fragment.</p>
+<p>Overlap copies boundary text into adjacent chunks so a claim crossing the split remains recoverable. Too much overlap increases index size and returns near-duplicates that crowd the context. Parent-child retrieval stores small units for matching but expands a selected child to a larger parent section for generation.</p>
+<div id="tbl-m1-c06-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m1-c06-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;6.2: Chunk and retrieval settings trade evidence completeness against noise, cost, and duplication.
+</figcaption>
+<div aria-describedby="tbl-m1-c06-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Chunk decision</th>
+<th>Smaller value tends to</th>
+<th>Larger value tends to</th>
+<th>What to measure</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Chunk size</td>
+<td>Improve targeting but risk missing context</td>
+<td>More context with additional noise and tokens</td>
+<td>Evidence hit@k and grounded answer quality</td>
+</tr>
+<tr class="even">
+<td>Overlap</td>
+<td>Reduce duplicates but expose boundary loss</td>
+<td>More boundary preservation with duplicated evidence</td>
+<td>Unique evidence ratio and index size</td>
+</tr>
+<tr class="odd">
+<td>Top-k retrieval</td>
+<td>Lower context cost but miss evidence</td>
+<td>Raise recall but increase noise</td>
+<td>Recall/hit@k, faithfulness, latency</td>
+</tr>
+<tr class="even">
+<td>Parent expansion</td>
+<td>Compact evidence set</td>
+<td>Restore section context</td>
+<td>Support completeness and prompt size</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Metadata is part of the chunk</strong></p>
+<p>Store document name, page, section path, date, and access attributes with the text. Trying to reconstruct that information after retrieval is unreliable and can create false citations.</p>
+</div>
+</section>
+<section id="sec-m1-c06-s05" class="level2" data-number="6.5">
+<h2 data-number="6.5" class="anchored" data-anchor-id="sec-m1-c06-s05"><span class="header-section-number">6.5</span> Retrieval and ranking</h2>
+<p>Chunks define the evidence units available for ranking. Exact words may differ between a user question and a relevant chunk, so literal matching alone can miss paraphrases. An embedding model maps both to vectors, and a vector index returns nearby candidates under a chosen similarity measure.</p>
+<p>An embedding model produces a fixed-dimensional vector for a text unit. A vector database stores the vectors with chunk text and metadata. At query time, the same embedding model converts the question to a vector and the index performs exact or Approximate Nearest Neighbor (ANN) search.</p>
+<div id="fig-m1-c06-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A vector index stores embedding vectors beside original chunks and supports approximate nearest-neighbor search. Source: Week 3, PDF p. 31.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m1-c06-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m1-c06-f05.png" class="img-fluid figure-img" style="width:6.35in" alt="A vector index stores embedding vectors beside original chunks and supports approximate nearest-neighbor search. Source: Week 3, PDF p. 31.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m1-c06-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6.5: A vector index stores embedding vectors beside original chunks and supports approximate nearest-neighbor search. Source: Week 3, PDF p.&nbsp;31.
+</figcaption>
+</figure>
+</div>
+<p>The index returns candidates that are close under the embedding model, not guaranteed answers. Filters and reranking apply product knowledge the embedding may not encode.</p>
+<p>Cosine similarity compares the direction of a query vector and a chunk vector.</p>
+<p><span id="eq-m1-c06-e01"><span class="math display">\[
+\cos(q,d)=\frac{q\cdot d}{\sqrt{\sum_{j=1}^{n}q_j^2}\sqrt{\sum_{j=1}^{n}d_j^2}}
+\tag{6.1}\]</span></span></p>
+<p>Here, <span class="math inline">\(q\)</span> is the query vector, <span class="math inline">\(d\)</span> is one chunk vector, <span class="math inline">\(j\)</span> indexes their <span class="math inline">\(n\)</span> coordinates, and the dot product measures alignment. Each square root is the vector’s Euclidean magnitude, so their product normalizes the score. A larger cosine value means the vectors point more similarly under this embedding model. It does not prove factual relevance or authorization.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation - cosine similarity for two chunks</strong></p>
+<p>Use query q = (1, 0). Candidate d1 = (0.8, 0.6), and candidate d2 = (0.2, 0.98). Both candidates have norm approximately 1.</p>
+<ol type="1">
+<li>q dot d1 = 1 x 0.8 + 0 x 0.6 = 0.8, so cosine(q, d1) is 0.8.</li>
+<li>q dot d2 = 1 x 0.2 + 0 x 0.98 = 0.2, so cosine(q, d2) is about 0.2.</li>
+</ol>
+<p><strong>Result:</strong> The vector search ranks d1 above d2 for this query.</p>
+<p><strong>Interpretation:</strong> The numeric ranking is meaningful only within the embedding model’s representation. A lexical identifier or date constraint may still require exact search or metadata filtering.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Embedding selection</strong></p>
+<p>This method applies to the language, domain, and unit length represented by document chunks and user queries.. It is useful when questions paraphrase relevant text or use conceptual rather than exact matching..</p>
+<p>It works by evaluate candidate models on labeled query-evidence pairs and keep document/query embedding versions identical within one index.. Changing the embedding model changes the ranking space and normally requires rebuilding the vector index.</p>
+<p>A limit to keep in mind: Domain jargon, identifiers, code symbols, and numeric constraints may be represented poorly.</p>
+</div>
+</section>
+<section id="sec-m1-c06-s06" class="level2" data-number="6.6">
+<h2 data-number="6.6" class="anchored" data-anchor-id="sec-m1-c06-s06"><span class="header-section-number">6.6</span> Staged retrieval pipeline</h2>
+<p>Vector similarity supplies semantic candidates from the indexed chunks. A production question can also depend on exact identifiers, dates, permissions, and subtle relevance that one embedding score cannot capture. Retrieval therefore combines query construction, search methods, metadata filters, candidate diversification, and reranking.</p>
+<p><strong>BM25</strong> is a probabilistic lexical relevance function that rewards matching terms and is strong for names, codes, and domain vocabulary. <strong>Semantic search</strong> retrieves paraphrases through embeddings. <strong>Hybrid retrieval</strong> combines both signals. A <strong>reranker</strong> examines the query and each candidate together, trading additional latency for a more precise ordering.</p>
+<p>Metadata filters should apply authorization, document date, company, language, or content type before context reaches the model. Maximum Marginal Relevance balances query similarity and redundancy so the result set covers distinct evidence.</p>
+<div id="fig-m1-c06-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Retrieval failures include missing relevant evidence, noisy candidates, incomplete chunks, and incorrect ranking. Source: Week 3, PDF p. 34.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m1-c06-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m1-c06-f06.png" class="img-fluid figure-img" style="width:6.35in" alt="Retrieval failures include missing relevant evidence, noisy candidates, incomplete chunks, and incorrect ranking. Source: Week 3, PDF p. 34.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m1-c06-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6.6: Retrieval failures include missing relevant evidence, noisy candidates, incomplete chunks, and incorrect ranking. Source: Week 3, PDF p.&nbsp;34.
+</figcaption>
+</figure>
+</div>
+<p>These symptoms require different repairs. Increasing top-k cannot recover a document that was never parsed or indexed, and a better model cannot use evidence the retriever omitted.</p>
+<ol type="1">
+<li>Normalize or rewrite the user question only when the rewrite preserves constraints and named entities.</li>
+<li>Apply authorization and hard metadata filters.</li>
+<li>Run lexical, semantic, structured, or hybrid candidate search appropriate to the query.</li>
+<li>Deduplicate and diversify candidates where repeated chunks consume the result set.</li>
+<li>Rerank the reduced candidate pool with a stronger query-document scorer when latency permits.</li>
+<li>Select context according to evidence coverage and token budget, preserving source identifiers.</li>
+</ol>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Retrieval score semantics</strong></p>
+<p>Vector distance, cosine similarity, BM25 score, and reranker score are not interchangeable probabilities. Store the score type and model or index version with every trace.</p>
+</div>
+</section>
+<section id="sec-m1-c06-s07" class="level2" data-number="6.7">
+<h2 data-number="6.7" class="anchored" data-anchor-id="sec-m1-c06-s07"><span class="header-section-number">6.7</span> Answering from retrieved evidence</h2>
+<p>Candidate search and reranking have produced a compact, authorized evidence set. The model can still ignore, misread, or overgeneralize that evidence while producing fluent prose. A grounded generation specification states the evidence boundary, citation format, missing-evidence behavior, and post-generation checks.</p>
+<p>The generation prompt should identify evidence blocks by stable source identifiers, ask the model to support each factual claim, and permit an explicit insufficient-evidence response. The output can include answer text, cited identifiers, and a support or escalation status. Application validation confirms every cited identifier was retrieved.</p>
+<div id="fig-m1-c06-f07" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Retrieval finds information and generation uses it; either stage can create the visible answer failure. Source: Week 3, PDF p. 42.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m1-c06-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m1-c06-f07.png" class="img-fluid figure-img" style="width:6.35in" alt="Retrieval finds information and generation uses it; either stage can create the visible answer failure. Source: Week 3, PDF p. 42.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m1-c06-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6.7: Retrieval finds information and generation uses it; either stage can create the visible answer failure. Source: Week 3, PDF p.&nbsp;42.
+</figcaption>
+</figure>
+</div>
+<p>A correct passage with an incorrect answer isolates generation. An unsupported answer after a missed passage isolates retrieval or corpus coverage first.</p>
+<ul>
+<li><strong>Unsupported synthesis:</strong> the answer combines claims not stated by any selected source.</li>
+<li><strong>Citation mismatch:</strong> an identifier is valid but the cited chunk does not support the attached sentence.</li>
+<li><strong>Conflict suppression:</strong> the model chooses one of two conflicting documents without reporting the conflict.</li>
+<li><strong>Instruction injection:</strong> retrieved text contains instructions that attempt to override application policy.</li>
+<li><strong>Answer drift:</strong> the answer addresses a related topic but not the user’s question.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Grounded generation</strong></p>
+<p>This method applies to the selected evidence set, the user’s question, and a response schema that preserves source identifiers.. It is useful when answers must be current, auditable, or limited to an authorized knowledge base..</p>
+<p>It works by delimit evidence as untrusted data, require support, validate citations, and score faithfulness separately from answer relevance.. Grounding changes a fluent answer into a claim that can be checked against the exact evidence shown to the model.</p>
+<p>A limit to keep in mind: The model can still misunderstand a source, and the reference data itself may be incomplete or wrong.</p>
+</div>
+</section>
+<section id="sec-m1-c06-s08" class="level2" data-number="6.8">
+<h2 data-number="6.8" class="anchored" data-anchor-id="sec-m1-c06-s08"><span class="header-section-number">6.8</span> FinanceBench RAG: from documents to answers</h2>
+<p>The RAG design identifies the component responsible for each stage and records its inputs and outputs. A financial-question answering example turns that architecture into executable stages and row-level records that can be evaluated later. The implementation follows naive generation, ingestion, retrieval, answering from selected passages, comparison, evaluation, and controlled improvement.</p>
+<p>The example uses FinanceBench questions and financial documents. A no-retrieval run establishes the baseline. The ingestion path loads PDF pages, attaches <code>doc_name</code>, <code>company</code>, <code>doc_period</code>, and page metadata, splits the text with <code>RecursiveCharacterTextSplitter</code>, embeds the chunks, and saves a Facebook AI Similarity Search (FAISS) index. The online path retrieves evidence and returns both the answer and its trace. Comparison then separates answer correctness, faithfulness, and evidence-page hit.</p>
+<p><strong>Code example 6.1 - the worked ingestion path preserves page identity before splitting.</strong></p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Code example 6.1 - the worked ingestion path preserves page identity before splitting.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c06-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c06-c01-1"><a href="#lst-m1-c06-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain_community.document_loaders <span class="im">import</span> PyPDFLoader</span>
+<span id="lst-m1-c06-c01-2"><a href="#lst-m1-c06-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain_text_splitters <span class="im">import</span> RecursiveCharacterTextSplitter</span>
+<span id="lst-m1-c06-c01-3"><a href="#lst-m1-c06-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain_huggingface <span class="im">import</span> HuggingFaceEmbeddings</span>
+<span id="lst-m1-c06-c01-4"><a href="#lst-m1-c06-c01-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain_community.vectorstores <span class="im">import</span> FAISS</span>
+<span id="lst-m1-c06-c01-5"><a href="#lst-m1-c06-c01-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c06-c01-6"><a href="#lst-m1-c06-c01-6" aria-hidden="true" tabindex="-1"></a>pages <span class="op">=</span> []</span>
+<span id="lst-m1-c06-c01-7"><a href="#lst-m1-c06-c01-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> pdf_path <span class="kw">in</span> financial_pdfs:</span>
+<span id="lst-m1-c06-c01-8"><a href="#lst-m1-c06-c01-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> page <span class="kw">in</span> PyPDFLoader(<span class="bu">str</span>(pdf_path)).load():</span>
+<span id="lst-m1-c06-c01-9"><a href="#lst-m1-c06-c01-9" aria-hidden="true" tabindex="-1"></a>        page.metadata.update({</span>
+<span id="lst-m1-c06-c01-10"><a href="#lst-m1-c06-c01-10" aria-hidden="true" tabindex="-1"></a>            <span class="st">"doc_name"</span>: pdf_path.name,</span>
+<span id="lst-m1-c06-c01-11"><a href="#lst-m1-c06-c01-11" aria-hidden="true" tabindex="-1"></a>            <span class="st">"company"</span>: infer_company(pdf_path),</span>
+<span id="lst-m1-c06-c01-12"><a href="#lst-m1-c06-c01-12" aria-hidden="true" tabindex="-1"></a>            <span class="st">"doc_period"</span>: infer_period(pdf_path),</span>
+<span id="lst-m1-c06-c01-13"><a href="#lst-m1-c06-c01-13" aria-hidden="true" tabindex="-1"></a>            <span class="st">"source_page"</span>: page.metadata[<span class="st">"page"</span>] <span class="op">+</span> <span class="dv">1</span>,</span>
+<span id="lst-m1-c06-c01-14"><a href="#lst-m1-c06-c01-14" aria-hidden="true" tabindex="-1"></a>        })</span>
+<span id="lst-m1-c06-c01-15"><a href="#lst-m1-c06-c01-15" aria-hidden="true" tabindex="-1"></a>        pages.append(page)</span>
+<span id="lst-m1-c06-c01-16"><a href="#lst-m1-c06-c01-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c06-c01-17"><a href="#lst-m1-c06-c01-17" aria-hidden="true" tabindex="-1"></a>splitter <span class="op">=</span> RecursiveCharacterTextSplitter(</span>
+<span id="lst-m1-c06-c01-18"><a href="#lst-m1-c06-c01-18" aria-hidden="true" tabindex="-1"></a>    chunk_size<span class="op">=</span><span class="dv">1000</span>,</span>
+<span id="lst-m1-c06-c01-19"><a href="#lst-m1-c06-c01-19" aria-hidden="true" tabindex="-1"></a>    chunk_overlap<span class="op">=</span><span class="dv">150</span>,</span>
+<span id="lst-m1-c06-c01-20"><a href="#lst-m1-c06-c01-20" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="lst-m1-c06-c01-21"><a href="#lst-m1-c06-c01-21" aria-hidden="true" tabindex="-1"></a>chunks <span class="op">=</span> splitter.split_documents(pages)</span>
+<span id="lst-m1-c06-c01-22"><a href="#lst-m1-c06-c01-22" aria-hidden="true" tabindex="-1"></a>embedding_model <span class="op">=</span> HuggingFaceEmbeddings(</span>
+<span id="lst-m1-c06-c01-23"><a href="#lst-m1-c06-c01-23" aria-hidden="true" tabindex="-1"></a>    model_name<span class="op">=</span><span class="st">"BAAI/bge-small-en-v1.5"</span>,</span>
+<span id="lst-m1-c06-c01-24"><a href="#lst-m1-c06-c01-24" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="lst-m1-c06-c01-25"><a href="#lst-m1-c06-c01-25" aria-hidden="true" tabindex="-1"></a>index <span class="op">=</span> FAISS.from_documents(chunks, embedding_model)</span>
+<span id="lst-m1-c06-c01-26"><a href="#lst-m1-c06-c01-26" aria-hidden="true" tabindex="-1"></a>index.save_local(<span class="st">"financebench_faiss"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><code>page</code> is the source evidence unit, <code>chunks</code> are retrievable children carrying inherited metadata, the BGE model identifier defines the vector space, and <code>index</code> stores search records. The <code>source_page</code> field is converted to the one-based page number used by the assignment labels. Persist the source hashes, parser and splitter versions, metadata schema, embedding identifier, and FAISS settings beside the index; the binary index alone is not reproducible evidence.</p>
+<p><strong>Code example 6.2 - the online function returns answer evidence and trace objects, not prose alone.</strong></p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Code example 6.2 - the online function returns answer evidence and trace objects, not prose alone.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c06-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c06-c02-1"><a href="#lst-m1-c06-c02-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> answer_with_rag(question, <span class="op">*</span>, k<span class="op">=</span><span class="dv">5</span>):</span>
+<span id="lst-m1-c06-c02-2"><a href="#lst-m1-c06-c02-2" aria-hidden="true" tabindex="-1"></a>    retrieved <span class="op">=</span> index.similarity_search_with_score(question, k<span class="op">=</span><span class="dv">12</span>)</span>
+<span id="lst-m1-c06-c02-3"><a href="#lst-m1-c06-c02-3" aria-hidden="true" tabindex="-1"></a>    reranked <span class="op">=</span> bge_reranker.rerank(</span>
+<span id="lst-m1-c06-c02-4"><a href="#lst-m1-c06-c02-4" aria-hidden="true" tabindex="-1"></a>        question,</span>
+<span id="lst-m1-c06-c02-5"><a href="#lst-m1-c06-c02-5" aria-hidden="true" tabindex="-1"></a>        [doc <span class="cf">for</span> doc, _ <span class="kw">in</span> retrieved],</span>
+<span id="lst-m1-c06-c02-6"><a href="#lst-m1-c06-c02-6" aria-hidden="true" tabindex="-1"></a>    )[:k]</span>
+<span id="lst-m1-c06-c02-7"><a href="#lst-m1-c06-c02-7" aria-hidden="true" tabindex="-1"></a>    context <span class="op">=</span> [</span>
+<span id="lst-m1-c06-c02-8"><a href="#lst-m1-c06-c02-8" aria-hidden="true" tabindex="-1"></a>        {</span>
+<span id="lst-m1-c06-c02-9"><a href="#lst-m1-c06-c02-9" aria-hidden="true" tabindex="-1"></a>            <span class="st">"chunk_text"</span>: doc.page_content,</span>
+<span id="lst-m1-c06-c02-10"><a href="#lst-m1-c06-c02-10" aria-hidden="true" tabindex="-1"></a>            <span class="st">"doc_name"</span>: doc.metadata[<span class="st">"doc_name"</span>],</span>
+<span id="lst-m1-c06-c02-11"><a href="#lst-m1-c06-c02-11" aria-hidden="true" tabindex="-1"></a>            <span class="st">"source_page"</span>: doc.metadata[<span class="st">"source_page"</span>],</span>
+<span id="lst-m1-c06-c02-12"><a href="#lst-m1-c06-c02-12" aria-hidden="true" tabindex="-1"></a>            <span class="st">"reranker_score"</span>: score,</span>
+<span id="lst-m1-c06-c02-13"><a href="#lst-m1-c06-c02-13" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="lst-m1-c06-c02-14"><a href="#lst-m1-c06-c02-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> doc, score <span class="kw">in</span> reranked</span>
+<span id="lst-m1-c06-c02-15"><a href="#lst-m1-c06-c02-15" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="lst-m1-c06-c02-16"><a href="#lst-m1-c06-c02-16" aria-hidden="true" tabindex="-1"></a>    answer <span class="op">=</span> generation_model(</span>
+<span id="lst-m1-c06-c02-17"><a href="#lst-m1-c06-c02-17" aria-hidden="true" tabindex="-1"></a>        render_grounded_prompt(question<span class="op">=</span>question, evidence<span class="op">=</span>context)</span>
+<span id="lst-m1-c06-c02-18"><a href="#lst-m1-c06-c02-18" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m1-c06-c02-19"><a href="#lst-m1-c06-c02-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
+<span id="lst-m1-c06-c02-20"><a href="#lst-m1-c06-c02-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">"question"</span>: question,</span>
+<span id="lst-m1-c06-c02-21"><a href="#lst-m1-c06-c02-21" aria-hidden="true" tabindex="-1"></a>        <span class="st">"answer"</span>: answer.text,</span>
+<span id="lst-m1-c06-c02-22"><a href="#lst-m1-c06-c02-22" aria-hidden="true" tabindex="-1"></a>        <span class="st">"cited_pages"</span>: answer.cited_pages,</span>
+<span id="lst-m1-c06-c02-23"><a href="#lst-m1-c06-c02-23" aria-hidden="true" tabindex="-1"></a>        <span class="st">"retrieved"</span>: context,</span>
+<span id="lst-m1-c06-c02-24"><a href="#lst-m1-c06-c02-24" aria-hidden="true" tabindex="-1"></a>        <span class="st">"k"</span>: k,</span>
+<span id="lst-m1-c06-c02-25"><a href="#lst-m1-c06-c02-25" aria-hidden="true" tabindex="-1"></a>    }</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The result structure preserves enough information for Chapter 7 to distinguish a missed evidence page from an answer that ignored retrieved evidence. The baseline and RAG outputs should share question identifiers so a row-level comparison remains possible.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chapter checkpoint</strong></p>
+<p>A complete RAG build records where each retrieved passage came from and returns a trace beside the answer. Chapter 7 defines the component metrics and experiments that show whether the pipeline improved.</p>
+</div>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../parts/part-m1-p03.html" class="pagination-link" aria-label="Part III - RAG: Supplying external evidence">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part III - RAG: Supplying external evidence</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m1-c07.html" class="pagination-link" aria-label="Evaluating answers against retrieved evidence">
+        <span class="nav-page-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Evaluating answers against retrieved evidence</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>3&nbsp; Subword Tokenization: Building Compact Vocabularies – Mathematical Foundations of LLM Training and Inference</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m2-c04.html" rel="next">
+<link href="../chapters/ch-m2-c02.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p01.html">Part I: From Text to Mathematical Objects</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c03.html"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Subword Tokenization: Building Compact Vocabularies</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Mathematical Foundations of LLM Training and Inference</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Mathematical Foundations of LLM Training and Inference</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-roadmap.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Roadmap</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-notation.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Notation</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-library-map.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library Map</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: From Text to Mathematical Objects</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Prediction Targets: Defining What the Model Learns</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Token IDs: Discretizing Text into Numbers and Batches</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c03.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Subword Tokenization: Building Compact Vocabularies</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Count Vectors &amp; TF-IDF: Extracting Word Frequencies and Their Limits</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: From Scores to Loss</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Linear Hyperplanes: Scoring Features with Matrix Math</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Sigmoid &amp; Softmax: Turning Raw Scores into Probabilities</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Decoding Strategies: Generating Text Token by Token</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Cross-Entropy &amp; Perplexity: Measuring Prediction Error and Uncertainty</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Validation &amp; Testing: Catching Overfitting and Measuring Generalization</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: From Error to Learning</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">AdamW &amp; Momentum: Steering Parameter Updates</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Backpropagation: Tracing Error Gradients via the Chain Rule</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Activation Functions: Bending Decision Boundaries with MLPs</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Embedding Tables: Looking Up Dense Word Vectors</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c14.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">14</span>&nbsp; <span class="chapter-title">Word2Vec: Learning Word Geometry from Context</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part IV: Modeling Sequences</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c15.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">Recurrent Networks: Why Sequential Memory Hits a Wall</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c16.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">16</span>&nbsp; <span class="chapter-title">Attention Mathematics</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c17.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">17</span>&nbsp; <span class="chapter-title">Transformer Blocks: Building Deep, Order-Aware Networks</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c18.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">18</span>&nbsp; <span class="chapter-title">Transformer Topologies: Choosing the Right Architecture</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c19.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">19</span>&nbsp; <span class="chapter-title">Pretraining Data and Scaling</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part V: Adapting and Running LLMs</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c20.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">20</span>&nbsp; <span class="chapter-title">Low-Rank Adaptation and Preference Alignment</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c21.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">21</span>&nbsp; <span class="chapter-title">KV Cache: Speeding Up Generation</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part VI: Implementation and Extensions</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c22.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">22</span>&nbsp; <span class="chapter-title">Multimodal Transformers: Processing Images and Audio</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c24.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">24</span>&nbsp; <span class="chapter-title">Computational Labs: Verifying the Math in Code</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m2-dictionary.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Dictionary</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m2-c03-s01" id="toc-sec-m2-c03-s01" class="nav-link active" data-scroll-target="#sec-m2-c03-s01"><span class="header-section-number">3.1</span> Compressing Vocabularies with Byte Pair Encoding</a></li>
+  <li><a href="#sec-m2-c03-s02" id="toc-sec-m2-c03-s02" class="nav-link" data-scroll-target="#sec-m2-c03-s02"><span class="header-section-number">3.2</span> Tokenizing Text with WordPiece and SentencePiece</a></li>
+  <li><a href="#sec-m2-c03-s03" id="toc-sec-m2-c03-s03" class="nav-link" data-scroll-target="#sec-m2-c03-s03"><span class="header-section-number">3.3</span> Delimiting Documents and Sequences with Special Tokens</a></li>
+  <li><a href="#sec-m2-c03-s04" id="toc-sec-m2-c03-s04" class="nav-link" data-scroll-target="#sec-m2-c03-s04"><span class="header-section-number">3.4</span> Tokenization and n-gram trace</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p01.html">Part I: From Text to Mathematical Objects</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c03.html"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Subword Tokenization: Building Compact Vocabularies</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m2-c03" class="quarto-section-identifier"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Subword Tokenization: Building Compact Vocabularies</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>A vocabulary must cover varied language without making every sequence unnecessarily long. Subword tokenization builds reusable pieces between characters and whole words.</p>
+<p>Subword tokenizers balance vocabulary size against sequence length. Byte Pair Encoding (BPE), WordPiece, and SentencePiece reach that balance differently, while special tokens mark boundaries and model roles.</p>
+<p>In code, Hugging Face tokenizers expose vocabulary IDs, normalization, special tokens, and padding; NLTK supplies the course n-gram preprocessing workflow.</p>
+<p>Chapter 3 develops one required stage of the guide’s computation.</p>
+<div id="fig-m2-c03-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 3 opener for Tokenization algorithms, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c03-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c03-f01.png" class="img-fluid figure-img" style="width:5.9in" alt="Chapter 3 opener for Tokenization algorithms, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c03-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.1: Subword algorithms balance vocabulary size, unknown words, and sequence length.
+</figcaption>
+</figure>
+</div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
+<section id="sec-m2-c03-s01" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="sec-m2-c03-s01"><span class="header-section-number">3.1</span> Compressing Vocabularies with Byte Pair Encoding</h2>
+<p>A tokenizer defines the interface between raw text and model inputs. It decides which strings become atomic IDs and therefore what the embedding table can look up.</p>
+<p>Token ID is an integer index into the vocabulary and embedding matrix.</p>
+<p>Word-level tokenization is easy to understand but struggles with rare words and morphology. Character tokenization avoids unknown words but creates long sequences. Subword tokenization is the practical compromise used by many LLMs.</p>
+<p>The tokenizer is not a preprocessing detail that can be swapped casually. A trained model’s embedding matrix, output head, and checkpoint all assume the same vocabulary and token-ID mapping.</p>
+<p><strong>Origin note:</strong> Byte Pair Encoding began as a compression algorithm: repeatedly replace frequent adjacent byte pairs with a new symbol. Modern subword tokenization adapts that compression idea to text vocabularies.</p>
+<p>The machine-learning reinterpretation is that frequent pieces deserve their own symbols because they reduce sequence length without requiring a full word-level vocabulary.</p>
+<p>The merge decision is only the first half of the BPE update. After a pair is selected, every matching adjacent occurrence in the training corpus is replaced by one new symbol, so later counts and token lengths are computed over a changed representation.</p>
+<p>At each BPE step, choose the most frequent adjacent pair in the training corpus.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>BPE merge rule:</strong></span></p>
+<p><span id="eq-m2-c03-e01"><span class="math display">\[
+(a^\star,b^\star)=\operatorname*{arg\,max}_{a,b}\operatorname{count}(a,b)
+\tag{3.1}\]</span></span></p>
+<p>where (a,b) is adjacent token pair; count(a,b) is frequency of that adjacent pair in the corpus.</p>
+<p>BPE is greedy compression: at each step it chooses the adjacent pair whose replacement gives the largest immediate corpus-frequency payoff.</p>
+<p>the merge rule trades a larger vocabulary for shorter token sequences.</p>
+<p>The selected pair becomes a new subword symbol.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>BPE vocabulary update:</strong></span></p>
+<p><span id="eq-m2-c03-e02"><span class="math display">\[
+V_{k+1}=V_k\cup\{a^\star b^\star\}
+\tag{3.2}\]</span></span></p>
+<p>where <span class="math inline">\(V_{k}\)</span> is vocabulary after k merge rounds; a·b· is the new symbol formed from the selected adjacent pair; <span class="math inline">\(V_{k+1}\)</span> is vocabulary after adding the selected merge.</p>
+<p>The selected pair is added as one new vocabulary entry. The corpus is then retokenized so that each matching a·, b· occurrence can be represented by that one entry instead of two consecutive entries.</p>
+<p>Each merge expands the vocabulary by one symbol while shortening the token sequence wherever the pair occurs.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: BPE merge rule</strong></p>
+<p>If ‘l o’ occurs 30 times and ‘o w’ occurs 12 times, BPE merges ‘l o’ first.</p>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: BPE vocabulary update</strong></p>
+<p>If <span class="math inline">\(V_{k}\)</span> has 100 symbols and the merge creates ‘low’, then <span class="math inline">\(V_{k+1}\)</span> has 101 symbols.</p>
+</div>
+<ul>
+<li>WordPiece and BPE build frequent subword units from a corpus.</li>
+<li>SentencePiece can tokenize text without relying on whitespace as a hard boundary.</li>
+<li>Padding tokens support batching but should usually be masked out of loss and attention.</li>
+<li>BOS and EOS tokens mark sequence boundaries for generation.</li>
+</ul>
+<p>BPE trades a larger vocabulary for shorter token sequences by reusing frequent character patterns. Other subword algorithms make the same representation choice with different merge or segmentation rules.</p>
+</section>
+<section id="sec-m2-c03-s02" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="sec-m2-c03-s02"><span class="header-section-number">3.2</span> Tokenizing Text with WordPiece and SentencePiece</h2>
+<p>BPE is not the only subword method in the course sequence. WordPiece and SentencePiece solve similar vocabulary-pressure problems with different criteria and text assumptions.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>WordPiece:</strong></span> A subword method that favors merges useful relative to their parts, often using continuation markers such as ##.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>SentencePiece:</strong></span> A language-independent tokenizer that trains directly on raw text and can treat whitespace as an ordinary symbol.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Domain token:</strong></span> A token added or preserved because a course domain needs it, such as a biomedical term, code token, or Hebrew subword pattern.</li>
+</ul>
+<p>WordPiece became notable in production speech/search and neural language systems because it handled rare words without exploding the vocabulary. SentencePiece is a raw-sentence tokenization framework: it can train a unigram language-model tokenizer or a BPE tokenizer without requiring pre-tokenized words. Its broader contribution is removing a hidden English-centric assumption: that spaces reliably define words.</p>
+<p>WordPiece starts from candidate pieces and compares a pair’s joint frequency with the frequencies of its parts. A frequent pair is valuable when it occurs together more often than its individual pieces would suggest. The <code>##</code> convention records that a piece continues an existing word rather than starting a new one.</p>
+<p>The unigram form of SentencePiece begins with an overcomplete vocabulary and removes pieces whose absence increases corpus loss the least. Because spaces are represented explicitly, the algorithm can train on raw multilingual text without first declaring that whitespace always marks a word boundary.</p>
+<p>Both methods produce the same model-facing objects: a finite vocabulary, a deterministic mapping from text to IDs, and a sequence length that controls later memory and attention cost. Their training criteria differ even though their runtime output has the same form.</p>
+<p>WordPiece and SentencePiece make the same practical trade-off as BPE: a limited vocabulary must represent frequent whole fragments as well as rare or previously unseen text. They differ in how they score a candidate vocabulary and in whether spaces are treated as fixed boundaries.</p>
+<p>These algorithms change the model’s numerical input before any neural computation begins. A different tokenization changes the sequence length T, the vocabulary size |V|, the embedding table rows, and the targets used for next-token prediction.</p>
+<p>A simplified course-friendly score rewards pairs that are useful together rather than merely individually frequent.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>WordPiece score:</strong></span></p>
+<p><span id="eq-m2-c03-e03"><span class="math display">\[
+score(a,b)=\frac{\operatorname{count}(a,b)}{\operatorname{count}(a)\,\operatorname{count}(b)}
+\tag{3.3}\]</span></span></p>
+<p>where a, b is candidate adjacent subword pieces; count(a,b) is number of times the pair occurs together; count(a), count(b) is individual piece frequencies.</p>
+<p>The numerator rewards pieces that occur together. Dividing by the separate frequencies reduces the score of a pair that is common only because each part is common in many unrelated contexts.</p>
+<p>A high-scoring pair is a candidate for one reusable subword unit, which can reduce token length without allocating a separate token to every full word.</p>
+<p>The unigram SentencePiece method chooses a subword vocabulary that explains raw text under a probabilistic segmentation model.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>SentencePiece unigram objective:</strong></span></p>
+<p><span id="eq-m2-c03-e04"><span class="math display">\[
+V^\star=\operatorname*{arg\,min}_{V}\left[-\sum_{s\in C}\log P(s\mid V)\right]
+\tag{3.4}\]</span></span></p>
+<p>where V is candidate subword vocabulary; C is training corpus; P(s | V) is probability assigned to sequence s under segmentations available from V.</p>
+<p>For each candidate vocabulary, SentencePiece assigns probabilities to possible segmentations of every training text. Summing negative log probabilities over the corpus produces one score; the vocabulary with the smaller score explains the corpus more efficiently under this model.</p>
+<p>This objective can learn useful pieces directly from raw text, including languages where whitespace is not a reliable word boundary.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Comparing a WordPiece score with SentencePiece pruning</strong></p>
+<p>Suppose the pair <code>un</code> occurs 16 times, while <code>u</code> occurs 40 times and <code>n</code> occurs 20 times.</p>
+<p><strong>WordPiece score:</strong></p>
+<p><span class="math inline">\(score(u,n) = \frac{16}{40  \cdot  20} = 0.02\)</span></p>
+<p>A second pair occurring 12 times with part counts 20 and 15 receives score 0.04 and is preferred even though its raw count is lower.</p>
+<p><strong>SentencePiece pruning:</strong></p>
+<p>If removing token <code>pu</code> changes corpus loss from 10.00 to 10.01, while removing <code>hug</code> changes it to 10.80, <code>pu</code> is the safer token to prune.</p>
+<p><strong>Dimensions:</strong></p>
+<p>Tokenizer output remains one integer sequence of length T under either algorithm.</p>
+<p>The algorithms differ during vocabulary construction; the model still receives token IDs after either choice.</p>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> WordPiece pair scores from corpus counts</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c03-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c03-c01-1"><a href="#lst-m2-c03-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> collections <span class="im">import</span> Counter</span>
+<span id="lst-m2-c03-c01-2"><a href="#lst-m2-c03-c01-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c03-c01-3"><a href="#lst-m2-c03-c01-3" aria-hidden="true" tabindex="-1"></a>piece_counts <span class="op">=</span> Counter({<span class="st">"u"</span>: <span class="dv">40</span>, <span class="st">"n"</span>: <span class="dv">20</span>, <span class="st">"g"</span>: <span class="dv">15</span>})</span>
+<span id="lst-m2-c03-c01-4"><a href="#lst-m2-c03-c01-4" aria-hidden="true" tabindex="-1"></a>pair_counts <span class="op">=</span> Counter({(<span class="st">"u"</span>, <span class="st">"n"</span>): <span class="dv">16</span>, (<span class="st">"n"</span>, <span class="st">"g"</span>): <span class="dv">12</span>})</span>
+<span id="lst-m2-c03-c01-5"><a href="#lst-m2-c03-c01-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c03-c01-6"><a href="#lst-m2-c03-c01-6" aria-hidden="true" tabindex="-1"></a>scores <span class="op">=</span> {</span>
+<span id="lst-m2-c03-c01-7"><a href="#lst-m2-c03-c01-7" aria-hidden="true" tabindex="-1"></a>    pair: count <span class="op">/</span> (piece_counts[pair[<span class="dv">0</span>]] <span class="op">*</span> piece_counts[pair[<span class="dv">1</span>]])</span>
+<span id="lst-m2-c03-c01-8"><a href="#lst-m2-c03-c01-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> pair, count <span class="kw">in</span> pair_counts.items()</span>
+<span id="lst-m2-c03-c01-9"><a href="#lst-m2-c03-c01-9" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="lst-m2-c03-c01-10"><a href="#lst-m2-c03-c01-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">max</span>(scores, key<span class="op">=</span>scores.get), scores)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The pair with the largest relative score can differ from the pair with the largest raw count.</p>
+<p>Production WordPiece trainers include normalization and vocabulary constraints omitted here.</p>
+<p>All three algorithms produce token IDs, but their vocabulary-building rules affect how rare words, whitespace, and multilingual text are segmented. Special tokens then mark roles that ordinary text tokens cannot express.</p>
+</section>
+<section id="sec-m2-c03-s03" class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="sec-m2-c03-s03"><span class="header-section-number">3.3</span> Delimiting Documents and Sequences with Special Tokens</h2>
+<p>A special token is a vocabulary item whose ID marks structure or control information rather than ordinary lexical content.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>BOS/EOS:</strong></span> Beginning-of-sequence and end-of-sequence markers.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>PAD:</strong></span> A padding token used to align sequences in a batch.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>MASK:</strong></span> A placeholder used in masked language modeling.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Role token:</strong></span> A chat-format token that marks user, assistant, system, or tool content.</li>
+</ul>
+<p>A model can learn behavior around special tokens because they appear in the same ID stream as ordinary tokens. Tokenizer design therefore changes the model input space.</p>
+<p>Special tokens make sequence structure visible to the numerical model. Padding marks unused reserved positions, separators distinguish segments, and mask tokens mark positions whose original content becomes a prediction target in masked-language modeling.</p>
+<p>Beginning- and end-of-sequence markers delimit an example. Padding creates equal-length rows for batching, while the attention mask prevents those added positions from influencing the model. Mask tokens create explicit prediction gaps for masked-language-model training.</p>
+<p>Chat templates use role and separator tokens to identify system, user, assistant, and tool spans. These markers are ordinary integer IDs to the embedding lookup, but their repeated training context gives them a structural role.</p>
+<p>Masked language modeling replaces selected positions with a special token or corruption pattern.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Masked input:</strong></span></p>
+<p><span id="eq-m2-c03-e05"><span class="math display">\[
+x'_t=\begin{cases}\mathrm{MASK},&amp;t\in M,\\x_t,&amp;\text{otherwise}\end{cases}
+\tag{3.5}\]</span></span></p>
+<p>where <span class="math inline">\(x_{t}\)</span> is original token ID at position t; <span class="math inline">\(x'_{t}\)</span> is corrupted input token presented to the model; M is set of positions selected for masking or corruption.</p>
+<p>Evaluate the membership test separately at every position. A selected index t in M is replaced by the mask symbol; every other position preserves its original token ID.</p>
+<p>The original <span class="math inline">\(x_{t}\)</span> at selected positions remains the target, so the model must infer it from the surrounding visible context.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Masked input</strong></p>
+<p>If <span class="math inline">\(x=[5,6,7]\)</span> and M={2}, then the masked sequence is [5, MASK, 7].</p>
+</div>
+<p>Special tokens make boundaries, padding, and prediction roles explicit in the ID sequence. Once text is numerical, classical feature methods can count its vocabulary coordinates.</p>
+</section>
+<section id="sec-m2-c03-s04" class="level2" data-number="3.4">
+<h2 data-number="3.4" class="anchored" data-anchor-id="sec-m2-c03-s04"><span class="header-section-number">3.4</span> Tokenization and n-gram trace</h2>
+<p>Text is not numerical until a tokenizer and vocabulary make it numerical. The computation starts with a string, segments it into tokens, maps each token to an integer id, and pads or masks sequences so batches become rectangular tensors. Each design choice creates a different sequence length and a different failure mode for unknown or rare words.</p>
+<p>The n-gram notebook gives a useful classical baseline because it makes probability estimation visible. Instead of learning a neural representation, the model counts contexts and continuations. The result is still a language model: it estimates the probability of the next token from previous tokens.</p>
+<p>Subword vocabularies are built by repeated corpus-level decisions, not by hand-selecting every token.</p>
+<div id="fig-m2-c03-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram showing repeated frequent-pair merges in BPE tokenizer training.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c03-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c03-f02.png" class="img-fluid figure-img" style="width:5.9in" alt="Diagram showing repeated frequent-pair merges in BPE tokenizer training.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c03-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.2: Frequent adjacent pairs become shared subword units, shortening common text sequences.
+</figcaption>
+</figure>
+</div>
+<p>BPE creates subword tokens by repeatedly merging frequent adjacent symbols. The result trades vocabulary size against sequence length.</p>
+<p>BPE, WordPiece, and SentencePiece share the same practical aim but differ in how candidate subwords are selected and how raw text boundaries are treated.</p>
+<div id="fig-m2-c03-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram comparing WordPiece and SentencePiece subword vocabulary methods.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c03-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c03-f03.png" class="img-fluid figure-img" style="width:5.9in" alt="Diagram comparing WordPiece and SentencePiece subword vocabulary methods.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c03-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.3: WordPiece scores useful pieces, while SentencePiece learns pieces directly from raw text.
+</figcaption>
+</figure>
+</div>
+<p>WordPiece scores candidate merges by usefulness relative to their parts. SentencePiece treats tokenization as language-independent modeling over raw text, which is important for multilingual and non-whitespace corpora.</p>
+<p>Tokenization maps raw strings to token sequences and integer IDs using a learned or fixed vocabulary. Token IDs are integer tensors <code>[B,T]</code>; masks are usually boolean or integer tensors with the same batch and sequence axes. Text is normalized, segmented, mapped to IDs, padded, and masked before numerical modeling begins.</p>
+<p>In PyTorch, <code>AutoTokenizer(...)(texts, padding=True, return_tensors='pt')</code> produces the tensors consumed by models.</p>
+<p><strong>Performance note:</strong> Longer token sequences increase attention work, key-value (KV) cache size, and memory use downstream.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: BPE walkthrough</strong></p>
+<p><strong>Starting vocabulary:</strong></p>
+<p><code>h-u-g&lt;/w&gt;</code>: 10, <code>p-u-g&lt;/w&gt;</code>: 5, <code>p-u-n&lt;/w&gt;</code>: 12, <code>b-u-n&lt;/w&gt;</code>: 4, <code>h-u-g-s&lt;/w&gt;</code>: 5</p>
+<p><strong>Round 1 — count adjacent character pairs across all words:</strong></p>
+<p>Pair counts: <code>(u,g): 10 + 5 + 5 = 20; (p,u): 5 + 12 = 17; (u,n): 12 + 4 = 16; (g,s): 5</code>.</p>
+<p>Most frequent pair: (u,g) with count 20. Merge -&gt; ‘ug’.</p>
+<p><strong>Round 2 — recount with ‘ug’ as single unit:</strong></p>
+<p>(h,ug): <span class="math inline">\(10+5=15\)</span> (p,ug): 5 (u,n): <span class="math inline">\(12+4=16\)</span> …</p>
+<p>Most frequent: (u,n) with count 16. Merge -&gt; ‘un’.</p>
+<p><strong>Round 3 — recount with ‘ug’ and ‘un’ as units:</strong></p>
+<p>(h,ug): 15; (ug,<code>&lt;/w&gt;</code>): 15; (p,un): 12; (b,un): 4; …</p>
+<p>Tie: (h,ug) and (ug,<code>&lt;/w&gt;</code>) both have count 15. Merge (h,ug) to form <code>hug</code>.</p>
+<p>After 3 rounds, the vocabulary contains: h, u, g, p, n, b, s, <code>&lt;/w&gt;</code>, ug, un, and hug.</p>
+<p>‘hug’ is now a single token. ‘pun’ tokenises as [‘p’,‘un’].</p>
+<p>BPE learns compressive merges from frequency — no linguistic rules needed.</p>
+</div>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>N-gram probability:</strong></span></p>
+<p><span id="eq-m2-c03-e06"><span class="math display">\[
+P(w_t\mid\mathrm{context})=\frac{\operatorname{count}(\mathrm{context},w_t)}{\operatorname{count}(\mathrm{context})}
+\tag{3.6}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>BPE merge choice:</strong></span></p>
+<p><span id="eq-m2-c03-e07"><span class="math display">\[
+\mathrm{merge}=\operatorname*{arg\,max}_{\mathrm{pair}}\operatorname{count}(\mathrm{pair})
+\tag{3.7}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Token id lookup:</strong></span></p>
+<p><span id="eq-m2-c03-e08"><span class="math display">\[
+\mathrm{ids}[t]=\begin{cases}\mathrm{vocab}[\mathrm{token}_t],&amp;\text{if }\mathrm{token}_t\text{ is represented in the vocabulary},\\mathrm{vocab}[\mathrm{UNK}],&amp;\text{otherwise}\end{cases}
+\tag{3.8}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
+<p>These dimensions appear in the computation in order.</p>
+<ul>
+<li>Raw string: a sequence of characters.</li>
+<li>Tokens: T strings after segmentation.</li>
+<li>Token ids: [T], integer vocabulary indices.</li>
+<li>Batch ids: [B, <span class="math inline">\(T_{max}\)</span>], padded to a common length.</li>
+<li>Attention mask: [B, <span class="math inline">\(T_{max}\)</span>], marking real tokens versus padding.</li>
+</ul>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
+<ul>
+<li>Tokenizer APIs usually return <span class="math inline">\(input_{ids}\)</span> and <span class="math inline">\(attention_{mask}\)</span> because ids alone do not tell the model which positions are padding.</li>
+<li>N-gram code should expose the count table before normalizing to probabilities.</li>
+<li>Special tokens such as BOS, EOS, PAD, UNK, and MASK are part of the mathematical input space.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>It should now be clear how to tokenize one sentence, map it to ids, pad it into a batch, and compute one n-gram probability.</strong></p>
+</div>
+<p>Tokenization is an algorithm that defines the discrete symbols the model can store, predict, and evaluate.</p>
+<p>Feature construction turns token IDs and counts into vectors and matrices.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../chapters/ch-m2-c02.html" class="pagination-link" aria-label="Token IDs: Discretizing Text into Numbers and Batches">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Token IDs: Discretizing Text into Numbers and Batches</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m2-c04.html" class="pagination-link" aria-label="Count Vectors &amp; TF-IDF: Extracting Word Frequencies and Their Limits">
+        <span class="nav-page-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Count Vectors &amp; TF-IDF: Extracting Word Frequencies and Their Limits</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

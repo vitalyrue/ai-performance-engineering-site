@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>15&nbsp; Recurrent Networks: Why Sequential Memory Hits a Wall – Mathematical Foundations of LLM Training and Inference</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m2-c16.html" rel="next">
+<link href="../parts/part-m2-p04.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p04.html">Part IV: Modeling Sequences</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c15.html"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">Recurrent Networks: Why Sequential Memory Hits a Wall</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Mathematical Foundations of LLM Training and Inference</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Mathematical Foundations of LLM Training and Inference</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-roadmap.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Roadmap</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-notation.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Notation</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-library-map.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library Map</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: From Text to Mathematical Objects</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Prediction Targets: Defining What the Model Learns</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Token IDs: Discretizing Text into Numbers and Batches</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Subword Tokenization: Building Compact Vocabularies</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Count Vectors &amp; TF-IDF: Extracting Word Frequencies and Their Limits</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: From Scores to Loss</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Linear Hyperplanes: Scoring Features with Matrix Math</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Sigmoid &amp; Softmax: Turning Raw Scores into Probabilities</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Decoding Strategies: Generating Text Token by Token</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Cross-Entropy &amp; Perplexity: Measuring Prediction Error and Uncertainty</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Validation &amp; Testing: Catching Overfitting and Measuring Generalization</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: From Error to Learning</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">AdamW &amp; Momentum: Steering Parameter Updates</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Backpropagation: Tracing Error Gradients via the Chain Rule</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Activation Functions: Bending Decision Boundaries with MLPs</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Embedding Tables: Looking Up Dense Word Vectors</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c14.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">14</span>&nbsp; <span class="chapter-title">Word2Vec: Learning Word Geometry from Context</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part IV: Modeling Sequences</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c15.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">Recurrent Networks: Why Sequential Memory Hits a Wall</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c16.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">16</span>&nbsp; <span class="chapter-title">Attention Mathematics</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c17.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">17</span>&nbsp; <span class="chapter-title">Transformer Blocks: Building Deep, Order-Aware Networks</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c18.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">18</span>&nbsp; <span class="chapter-title">Transformer Topologies: Choosing the Right Architecture</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c19.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">19</span>&nbsp; <span class="chapter-title">Pretraining Data and Scaling</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part V: Adapting and Running LLMs</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c20.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">20</span>&nbsp; <span class="chapter-title">Low-Rank Adaptation and Preference Alignment</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c21.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">21</span>&nbsp; <span class="chapter-title">KV Cache: Speeding Up Generation</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part VI: Implementation and Extensions</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c22.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">22</span>&nbsp; <span class="chapter-title">Multimodal Transformers: Processing Images and Audio</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c24.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">24</span>&nbsp; <span class="chapter-title">Computational Labs: Verifying the Math in Code</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m2-dictionary.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Dictionary</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m2-c15-s01" id="toc-sec-m2-c15-s01" class="nav-link active" data-scroll-target="#sec-m2-c15-s01"><span class="header-section-number">15.1</span> Carrying Sequential Memory Forward with Recurrent Hidden States</a></li>
+  <li><a href="#sec-m2-c15-s02" id="toc-sec-m2-c15-s02" class="nav-link" data-scroll-target="#sec-m2-c15-s02"><span class="header-section-number">15.2</span> Comparing Fixed N-Gram Histories with Continuous Hidden States</a></li>
+  <li><a href="#sec-m2-c15-s03" id="toc-sec-m2-c15-s03" class="nav-link" data-scroll-target="#sec-m2-c15-s03"><span class="header-section-number">15.3</span> Training Recurrent Networks with Backpropagation Through Time</a></li>
+  <li><a href="#sec-m2-c15-s04" id="toc-sec-m2-c15-s04" class="nav-link" data-scroll-target="#sec-m2-c15-s04"><span class="header-section-number">15.4</span> Gating Sequential Memory with LSTMs and GRUs</a></li>
+  <li><a href="#sec-m2-c15-s05" id="toc-sec-m2-c15-s05" class="nav-link" data-scroll-target="#sec-m2-c15-s05"><span class="header-section-number">15.5</span> Executing Additive Cell State Updates in LSTMs</a></li>
+  <li><a href="#sec-m2-c15-s06" id="toc-sec-m2-c15-s06" class="nav-link" data-scroll-target="#sec-m2-c15-s06"><span class="header-section-number">15.6</span> The Vanishing Gradient Problem and the O(T) Sequential Bottleneck</a></li>
+  <li><a href="#sec-m2-c15-s07" id="toc-sec-m2-c15-s07" class="nav-link" data-scroll-target="#sec-m2-c15-s07"><span class="header-section-number">15.7</span> RNN state trace</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p04.html">Part IV: Modeling Sequences</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c15.html"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">Recurrent Networks: Why Sequential Memory Hits a Wall</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m2-c15" class="quarto-section-identifier"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">Recurrent Networks: Why Sequential Memory Hits a Wall</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Language has order: an earlier token can change the meaning of a later one. Recurrent models represent that order by carrying a state from one position to the next.</p>
+<p>Sequence tasks must retain both token content and token order. N-grams use a fixed history; RNNs and LSTMs carry a learned state through the sequence, which exposes the limits that motivate attention.</p>
+<p>In code, <code>torch.nn.RNN</code>, <code>GRU</code>, and <code>LSTM</code> return per-token outputs and final states; NLTK supports the count-based n-gram comparison.</p>
+<p>Chapter 15 develops one required stage of the guide’s computation.</p>
+<div id="fig-m2-c15-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 15 opener for N-grams, RNNs, and LSTMs, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c15-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c15-f01.png" class="img-fluid figure-img" style="width:5.9in" alt="Chapter 15 opener for N-grams, RNNs, and LSTMs, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c15-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;15.1: Fixed history and recurrent state provide different ways to carry context through a sequence.
+</figcaption>
+</figure>
+</div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
+<section id="sec-m2-c15-s01" class="level2" data-number="15.1">
+<h2 data-number="15.1" class="anchored" data-anchor-id="sec-m2-c15-s01"><span class="header-section-number">15.1</span> Carrying Sequential Memory Forward with Recurrent Hidden States</h2>
+<p>A sequence task preserves the order of tokens and may return one decision, one label per position, or another sequence.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Sequence acceptor:</strong></span> A model that reads a sequence and produces one decision, such as a class label.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Sequence transducer:</strong></span> A model that maps an input sequence to an output sequence.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Autoregressive model:</strong></span> A model that predicts future tokens from previous tokens.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Teacher forcing:</strong></span> Training a decoder with the true previous token rather than its own sampled previous token.</li>
+</ul>
+<p>A sequence task preserves token order. An acceptor reads the sequence and returns one decision, sequence labeling returns one label per position, and generation or translation returns another sequence.</p>
+<p>These output forms describe the task, not the network. The next sections compare fixed-history probabilities with recurrent state before introducing the mechanism that trains that state.</p>
+<p>The hidden state gives a sequence model a learned memory, but its value depends on how much context the task actually needs.</p>
+</section>
+<section id="sec-m2-c15-s02" class="level2" data-number="15.2">
+<h2 data-number="15.2" class="anchored" data-anchor-id="sec-m2-c15-s02"><span class="header-section-number">15.2</span> Comparing Fixed N-Gram Histories with Continuous Hidden States</h2>
+<p>An n-gram language model predicts the next token from a fixed-length suffix of the preceding token sequence.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Markov assumption:</strong></span> Only a fixed number of previous tokens are used to predict the next token.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Smoothing:</strong></span> Assigning nonzero probability to unseen n-grams.</li>
+</ul>
+<p>The Markov assumption is the key simplification: instead of conditioning on the full prefix, the model keeps only the last one, two, or three tokens. That makes counts tractable but loses long-range dependencies.</p>
+<p>N-grams are useful because they show the probability problem before neural representations enter. They also make smoothing necessary, since many valid contexts are rare or absent in the training corpus.</p>
+<p>The model keeps only a fixed-width history.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>N-gram approximation:</strong></span></p>
+<p><span id="eq-m2-c15-e01"><span class="math display">\[
+P(x_{t}\mid x_{&lt;t})\approx P\!\left(x_{t}\mid x_{t-n+1},\ldots,x_{t-1}\right)
+\tag{15.1}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: N-gram approximation</strong></p>
+<p>A trigram model estimates P(‘sat’ | ‘the cat slept’) as P(‘sat’ | ‘cat slept’).</p>
+</div>
+<p>A fixed history is simple to count, while a learned state can compress earlier evidence. Training that state requires an unrolled recurrent computation.</p>
+</section>
+<section id="sec-m2-c15-s03" class="level2" data-number="15.3">
+<h2 data-number="15.3" class="anchored" data-anchor-id="sec-m2-c15-s03"><span class="header-section-number">15.3</span> Training Recurrent Networks with Backpropagation Through Time</h2>
+<p>A recurrent neural network updates a hidden state as it scans a sequence. The hidden state is a compressed memory of previous tokens.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>RNN cell:</strong></span> The repeated function that combines the current input and previous hidden state.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Vanishing gradient:</strong></span> The tendency for gradients through many recurrent steps to shrink.</li>
+</ul>
+<p>At step t, an RNN combines the current input vector with the previous hidden state using the same learned weights used at every other position. The new state can produce an output immediately or carry information to a later position.</p>
+<p>Backpropagation through time unrolls those repeated updates. A loss at a later position sends gradients through each earlier state transition to the shared input and recurrent matrices.</p>
+<p>Teacher forcing supplies the observed previous token during training. During generation the model receives its own selected token instead, so an early error can alter every later input state.</p>
+<p>An RNN updates a hidden state one token at a time.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>RNN update:</strong></span></p>
+<p><span id="eq-m2-c15-e02"><span class="math display">\[
+h_{t}=\phi(W_{x}x_{t}+W_{h}h_{t-1}+b)
+\tag{15.2}\]</span></span></p>
+<p>where <span class="math inline">\(x_{t}\)</span> is input at time t; <span class="math inline">\(h_{t-1}\)</span> is previous hidden state; <span class="math inline">\(h_{t}\)</span> is new hidden state.</p>
+<p>An RNN reuses the same transition at every time step, combining the new input with a summary of previous inputs.</p>
+<p>recurrence serializes sequence processing because each <span class="math inline">\(h_{t}\)</span> depends on <span class="math inline">\(h_{t-1}\)</span>.</p>
+<p>A sequence model can emit logits from each hidden state.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>RNN output:</strong></span></p>
+<p><span id="eq-m2-c15-e03"><span class="math display">\[
+z_{t}=W_{o}h_{t}+b_{o}
+\tag{15.3}\]</span></span></p>
+<p>where <span class="math inline">\(h_{t}\)</span> is hidden state at time t; <span class="math inline">\(x_{t}\)</span> is input vector at time t; φ is nonlinear activation.</p>
+<p>The recurrence combines the current input with the previous hidden state before applying the activation.</p>
+<p>The hidden state carries information forward, but the same dependency also limits parallel computation.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: RNN State for Sequential Prediction</strong></p>
+<p><strong>RNN update:</strong></p>
+<p>In a scalar toy RNN with identity activation, input weight 2, recurrent weight 0.5, current input 3, and previous hidden state 4, the next hidden state is 8.</p>
+<p><strong>RNN output:</strong></p>
+<p>If <span class="math inline">\(h_t=[1,2]\)</span>, <span class="math inline">\(W_o\)</span> is the <span class="math inline">\(2\times2\)</span> identity, and <span class="math inline">\(b_o=[0,0]\)</span>, then the output logits are <span class="math inline">\([1,2]\)</span>.</p>
+<p><strong>RNN recurrence:</strong></p>
+<p>With both scalar weights equal to <span class="math inline">\(1\)</span>, <span class="math inline">\(x_t=2\)</span>, <span class="math inline">\(h_{t-1}=1\)</span>, and <span class="math inline">\(b=0\)</span>, the preactivation is <span class="math inline">\(1\cdot2+1\cdot1+0=3\)</span>.</p>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Deep bidirectional LSTM dimensions</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c15-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c15-c01-1"><a href="#lst-m2-c15-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m2-c15-c01-2"><a href="#lst-m2-c15-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="lst-m2-c15-c01-3"><a href="#lst-m2-c15-c01-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c15-c01-4"><a href="#lst-m2-c15-c01-4" aria-hidden="true" tabindex="-1"></a>batch, steps, input_width, hidden_width <span class="op">=</span> <span class="dv">2</span>, <span class="dv">5</span>, <span class="dv">3</span>, <span class="dv">4</span></span>
+<span id="lst-m2-c15-c01-5"><a href="#lst-m2-c15-c01-5" aria-hidden="true" tabindex="-1"></a>inputs <span class="op">=</span> torch.randn(batch, steps, input_width)</span>
+<span id="lst-m2-c15-c01-6"><a href="#lst-m2-c15-c01-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c15-c01-7"><a href="#lst-m2-c15-c01-7" aria-hidden="true" tabindex="-1"></a>lstm <span class="op">=</span> nn.LSTM(</span>
+<span id="lst-m2-c15-c01-8"><a href="#lst-m2-c15-c01-8" aria-hidden="true" tabindex="-1"></a>    input_size<span class="op">=</span>input_width,</span>
+<span id="lst-m2-c15-c01-9"><a href="#lst-m2-c15-c01-9" aria-hidden="true" tabindex="-1"></a>    hidden_size<span class="op">=</span>hidden_width,</span>
+<span id="lst-m2-c15-c01-10"><a href="#lst-m2-c15-c01-10" aria-hidden="true" tabindex="-1"></a>    num_layers<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="lst-m2-c15-c01-11"><a href="#lst-m2-c15-c01-11" aria-hidden="true" tabindex="-1"></a>    batch_first<span class="op">=</span><span class="va">True</span>,</span>
+<span id="lst-m2-c15-c01-12"><a href="#lst-m2-c15-c01-12" aria-hidden="true" tabindex="-1"></a>    bidirectional<span class="op">=</span><span class="va">True</span>,</span>
+<span id="lst-m2-c15-c01-13"><a href="#lst-m2-c15-c01-13" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="lst-m2-c15-c01-14"><a href="#lst-m2-c15-c01-14" aria-hidden="true" tabindex="-1"></a>outputs, (final_hidden, final_cell) <span class="op">=</span> lstm(inputs)</span>
+<span id="lst-m2-c15-c01-15"><a href="#lst-m2-c15-c01-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c15-c01-16"><a href="#lst-m2-c15-c01-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(outputs.shape)       <span class="co"># [batch, steps, 2 * hidden_width]</span></span>
+<span id="lst-m2-c15-c01-17"><a href="#lst-m2-c15-c01-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(final_hidden.shape)  <span class="co"># [layers * directions, batch, hidden_width]</span></span>
+<span id="lst-m2-c15-c01-18"><a href="#lst-m2-c15-c01-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(final_cell.shape)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The output width doubles because each position receives one state from each direction.</p>
+<p>Bidirectional recurrence assumes that the complete input sequence is available.</p>
+<p>Backpropagation through time assigns the loss at later positions to the shared recurrent weights used at earlier positions.</p>
+</section>
+<section id="sec-m2-c15-s04" class="level2" data-number="15.4">
+<h2 data-number="15.4" class="anchored" data-anchor-id="sec-m2-c15-s04"><span class="header-section-number">15.4</span> Gating Sequential Memory with LSTMs and GRUs</h2>
+<p>An LSTM adds gates that control what to remember, forget, and expose. The gates improve gradient flow and make longer dependencies more learnable than in a plain RNN.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Forget gate:</strong></span> Controls how much previous cell state is retained.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Input gate:</strong></span> Controls how much new candidate information enters the cell state.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Output gate:</strong></span> Controls how much cell state is exposed as hidden state.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cell state:</strong></span> The LSTM memory path designed to preserve information over time.</li>
+</ul>
+<p>The mathematical purpose of gates is selective information flow. A gate near 0 blocks information; a gate near 1 passes it through.</p>
+<p>LSTMs reduce but do not eliminate the sequential bottleneck. They still process tokens step by step, which limits parallelism compared with transformer self-attention.</p>
+<p><strong>Origin note:</strong> LSTMs introduced gated memory to reduce the vanishing-gradient problem in recurrent sequence learning.</p>
+<p>The cell state <span class="math inline">\(c_{t}\)</span> is the long-lived memory vector. The hidden state <span class="math inline">\(h_{t}\)</span> is the vector exposed to the next layer or prediction head. Gates are vectors of sigmoid values between zero and one, so each coordinate can keep a different fraction of old memory or new candidate content.</p>
+<p>The forget gate multiplies the old cell state, the input gate multiplies the candidate content, and the output gate multiplies the transformed new cell state. The operations are coordinatewise, so an LSTM can preserve one coordinate while replacing another.</p>
+<p>A forget gate controls how much previous cell state remains.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>LSTM forget gate:</strong></span></p>
+<p><span id="eq-m2-c15-e05"><span class="math display">\[
+f_{t}=\sigma\!\left(W_{f}[h_{t-1};x_{t}]+b_{f}\right)
+\tag{15.4}\]</span></span></p>
+<p>Teacher forcing feeds the true previous token during training rather than the model’s sampled output.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Teacher forcing:</strong></span></p>
+<p><span id="eq-m2-c15-e06"><span class="math display">\[
+u_{t}=x_{t-1}^{\mathrm{gold}}
+\tag{15.5}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Gated update sketch:</strong></span></p>
+<p><span id="eq-m2-c15-e07"><span class="math display">\[
+c_{t}=f_{t}\odot c_{t-1}+i_{t}\odot g_{t}
+\tag{15.6}\]</span></span></p>
+<p>where <span class="math inline">\(c_{t}\)</span> is cell state at time t; <span class="math inline">\(f_{t}\)</span> is forget gate; <span class="math inline">\(i_{t}\)</span> is input gate; <span class="math inline">\(g_{t}\)</span> is candidate update.</p>
+<p>The cell state is the retained previous state plus a gated candidate contribution.</p>
+<p>Separate gates let an LSTM preserve or overwrite memory selectively.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Updating one scalar LSTM memory coordinate</strong></p>
+<p>Use previous cell state <span class="math inline">\(c_{t-1}=0.5\)</span>, candidate update <span class="math inline">\(g_t=0.4\)</span>, forget gate <span class="math inline">\(f_t=0.8\)</span>, input gate <span class="math inline">\(i_t=0.3\)</span>, and output gate <span class="math inline">\(o_t=0.6\)</span>.</p>
+<p><strong>Keep old memory:</strong></p>
+<p><span class="math inline">\(f_{t}  \cdot  c_{t-1} = 0.8  \cdot  0.5 = 0.4\)</span></p>
+<p><strong>Write candidate memory:</strong></p>
+<p><span class="math inline">\(i_{t}  \cdot  g_{t} = 0.3  \cdot  0.4 = 0.12\)</span></p>
+<p><strong>New cell state:</strong></p>
+<p><span class="math inline">\(c_{t} = 0.4 + 0.12 = 0.52\)</span></p>
+<p><strong>Exposed hidden state:</strong></p>
+<p><span class="math inline">\(h_{t} = 0.6  \cdot  tanh(0.52) = 0.287\)</span></p>
+<p>The cell state keeps most of its old value while accepting a smaller contribution from the new candidate.</p>
+</div>
+<p>Gates let the model choose what to retain, overwrite, and expose. The cell-state update makes that choice explicit.</p>
+</section>
+<section id="sec-m2-c15-s05" class="level2" data-number="15.5">
+<h2 data-number="15.5" class="anchored" data-anchor-id="sec-m2-c15-s05"><span class="header-section-number">15.5</span> Executing Additive Cell State Updates in LSTMs</h2>
+<p>An LSTM keeps a separate cell state and uses gates to decide what to forget, what to write, and what to expose as the hidden state. The gates are differentiable functions of the current input and previous hidden state.</p>
+<p>Cell candidate is a tanh-transformed proposal for new cell information.</p>
+<p>The gates use sigmoid values between zero and one, so multiplication by a gate acts like a soft keep, erase, or expose decision. The cell state has an additive path that helps information survive many time steps.</p>
+<p>Teacher forcing is separate from the gate equations: during supervised sequence training, the decoder receives the gold previous token as its input. The recurrent state still follows the same gated computation.</p>
+<p>The input, forget, and output gates are sigmoid functions of the current input and previous hidden state.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>LSTM gates:</strong></span></p>
+<p><span id="eq-m2-c15-e08"><span class="math display">\[
+\begin{aligned} i_{t}&amp;=\sigma(W_{i}x_{t}+U_{i}h_{t-1}+b_{i}),\\ f_{t}&amp;=\sigma(W_{f}x_{t}+U_{f}h_{t-1}+b_{f}),\\ o_{t}&amp;=\sigma(W_{o}x_{t}+U_{o}h_{t-1}+b_{o}) \end{aligned}
+\tag{15.7}\]</span></span></p>
+<p>where <span class="math inline">\(x_{t}\)</span> is input at time t; <span class="math inline">\(h_{t-1}\)</span> is previous hidden state; <span class="math inline">\(i_{t}\)</span>,<span class="math inline">\(f_{t}\)</span>,<span class="math inline">\(o_{t}\)</span> is input, forget, and output gates; W,U,b is gate-specific weights and biases.</p>
+<p>Each gate first forms an affine score from <span class="math inline">\(x_t\)</span> and <span class="math inline">\(h_{t-1}\)</span>. Sigmoid converts that score into a differentiable keep fraction between zero and one.</p>
+<p>Each gate is a vector with one value for each hidden coordinate.</p>
+<p>The candidate is filtered into the cell state, and the output gate exposes part of that state as the hidden state.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>LSTM state update:</strong></span></p>
+<p><span id="eq-m2-c15-e09"><span class="math display">\[
+\begin{aligned} g_{t}&amp;=\tanh(W_{g}x_{t}+U_{g}h_{t-1}+b_{g}),\\ c_{t}&amp;=f_{t}\odot c_{t-1}+i_{t}\odot g_{t},\\ h_{t}&amp;=o_{t}\odot\tanh(c_{t}) \end{aligned}
+\tag{15.8}\]</span></span></p>
+<p>where <span class="math inline">\(g_{t}\)</span> is candidate cell content; <span class="math inline">\(c_{t}\)</span> is cell state; <span class="math inline">\(h_{t}\)</span> is hidden state; · is coordinatewise multiplication.</p>
+<p>First compute the candidate and gates, then retain the gated old cell state and add the gated candidate. Finally, apply tanh and the output gate to produce <span class="math inline">\(h_{t}\)</span>.</p>
+<p>The additive cell update separates long-lived memory from the exposed hidden representation.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: LSTM gates</strong></p>
+<p>If a scalar gate preactivation is 0, its sigmoid value is 0.5; half of the corresponding state or candidate passes through that gate.</p>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: LSTM state update</strong></p>
+<p>With <span class="math inline">\(f_{t}=i_{t}=o_{t}=0.5, c_{t-1}=0\)</span>, and <span class="math inline">\(g_{t}=0.38\)</span>, <span class="math inline">\(c_{t}=0.19\)</span> and <span class="math inline">\(h_{t}=0.5·tanh(0.19)=0.094\)</span>.</p>
+</div>
+<p>The additive cell path helps information survive repeated steps, but recurrence still imposes a long serial path through the sequence.</p>
+</section>
+<section id="sec-m2-c15-s06" class="level2" data-number="15.6">
+<h2 data-number="15.6" class="anchored" data-anchor-id="sec-m2-c15-s06"><span class="header-section-number">15.6</span> The Vanishing Gradient Problem and the O(T) Sequential Bottleneck</h2>
+<p>Recurrence encodes order naturally but creates a long path between distant tokens. That long path is both a learning problem and a compute-parallelism problem.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Path length:</strong></span> The number of computational steps connecting two positions.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Sequential dependency:</strong></span> A dependency that prevents later steps from being computed before earlier steps.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Exposure bias:</strong></span> A mismatch between teacher-forced training prefixes and self-generated inference prefixes.</li>
+</ul>
+<p>A distant token influences a recurrent output only after passing through every intermediate state. The same repeated multiplication appears in the backward path, so gradients can shrink or grow across many time steps.</p>
+<p>The serial update also limits parallelism: the state at position t cannot be computed until the state at position t-1 is available. Attention replaces that long information path with a direct weighted read from permitted positions.</p>
+<p>Recurrence therefore trades compact state for serial computation and long gradient paths. Attention changes the connection between positions.</p>
+</section>
+<section id="sec-m2-c15-s07" class="level2" data-number="15.7">
+<h2 data-number="15.7" class="anchored" data-anchor-id="sec-m2-c15-s07"><span class="header-section-number">15.7</span> RNN state trace</h2>
+<p>A recurrent model processes a sequence by carrying a hidden state through time. At time t, the model combines the current input vector with the previous hidden state to create a new hidden state. That recurrence is the computation that gives the model memory, and it is also what makes long sequences hard to train.</p>
+<p>The task type determines which output dimensions matter. An acceptor uses the final hidden state for one decision, a transducer returns a prediction at every position, and a generator feeds generated tokens back as future inputs. Teacher forcing changes this feedback loop during training by supplying the correct previous token.</p>
+<p>Sequence tasks differ by where outputs are produced: once after reading the input, at each input position, or autoregressively as a generated sequence.</p>
+<div id="fig-m2-c15-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram comparing sequence acceptor, transducer, and generator output patterns.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c15-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c15-f02.png" class="img-fluid figure-img" style="width:5.9in" alt="Diagram comparing sequence acceptor, transducer, and generator output patterns.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c15-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;15.2: Where a sequence model emits outputs determines its targets, loss, and inference loop.
+</figcaption>
+</figure>
+</div>
+<p>The output dimensions determine the training target, loss reduction, and inference loop. RNNs make this distinction explicit before attention removes the strict recurrence bottleneck.</p>
+<p>A recurrent model updates hidden state one position at a time and emits final or per-token outputs. Inputs are <code>[B,T,d]</code>, hidden states are <code>[B,H]</code> or <code>[layers,B,H]</code>, and token logits are <code>[B,T,V]</code>. Each step combines the current input with prior hidden state, then forwards the new state.</p>
+<p>In PyTorch, <code>nn.RNN</code>, <code>nn.GRU</code>, and <code>nn.LSTM</code> return per-step outputs and final states.</p>
+<p><strong>Performance note:</strong> Sequential dependence across T limits parallelism compared with attention.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: One recurrent update</strong></p>
+<p>Use a two-coordinate input, a two-coordinate previous hidden state, identity input weights, recurrent weight 0.2I, and zero bias.</p>
+<p><span class="math inline">\(x_{t} = [1, 0]\)</span></p>
+<p><span class="math inline">\(h_{t-1} = [0.5, -0.5]\)</span></p>
+<p>preactivation = [1, 0] + [0.1, -0.1] = [1.1, -0.1]</p>
+<p><span class="math inline">\(h_{t} = tanh([1.1, -0.1]) = [0.800, -0.100]\)</span></p>
+</div>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>RNN recurrence:</strong></span></p>
+<p><span id="eq-m2-c15-e10"><span class="math display">\[
+h_{t}=\tanh(W_{x}x_{t}+W_{h}h_{t-1}+b)
+\tag{15.9}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Transducer output:</strong></span></p>
+<p><span id="eq-m2-c15-e11"><span class="math display">\[
+\mathrm{logits}_{t}=W_{o}h_{t}+b_{o}
+\tag{15.10}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
+<p>These dimensions appear in the computation in order.</p>
+<ul>
+<li>Input embeddings: [B, T, D].</li>
+<li>Initial hidden state <span class="math inline">\(h_{0}:\)</span> [B, H].</li>
+<li>All hidden states: [B, T, H].</li>
+<li>Final hidden state: [B, H].</li>
+<li>Token logits for generation or tagging: [B, T, V].</li>
+</ul>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
+<ul>
+<li>nn.RNN, nn.LSTM, and nn.GRU return both per-step outputs and final state variants.</li>
+<li>Token-level loss usually flattens [B, T, V] to [B·T, V] and targets to [B·T].</li>
+<li>Sampling from a CharRNN feeds the sampled id back into the next recurrent step.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>It should now be clear how to identify whether a sequence task needs [B,H], [B,T,H], or [B,T,V].</strong></p>
+</div>
+<p>Sequence alternatives show what attention improves: recurrence, fixed context, and step-by-step state updates.</p>
+<p>Attention selects and combines value vectors through normalized query-key scores.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../parts/part-m2-p04.html" class="pagination-link" aria-label="Part IV: Modeling Sequences">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part IV: Modeling Sequences</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m2-c16.html" class="pagination-link" aria-label="Attention Mathematics">
+        <span class="nav-page-text"><span class="chapter-number">16</span>&nbsp; <span class="chapter-title">Attention Mathematics</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

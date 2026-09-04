@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>3&nbsp; Serving LLMs with predictable performance – MLOps: From Experiments to Reliable AI Systems</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m3-c04.html" rel="next">
+<link href="../parts/part-ii.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: Reliable model services with measurement and retrieval</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m3-c03.html"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Serving LLMs with predictable performance</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">MLOps: From Experiments to Reliable AI Systems</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">MLOps: From Experiments to Reliable AI Systems</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m3-index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction: the operating problem</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-i.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: Reproducible training at cluster scale</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Making ML runs reproducible</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Distributed training across devices and clusters</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-ii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: Reliable model services with measurement and retrieval</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c03.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Serving LLMs with predictable performance</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Measuring service health and model quality</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Keeping storage and retrieval state reliable</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-iii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: Automated workflows and reliable system operation</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Running repeatable ML workflows</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Operating a grounded-answer system end to end</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m3-app-a.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Formula reference</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m3-app-b.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">MLOps glossary</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m3-app-c.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">C</span>&nbsp; <span class="chapter-title">Questions and concise answers</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m3-c03-s01" id="toc-sec-m3-c03-s01" class="nav-link active" data-scroll-target="#sec-m3-c03-s01"><span class="header-section-number">3.1</span> Setting latency and throughput targets</a></li>
+  <li><a href="#sec-m3-c03-s02" id="toc-sec-m3-c03-s02" class="nav-link" data-scroll-target="#sec-m3-c03-s02"><span class="header-section-number">3.2</span> Routing a request through the serving system</a></li>
+  <li><a href="#sec-m3-c03-s03" id="toc-sec-m3-c03-s03" class="nav-link" data-scroll-target="#sec-m3-c03-s03"><span class="header-section-number">3.3</span> Separating prefill and decode latency</a></li>
+  <li><a href="#sec-m3-c03-s04" id="toc-sec-m3-c03-s04" class="nav-link" data-scroll-target="#sec-m3-c03-s04"><span class="header-section-number">3.4</span> Increasing throughput with continuous batching</a></li>
+  <li><a href="#sec-m3-c03-s05" id="toc-sec-m3-c03-s05" class="nav-link" data-scroll-target="#sec-m3-c03-s05"><span class="header-section-number">3.5</span> Reducing KV-cache fragmentation with PagedAttention</a></li>
+  <li><a href="#sec-m3-c03-s06" id="toc-sec-m3-c03-s06" class="nav-link" data-scroll-target="#sec-m3-c03-s06"><span class="header-section-number">3.6</span> Reusing prefixes with cache-aware routing</a></li>
+  <li><a href="#sec-m3-c03-s07" id="toc-sec-m3-c03-s07" class="nav-link" data-scroll-target="#sec-m3-c03-s07"><span class="header-section-number">3.7</span> Scaling capacity while limiting cold starts</a></li>
+  <li><a href="#sec-m3-c03-s08" id="toc-sec-m3-c03-s08" class="nav-link" data-scroll-target="#sec-m3-c03-s08"><span class="header-section-number">3.8</span> Releasing serving bundles through deployment gates</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: Reliable model services with measurement and retrieval</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m3-c03.html"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Serving LLMs with predictable performance</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m3-c03" class="quarto-section-identifier"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Serving LLMs with predictable performance</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>How does a versioned model become a responsive, efficient, and reversible user-facing service? Chapter 2 treated one coordinated training job whose ranks progress together. Serving replaces synchronized steps with variable-length requests, latency objectives, persistent KV-cache state, and rolling changes across a fleet.</p>
+<p>The three panels connect the request path to batching and KV-cache state, then to the capacity and release controls that protect an interactive service.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chapter map</strong></p>
+<p><strong>3.1–3.3 Serving Objectives &amp; Latency Stages:</strong> Define Time to First Token (TTFT), Inter-Token Latency (ITL), and throughput SLOs, and dissect compute-bound prefill vs.&nbsp;memory-bound decode latency.</p>
+<p><strong>3.4–3.5 Continuous Batching &amp; PagedAttention:</strong> Explain iteration-level request scheduling in modern engines, and eliminate KV-cache memory fragmentation using non-contiguous physical block allocation.</p>
+<p><strong>3.6–3.8 Cache Routing &amp; Deployment Gates:</strong> Route requests based on prefix caching and queue depth, autoscale GPU replicas while mitigating cold starts, and enforce blue-green serving-bundle release gates.</p>
+</div>
+<div id="fig-m3-c03-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled Chapter 3 map follows a request through routing, continuous batching, KV-cache allocation, capacity scaling, and release gates.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c03-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c03-f01.png" class="img-fluid figure-img" alt="A labelled Chapter 3 map follows a request through routing, continuous batching, KV-cache allocation, capacity scaling, and release gates.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.1: How request scheduling and memory control produce predictable serving. The three panels connect the request path to batching and KV-cache state, then to the capacity and release controls that protect an interactive service.
+</figcaption>
+</figure>
+</div>
+<section id="sec-m3-c03-s01" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="sec-m3-c03-s01"><span class="header-section-number">3.1</span> Setting latency and throughput targets</h2>
+<p>A checkpoint is only one ingredient of a user-facing release. The serving design cannot be optimized until success is stated in workload and business terms. Latency, throughput, memory, quality, and cost measurements give engine settings a clear objective.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Service Level Objective (SLO).</strong></span> a measurable target for service behavior over a stated window, such as a p95 time-to-first-token below a threshold.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Time to First Token (TTFT).</strong></span> elapsed time from request admission until the first generated token becomes available.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Inter-Token Latency (ITL).</strong></span> time between successive generated tokens during decode, commonly summarized as a distribution.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Throughput.</strong></span> completed useful work per unit time, such as output tokens per second per GPU or requests per second at a defined workload.</p>
+<p>The business objective combines accepted work per GPU with latency, quality, safety, and availability. A benchmark that doubles tokens/s but violates the user’s ITL target does not improve that service.</p>
+<p><span id="eq-m3-c03-e01"><span class="math display">\[
+T_{\mathrm{request}} ≈ \mathrm{TTFT} + \left(N_{\mathrm{out}}-1\right) \cdot \mathrm{ITL}
+\tag{3.1}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: latency for a short interactive answer</strong></p>
+<p><strong>Queue:</strong> The request waits 120 ms.</p>
+<p><strong>Prefill:</strong> A 2,000-token prompt takes 280 ms.</p>
+<p><strong>First token:</strong> Queueing, prefill, scheduling, and first-token work produce a measured TTFT of 400 ms.</p>
+<p><strong>Later tokens:</strong> The remaining 79 intervals average 22 ms, adding 1,738 ms.</p>
+<p><strong>Total:</strong> 400 + 79 × 22 = 2,138 ms.</p>
+<p><strong>Interpretation:</strong> Later-token decode dominates total time even though the first-token experience remains separately visible.</p>
+<p><strong>Conclusion:</strong> A single latency number hides the stage that limits the request.</p>
+</div>
+<div id="fig-m3-c03-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Batch size trades throughput against latency for a specific workload.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c03-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c03-f02.png" class="img-fluid figure-img" alt="Batch size trades throughput against latency for a specific workload.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.2: Batch size trades throughput against latency for a specific workload.
+</figcaption>
+</figure>
+</div>
+<p>Latency distributions reveal behavior that a mean can hide. The p95 or p99 TTFT exposes queue spikes and long prompts, while ITL exposes decode instability. A complete throughput measurement states prompt and output lengths, concurrency pattern, engine configuration, GPU type, quantization, and whether routing and gateway overhead are included.</p>
+</section>
+<section id="sec-m3-c03-s02" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="sec-m3-c03-s02"><span class="header-section-number">3.2</span> Routing a request through the serving system</h2>
+<p>The serving objective identifies what users and operators measure. Those measurements cross several components, and each component owns a different decision. One request passes through admission, routing, and execution, while fleet management and evidence collection run around that data path.</p>
+<div id="fig-m3-c03-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A production LLM request crosses gateway, router, engine, control-plane, and observability responsibilities.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c03-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c03-f03.png" class="img-fluid figure-img" alt="A production LLM request crosses gateway, router, engine, control-plane, and observability responsibilities.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.3: A production LLM request crosses gateway, router, engine, control-plane, and observability responsibilities.
+</figcaption>
+</figure>
+</div>
+<p>The request path separates five concrete responsibilities:</p>
+<ul>
+<li><strong>API gateway:</strong> authenticates identities, validates request shape, enforces quotas and rate limits, applies policy filters, and records billing identity.</li>
+<li><strong>Inference router:</strong> selects an eligible engine replica using health, queue, model placement, and cache-state evidence.</li>
+<li><strong>Inference engine:</strong> tokenizes, schedules batches, allocates KV-cache blocks, executes kernels, and streams generated tokens.</li>
+<li><strong>Control plane:</strong> reconciles desired model deployments, provisions capacity, distributes weights, rolls versions, and coordinates recovery.</li>
+<li><strong>Data and observability layer:</strong> stores request traces, metrics, logs, audit events, evaluation samples, and release evidence.</li>
+</ul>
+<p>The router lies on the live request path; the control plane normally does not. Healthy replicas can continue serving during a temporary control-plane outage. Conversely, a router without fresh health or queue state can keep sending traffic to an overloaded or corrupt engine even when provisioning is healthy.</p>
+<div id="tbl-m3-c03-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c03-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;3.1: Serving signals become useful when the component that acts on them is explicit.
+</figcaption>
+<div aria-describedby="tbl-m3-c03-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Signal</th>
+<th>First responsible component</th>
+<th>Downstream action</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Invalid token or exceeded quota</td>
+<td>Gateway</td>
+<td>Rejection before GPU work</td>
+</tr>
+<tr class="even">
+<td>Prefix already cached</td>
+<td>Router</td>
+<td>Selection of a replica with reusable KV state</td>
+</tr>
+<tr class="odd">
+<td>KV blocks nearly exhausted</td>
+<td>Engine</td>
+<td>Admission throttling, eviction, or pressure reporting</td>
+</tr>
+<tr class="even">
+<td>Sustained queue growth</td>
+<td>Router + control plane</td>
+<td>Hotspot avoidance and capacity scaling</td>
+</tr>
+<tr class="odd">
+<td>Candidate bundle fails quality case</td>
+<td>Release gate</td>
+<td>Promotion stops; stable version retains traffic</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>One request-state trace</strong></p>
+<p>The gateway accepts request <code>req-1842</code> for serving bundle <code>sb-27</code> and records tenant and quota state. The router sees replicas A and B as compatible, but A’s health record is older than the 10-second freshness limit.</p>
+<p>Replica A is excluded. Replica B receives the request, allocates KV blocks, streams tokens, and emits completion state. If every compatible health record is stale, the router returns a bounded unavailable response instead of guessing that an endpoint is healthy.</p>
+</div>
+</section>
+<section id="sec-m3-c03-s03" class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="sec-m3-c03-s03"><span class="header-section-number">3.3</span> Separating prefill and decode latency</h2>
+<p>The request path identifies the engine as the component that turns admitted text into tokens. Inside the engine, queueing, prompt processing, and token generation stress different resources. The normal request path provides the baseline for stage-specific controls.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill.</strong></span> the parallel forward pass over prompt tokens that computes hidden states and initializes key/value tensors for attention.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Decode.</strong></span> the autoregressive loop that produces one next token per sequence iteration while reading accumulated KV-cache state.</p>
+<p>Prefill performs large matrix operations over many prompt tokens and is commonly compute-bound. Decode repeatedly streams model weights and KV state for a small amount of arithmetic per active sequence, so memory bandwidth and batch width often dominate. Queueing is controlled by admission and scheduler policy rather than a GPU kernel.</p>
+<div id="fig-m3-c03-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Latency controls act separately on queueing, prompt prefill, token decode, and cross-stage execution.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c03-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c03-f04.png" class="img-fluid figure-img" alt="Latency controls act separately on queueing, prompt prefill, token decode, and cross-stage execution.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.4: Latency controls act separately on queueing, prompt prefill, token decode, and cross-stage execution.
+</figcaption>
+</figure>
+</div>
+<p>A useful latency diagnosis names the stage. Long queue delay suggests admission, capacity, or scheduling pressure; long prefill suggests very long prompts, poor prefix reuse, or insufficient prefill compute; high ITL suggests decode batching, memory bandwidth, cache pressure, or per-token synchronization.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: the same service under two request shapes</strong></p>
+<p><strong>Long prompt:</strong> A 12,000-token prompt spends 1,450 ms in prefill and then emits 20 tokens at 18 ms between tokens.</p>
+<p><strong>Long answer:</strong> A 600-token prompt spends 110 ms in prefill and then emits 180 tokens at 24 ms between tokens.</p>
+<p><strong>Comparison:</strong> The first request is prefill-dominated; the second is decode-dominated even though its prompt is much smaller.</p>
+<p><strong>Control choice:</strong> Prefix reuse or more prefill capacity helps the first shape, while decode batch width and KV pressure are more relevant to the second.</p>
+<p><strong>Conclusion:</strong> Prompt and output distributions select the useful optimization; request count alone does not.</p>
+</div>
+</section>
+<section id="sec-m3-c03-s04" class="level2" data-number="3.4">
+<h2 data-number="3.4" class="anchored" data-anchor-id="sec-m3-c03-s04"><span class="header-section-number">3.4</span> Increasing throughput with continuous batching</h2>
+<p>The request stages have distinct costs, while static batches force short sequences to wait for the longest member and leave holes after requests finish. Continuous batching recovers those slots through iteration-level admission and completion.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Continuous batching.</strong></span> a serving scheduler that adds waiting sequences and removes finished sequences between decode iterations.</p>
+<p>The scheduler has a token budget, not merely a request-count limit. It chooses a mix of new prefill tokens and active decode tokens for the next iteration. Wider batches increase throughput by reusing weight reads across sequences, but they also increase queue time and can degrade ITL if the GPU is oversubscribed.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Chunked prefill.</strong></span> splitting a long prompt into smaller prefill chunks so decode work from other requests can be interleaved.</p>
+<p>Chunked prefill protects interactive decode traffic from a single very long prompt. The trade-off is more scheduling overhead and potentially less efficient prompt computation. Its production behavior depends on the actual mix of prompt sizes and latency classes.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Continuous batching: purpose and limits</strong></p>
+<p>Works on: the serving-engine queue and active sequence set</p>
+<p>Helps when: requests have different arrival times and output lengths</p>
+<p>How it works: rebuilds the batch between iterations so completed sequences leave and waiting sequences enter</p>
+<p>Other limits: larger batches improve throughput but can increase queue delay and per-token latency</p>
+<p>Why it matters: it prevents variable-length traffic from wasting GPU slots behind finished or unusually long requests</p>
+</div>
+<div id="fig-m3-c03-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Iteration-level scheduling admits and removes sequences as their prompt and decode work changes.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c03-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c03-f05.png" class="img-fluid figure-img" alt="Iteration-level scheduling admits and removes sequences as their prompt and decode work changes.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.5: Iteration-level scheduling admits and removes sequences as their prompt and decode work changes.
+</figcaption>
+</figure>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Three-iteration batch trace</strong></p>
+<p>Iteration 1 admits requests A and B for prefill. Iteration 2 decodes A and B while request C waits because the token budget is full.</p>
+<p>B finishes after iteration 2. Iteration 3 removes B, admits C’s prefill chunk, and continues A’s decode. The active set changes without waiting for A to finish.</p>
+<p>The expected effect is fewer empty execution slots; the measured guardrails are queue delay and ITL for each latency class.</p>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> vLLM-style scheduler and cache-capacity settings.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c03-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c03-c01-1"><a href="#lst-m3-c03-c01-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c03-c01-2"><a href="#lst-m3-c03-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># vLLM-style example: names and availability depend on engine version.</span></span>
+<span id="lst-m3-c03-c01-3"><a href="#lst-m3-c03-c01-3" aria-hidden="true" tabindex="-1"></a>engine_args <span class="op">=</span> {</span>
+<span id="lst-m3-c03-c01-4"><a href="#lst-m3-c03-c01-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"max_num_seqs"</span>: <span class="dv">128</span>,</span>
+<span id="lst-m3-c03-c01-5"><a href="#lst-m3-c03-c01-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"max_num_batched_tokens"</span>: <span class="dv">8192</span>,</span>
+<span id="lst-m3-c03-c01-6"><a href="#lst-m3-c03-c01-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">"enable_chunked_prefill"</span>: <span class="va">True</span>,</span>
+<span id="lst-m3-c03-c01-7"><a href="#lst-m3-c03-c01-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">"gpu_memory_utilization"</span>: <span class="fl">0.90</span>,</span>
+<span id="lst-m3-c03-c01-8"><a href="#lst-m3-c03-c01-8" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Code walkthrough</strong></p>
+<p>Sequence ceiling: <code>max_num_seqs</code> bounds the number of active request sequences considered by the scheduler.</p>
+<p>Token budget: <code>max_num_batched_tokens</code> caps prompt and decode tokens admitted to one iteration’s work.</p>
+<p>Prefill policy: <code>enable_chunked_prefill</code> permits long prompts to be split so interactive decode work can interleave.</p>
+<p>Memory reserve: <code>gpu_memory_utilization</code> controls how much device memory the engine may use for weights, KV blocks, and execution buffers.</p>
+<p>Result: The four settings jointly determine admission, batch shape, queueing behavior, and KV-cache capacity; they cannot be tuned independently.</p>
+<p>Limits: These names are vLLM-style APIs whose availability and exact semantics depend on engine version. Other engines expose the same mechanisms through different settings.</p>
+</div>
+</section>
+<section id="sec-m3-c03-s05" class="level2" data-number="3.5">
+<h2 data-number="3.5" class="anchored" data-anchor-id="sec-m3-c03-s05"><span class="header-section-number">3.5</span> Reducing KV-cache fragmentation with PagedAttention</h2>
+<p>Continuous batching keeps execution slots occupied. Every active sequence also grows persistent attention state, and unpredictable lengths make contiguous preallocation wasteful. The memory estimate determines block allocation, prefix reuse, and whether compression or offload is useful.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Key-Value (KV) cache.</strong></span> the key and value tensors retained from earlier tokens so decode does not recompute attention state for the entire prefix.</p>
+<p><span id="eq-m3-c03-e02"><span class="math display">\[
+M_{\mathrm{KV}} = 2 \cdot B \cdot L \cdot T \cdot d_{\mathrm{KV}} \cdot b
+\tag{3.2}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: KV-cache memory for a long-context batch</strong></p>
+<p><strong>Model:</strong> The decoder has 32 layers and a key/value width of 1,024 values per token.</p>
+<p><strong>Traffic:</strong> Sixteen active sequences each retain 8,000 cached tokens.</p>
+<p><strong>Precision:</strong> The FP16 or BF16 cache uses 2 bytes per stored element.</p>
+<p><strong>Bytes:</strong> Substituting the traffic, layer, dimension, and precision values yields 16,777,216,000 bytes.</p>
+<p><strong>Binary size:</strong> Approximately 15.6 GiB, before allocator metadata and model weights.</p>
+<p><strong>Conclusion:</strong> Context length and concurrency can consume more memory than the model weights left available for cache.</p>
+</div>
+<div id="fig-m3-c03-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Inference memory controls allocate, reuse, compress, or evict KV-cache state.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c03-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c03-f06.png" class="img-fluid figure-img" alt="Inference memory controls allocate, reuse, compress, or evict KV-cache state.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.6: Inference memory controls allocate, reuse, compress, or evict KV-cache state.
+</figcaption>
+</figure>
+</div>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Paged attention.</strong></span> an attention-memory scheme that stores KV state in fixed-size non-contiguous blocks and maps logical token positions to physical blocks.</p>
+<p>Paged allocation reduces internal fragmentation and makes partial growth, eviction, and sharing practical. Reference counts let several requests point to the same cached prefix blocks; a block is released only when no live sequence references it. Prefix caching is valuable for shared system prompts, few-shot examples, and repeated conversation prefixes.</p>
+<p>For variable-length traffic, the uniform B × T factor becomes the sum of retained tokens across active sequences, Σᵢ Tᵢ. Grouped-query or multi-query attention reduces d with subscript KV because several query heads share fewer key/value heads. The estimate still needs allocator metadata and partially filled final blocks to explain measured memory.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Paged block-allocation trace</strong></p>
+<p>Sequences A and B share two immutable prefix blocks. A then owns three additional blocks, while B owns one additional block and one half-filled final block.</p>
+<p>When A finishes, its three private blocks return to the free list; the shared prefix remains because B still references it. The half-filled block exposes bounded internal fragmentation without requiring one contiguous maximum-length reservation.</p>
+</div>
+<p>Quantizing KV state reduces bytes per element and can improve capacity, but conversion or unsupported-kernel overhead may offset the gain. Offloading moves colder state from GPU memory to host memory or storage; it extends capacity at the cost of transfer latency. Admission control and early rejection protect the cache before pressure becomes an out-of-memory failure.</p>
+</section>
+<section id="sec-m3-c03-s06" class="level2" data-number="3.6">
+<h2 data-number="3.6" class="anchored" data-anchor-id="sec-m3-c03-s06"><span class="header-section-number">3.6</span> Reusing prefixes with cache-aware routing</h2>
+<p>Paged allocation makes KV state reusable inside one engine. A fleet loses that benefit when a stateless load balancer sends every turn to a different replica. Stateful routing combines eligibility, cache affinity, and current load.</p>
+<p>Round robin is a useful baseline only when replicas are equivalent and request history does not matter. LLM engines are not equivalent at a moment in time: they hold different model versions, prefix blocks, queue lengths, and free memory. Cache-aware routing first filters to healthy compatible endpoints, then estimates reusable prefix state and balances that benefit against queue pressure.</p>
+<div id="fig-m3-c03-f07" class="quarto-float quarto-figure quarto-figure-center anchored" alt="KV-aware routing estimates prefix reuse before selecting an inference replica.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c03-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c03-f07.png" class="img-fluid figure-img" alt="KV-aware routing estimates prefix reuse before selecting an inference replica.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.7: KV-aware routing estimates prefix reuse before selecting an inference replica.
+</figcaption>
+</figure>
+</div>
+<p>A cache hit avoids part or all of prefill, but an overloaded endpoint can erase the saved compute. The router therefore depends on timely engine state, bounded staleness, a fallback when state is missing, and observability that records why an endpoint was selected.</p>
+<p>Eligibility is evaluated before preference: an endpoint must be healthy, serve the requested bundle, accept the request’s policy and context limits, and expose state no older than the freshness bound. Among eligible endpoints, estimated completion time combines queue delay, uncached prefill time, and decode time. Missing cache metadata contributes zero assumed reuse rather than an invented cache hit.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: cache affinity versus queue delay</strong></p>
+<p><strong>Endpoint A:</strong> Can reuse 1,800 prompt tokens but has an estimated 450 ms queue.</p>
+<p><strong>Endpoint B:</strong> Has no prefix cache but an estimated 80 ms queue.</p>
+<p><strong>Measured prefill rate:</strong> The engine saves 0.18 ms per reused token, so A avoids about 324 ms of prefill.</p>
+<p><strong>Net comparison:</strong> A’s extra queue is 370 ms, larger than the 324 ms cache saving.</p>
+<p><strong>Decision:</strong> Endpoint B has lower estimated latency for this request; the result changes if queue or prefill cost changes.</p>
+<p><strong>Conclusion:</strong> Cache-aware routing is an optimization over measured time, not a rule that always chooses the largest prefix match.</p>
+</div>
+</section>
+<section id="sec-m3-c03-s07" class="level2" data-number="3.7">
+<h2 data-number="3.7" class="anchored" data-anchor-id="sec-m3-c03-s07"><span class="header-section-number">3.7</span> Scaling capacity while limiting cold starts</h2>
+<p>Stateful routing uses the replicas that already exist. Sustained queue growth still requires the control plane to add capacity, yet loading large weights can take minutes. A stable scaler uses a smoothed demand signal, prepares storage and network paths, and records the cold-start transition.</p>
+<p>Autoscaling on raw one-second metrics causes oscillation because one long prompt can temporarily consume free KV blocks or inflate TTFT. A stable controller uses a smoothed demand signal, a cooldown, and separate scale-up and scale-down policies. Queue depth, waiting tokens, available cache blocks, and SLO error are more relevant than CPU utilization.</p>
+<div id="fig-m3-c03-f08" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The control plane reconciles desired deployments while request traffic stays on the serving path.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c03-f08-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c03-f08.png" class="img-fluid figure-img" alt="The control plane reconciles desired deployments while request traffic stays on the serving path.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f08-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.8: The control plane reconciles desired deployments while request traffic stays on the serving path.
+</figcaption>
+</figure>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: replica demand with warm-up delay and hysteresis</strong></p>
+<p><strong>Measured capacity:</strong> One warmed replica sustains 6 requests/s for the target prompt-output mix while meeting both TTFT and ITL objectives.</p>
+<p><strong>Smoothed demand:</strong> The five-minute demand signal rises to 25 requests/s, so 25 ÷ 6 requires five warmed replicas after rounding up.</p>
+<p><strong>Current capacity:</strong> Three replicas are ready; the controller requests two more and keeps a sixth as failure headroom.</p>
+<p><strong>Warm-up timeline:</strong> Node allocation takes 70 seconds, image and weights take 95 seconds, kernel warm-up takes 25 seconds, and health stabilization takes 20 seconds: about 210 seconds before traffic.</p>
+<p><strong>Hysteresis:</strong> Scale-down begins only after demand stays below three-replica capacity for ten minutes, avoiding a reversal during the 210-second scale-up delay.</p>
+<p><strong>Conclusion:</strong> Autoscaling capacity depends on warmed service rate and response delay, not an instantaneous utilization sample.</p>
+</div>
+<div id="fig-m3-c03-f09" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Measured scaling behavior includes the delay between a capacity signal and a warmed replica joining traffic.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c03-f09-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c03-f09.png" class="img-fluid figure-img" alt="Measured scaling behavior includes the delay between a capacity signal and a warmed replica joining traffic.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f09-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.9: Measured scaling behavior includes the delay between a capacity signal and a warmed replica joining traffic.
+</figcaption>
+</figure>
+</div>
+<p>Cold-start work includes allocating a node, pulling the engine image, loading weights, initializing kernels or graphs, warming caches, passing health checks, and joining the router. Node-local NVMe is the fastest ordinary weight source. Shared filesystems or enhanced object storage can feed many nodes; peer-to-peer distribution reduces a thundering herd against one storage endpoint.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill/decode disaggregation.</strong></span> placing prompt processing and token decoding in different worker pools and transferring KV state between them.</p>
+<p>Disaggregation lets compute-rich prefill workers and memory-bandwidth-oriented decode workers scale independently. Its success depends on a fast KV-transfer path, correct request handoff, compatible cache formats, and routing that keeps the two pools balanced. The transfer can erase the gain when interconnect latency or serialization is too high.</p>
+<p>A measured decision compares the prefill/decode imbalance with KV-transfer cost. If separate pools save 90 ms of queue and compute time but serialization and transfer add 120 ms at the target context length, the combined request is slower and the unified engine remains the better placement for that workload.</p>
+</section>
+<section id="sec-m3-c03-s08" class="level2" data-number="3.8">
+<h2 data-number="3.8" class="anchored" data-anchor-id="sec-m3-c03-s08"><span class="header-section-number">3.8</span> Releasing serving bundles through deployment gates</h2>
+<p>The control plane can now add and specialize capacity. A production change remains unsafe if only the weight identifier is versioned or only HTTP health is checked. A safe release moves the complete serving bundle through performance, quality, safety, and rollback gates.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Serving bundle.</strong></span> the immutable combination of weights, tokenizer, engine image, hardware compatibility, quantization, prompt defaults, runtime configuration, and release metadata.</p>
+<div id="fig-m3-c03-f10" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A reproducible release bundles model artifacts, engine image, configuration, and rollback state.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c03-f10-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c03-f10.png" class="img-fluid figure-img" alt="A reproducible release bundles model artifacts, engine image, configuration, and rollback state.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f10-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.10: A reproducible release bundles model artifacts, engine image, configuration, and rollback state.
+</figcaption>
+</figure>
+</div>
+<p>A tokenizer change, quantized kernel, sampling default, structured-output parser, or engine version can change behavior while weights remain unchanged. Bundle identity attaches benchmark and evaluation results to the actual deployable unit.</p>
+<div id="tbl-m3-c03-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c03-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;3.2: A serving bundle advances only when its deployable behavior passes every required gate.
+</figcaption>
+<div aria-describedby="tbl-m3-c03-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Gate</th>
+<th>What it catches</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Compatibility</td>
+<td>Missing kernels, unsupported GPU, schema mismatch</td>
+<td>Startup and interface tests</td>
+</tr>
+<tr class="even">
+<td>Performance</td>
+<td>TTFT/ITL/throughput or memory regression</td>
+<td>Fixed, ramp, spike, replay, and soak tests</td>
+</tr>
+<tr class="odd">
+<td>Quality</td>
+<td>Reasoning, factuality, or structured-output regression</td>
+<td>Golden prompts and held-out evaluator cases</td>
+</tr>
+<tr class="even">
+<td>Safety/domain</td>
+<td>Policy or customer-specific failure</td>
+<td>Curated regression suites and red-team cases</td>
+</tr>
+<tr class="odd">
+<td>Runtime</td>
+<td>Unhealthy rollout, missing telemetry, failed rollback</td>
+<td>Canary/shadow traces and rollback drill</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div id="fig-m3-c03-f11" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A serving rollout keeps stable and candidate bundles alive until performance and quality gates pass.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c03-f11-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c03-f11.png" class="img-fluid figure-img" alt="A serving rollout keeps stable and candidate bundles alive until performance and quality gates pass.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f11-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.11: A serving rollout keeps stable and candidate bundles alive until performance and quality gates pass.
+</figcaption>
+</figure>
+</div>
+<p>Blue/green or canary deployment keeps the stable bundle available while a candidate receives synthetic, shadow, or limited live traffic. The release gate compares performance and quality on equivalent workload slices. Promotion is reversible until the candidate has enough evidence; rollback restores the whole bundle rather than only the weights.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: a canary promotion decision</strong></p>
+<p><strong>Comparable slice:</strong> Stable and candidate bundles each receive replayed requests stratified by prompt length, output length, tenant class, and retrieval use.</p>
+<p><strong>Performance gate:</strong> Candidate p95 TTFT is 4% lower and p95 ITL is 2% higher; both remain inside the predefined non-regression bounds.</p>
+<p><strong>Quality gate:</strong> The candidate passes 499 of 500 critical cases, but the single failure is an authorization case with a zero-tolerance stop condition.</p>
+<p><strong>Decision:</strong> Traffic returns to the stable bundle and the entire candidate bundle remains available for reproduction; favorable aggregate latency does not override the critical failure.</p>
+<p><strong>Conclusion:</strong> A canary decision combines equivalent workload slices with explicit stop conditions and whole-bundle rollback.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chapter 3 summary</strong></p>
+<p>Core mechanisms: Iteration-level continuous batching in vLLM/SGLang; PagedAttention non-contiguous KV-cache memory allocation; prefix-aware request routing.</p>
+<p>Governing tradeoffs: TTFT vs.&nbsp;ITL latency optimization; KV-cache memory allocation limits vs.&nbsp;request concurrency throughput; aggressive prefetching vs.&nbsp;memory fragmentation.</p>
+<p>Failure modes &amp; defenses: Blue-green serving bundle deployments; automated latency and accuracy release gates.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Carry-forward result</strong></p>
+<p>The serving system now has an owned request path, stage-specific performance model, managed KV state, cache-aware routing, cold-start plan, and immutable release bundle.</p>
+<p>The next chapter builds the evidence system that decides whether this apparently healthy service is also correct.</p>
+</div>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../parts/part-ii.html" class="pagination-link" aria-label="Part II: Reliable model services with measurement and retrieval">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part II: Reliable model services with measurement and retrieval</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m3-c04.html" class="pagination-link" aria-label="Measuring service health and model quality">
+        <span class="nav-page-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Measuring service health and model quality</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

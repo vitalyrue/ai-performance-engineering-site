@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>10&nbsp; AdamW &amp; Momentum: Steering Parameter Updates – Mathematical Foundations of LLM Training and Inference</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m2-c11.html" rel="next">
+<link href="../parts/part-m2-p03.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p03.html">Part III: From Error to Learning</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c10.html"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">AdamW &amp; Momentum: Steering Parameter Updates</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Mathematical Foundations of LLM Training and Inference</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Mathematical Foundations of LLM Training and Inference</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-roadmap.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Roadmap</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-notation.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Notation</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-library-map.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library Map</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: From Text to Mathematical Objects</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Prediction Targets: Defining What the Model Learns</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Token IDs: Discretizing Text into Numbers and Batches</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Subword Tokenization: Building Compact Vocabularies</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Count Vectors &amp; TF-IDF: Extracting Word Frequencies and Their Limits</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: From Scores to Loss</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Linear Hyperplanes: Scoring Features with Matrix Math</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Sigmoid &amp; Softmax: Turning Raw Scores into Probabilities</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Decoding Strategies: Generating Text Token by Token</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Cross-Entropy &amp; Perplexity: Measuring Prediction Error and Uncertainty</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Validation &amp; Testing: Catching Overfitting and Measuring Generalization</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: From Error to Learning</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c10.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">AdamW &amp; Momentum: Steering Parameter Updates</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Backpropagation: Tracing Error Gradients via the Chain Rule</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Activation Functions: Bending Decision Boundaries with MLPs</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Embedding Tables: Looking Up Dense Word Vectors</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c14.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">14</span>&nbsp; <span class="chapter-title">Word2Vec: Learning Word Geometry from Context</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part IV: Modeling Sequences</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c15.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">Recurrent Networks: Why Sequential Memory Hits a Wall</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c16.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">16</span>&nbsp; <span class="chapter-title">Attention Mathematics</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c17.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">17</span>&nbsp; <span class="chapter-title">Transformer Blocks: Building Deep, Order-Aware Networks</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c18.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">18</span>&nbsp; <span class="chapter-title">Transformer Topologies: Choosing the Right Architecture</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c19.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">19</span>&nbsp; <span class="chapter-title">Pretraining Data and Scaling</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part V: Adapting and Running LLMs</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c20.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">20</span>&nbsp; <span class="chapter-title">Low-Rank Adaptation and Preference Alignment</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c21.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">21</span>&nbsp; <span class="chapter-title">KV Cache: Speeding Up Generation</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part VI: Implementation and Extensions</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c22.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">22</span>&nbsp; <span class="chapter-title">Multimodal Transformers: Processing Images and Audio</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c24.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">24</span>&nbsp; <span class="chapter-title">Computational Labs: Verifying the Math in Code</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m2-dictionary.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Dictionary</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m2-c10-s01" id="toc-sec-m2-c10-s01" class="nav-link active" data-scroll-target="#sec-m2-c10-s01"><span class="header-section-number">10.1</span> Stepping Weights with Stochastic Gradient Descent</a></li>
+  <li><a href="#sec-m2-c10-s02" id="toc-sec-m2-c10-s02" class="nav-link" data-scroll-target="#sec-m2-c10-s02"><span class="header-section-number">10.2</span> Accelerating Convergence and Escaping Plateaus with Momentum</a></li>
+  <li><a href="#sec-m2-c10-s03" id="toc-sec-m2-c10-s03" class="nav-link" data-scroll-target="#sec-m2-c10-s03"><span class="header-section-number">10.3</span> Adapting Per-Parameter Learning Rates with RMSprop and Adam</a></li>
+  <li><a href="#sec-m2-c10-s04" id="toc-sec-m2-c10-s04" class="nav-link" data-scroll-target="#sec-m2-c10-s04"><span class="header-section-number">10.4</span> Decoupling Weight Decay and Controlling Gradients with AdamW</a></li>
+  <li><a href="#sec-m2-c10-s05" id="toc-sec-m2-c10-s05" class="nav-link" data-scroll-target="#sec-m2-c10-s05"><span class="header-section-number">10.5</span> Stabilizing Early Training with Warmup and Cosine Decay Schedules</a></li>
+  <li><a href="#sec-m2-c10-s06" id="toc-sec-m2-c10-s06" class="nav-link" data-scroll-target="#sec-m2-c10-s06"><span class="header-section-number">10.6</span> Regularizing Parameters with L2 Weight Decay and Dropout</a></li>
+  <li><a href="#sec-m2-c10-s07" id="toc-sec-m2-c10-s07" class="nav-link" data-scroll-target="#sec-m2-c10-s07"><span class="header-section-number">10.7</span> Bounding Gradient Norms with Gradient Clipping</a></li>
+  <li><a href="#sec-m2-c10-s08" id="toc-sec-m2-c10-s08" class="nav-link" data-scroll-target="#sec-m2-c10-s08"><span class="header-section-number">10.8</span> Selecting Hyperparameters for Stable Optimization</a></li>
+  <li><a href="#sec-m2-c10-s09" id="toc-sec-m2-c10-s09" class="nav-link" data-scroll-target="#sec-m2-c10-s09"><span class="header-section-number">10.9</span> Optimizer update trace</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p03.html">Part III: From Error to Learning</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c10.html"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">AdamW &amp; Momentum: Steering Parameter Updates</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m2-c10" class="quarto-section-identifier"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">AdamW &amp; Momentum: Steering Parameter Updates</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>A gradient points toward a local reduction in loss, but its size and direction can vary sharply from one mini-batch to the next. Optimizers smooth, scale, and constrain the resulting parameter updates.</p>
+<p>A gradient says which direction reduces loss locally; an optimizer chooses the actual parameter step. This chapter compares SGD, momentum, RMSprop, Adam, and AdamW as different ways of turning noisy mini-batch gradients into stable updates.</p>
+<p>In code, <code>torch.optim.SGD</code>, <code>Adam</code>, and <code>AdamW</code> hold optimizer state and apply gradients after <code>loss.backward()</code>; gradient clipping uses <code>torch.nn.utils.clip_grad_norm_</code>.</p>
+<p>Chapter 10 develops one required stage of the guide’s computation.</p>
+<div id="fig-m2-c10-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 10 opener for Gradient descent and optimizers, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c10-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c10-f01.png" class="img-fluid figure-img" style="width:5.9in" alt="Chapter 10 opener for Gradient descent and optimizers, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c10-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10.1: Update rules combine gradients, learning rates, history, and regularization to change parameters.
+</figcaption>
+</figure>
+</div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
+<section id="sec-m2-c10-s01" class="level2" data-number="10.1">
+<h2 data-number="10.1" class="anchored" data-anchor-id="sec-m2-c10-s01"><span class="header-section-number">10.1</span> Stepping Weights with Stochastic Gradient Descent</h2>
+<p>Gradient descent describes a family of methods that differ mainly in how much data they use to estimate each update direction. The batch choice controls noise, memory use, and update frequency.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Full-batch gradient descent:</strong></span> Computes the gradient over the whole training set before one update.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Stochastic gradient descent:</strong></span> Computes an update from one example at a time.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Mini-batch gradient descent:</strong></span> Computes an update from a small batch of examples.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Batch size:</strong></span> The number of examples used to estimate one gradient step.</li>
+</ul>
+<p>Full-batch updates are stable but expensive for modern datasets. Pure stochastic updates are cheap but noisy. Mini-batches are the practical compromise used throughout neural network training.</p>
+<p>Noise is not only a problem; it can help optimization escape narrow local behavior. But too much noise, or an unsuitable learning rate, can prevent convergence.</p>
+<p>Full-batch gradient descent averages over the entire training set before every update. Stochastic gradient descent uses one example, and mini-batch training averages a small subset that can be processed efficiently as a tensor.</p>
+<p>A mini-batch gradient is a noisy estimate of the full empirical-risk gradient. Larger batches reduce that sampling noise but require more memory and may produce fewer parameter updates for a fixed number of examples.</p>
+<p>A parameter update moves opposite the gradient direction.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient descent:</strong></span></p>
+<p><span id="eq-m2-c10-e01"><span class="math display">\[
+\theta_{t+1}=\theta_t-\eta\,\operatorname{grad}L(\theta_t)
+\tag{10.1}\]</span></span></p>
+<p>where <span class="math inline">\(\theta_{t}\)</span> is parameters before the update; η is learning rate; grad L is gradient of the scalar loss.</p>
+<p>The first-order Taylor approximation says the loss decreases fastest locally in the negative gradient direction.</p>
+<p>the learning rate controls how far the parameters move along the descent direction.</p>
+<p>Mini-batch descent estimates the full gradient from a subset of examples.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Mini-batch gradient:</strong></span></p>
+<p><span id="eq-m2-c10-e02"><span class="math display">\[
+g_B=\frac{1}{\lvert B\rvert}\sum_{i\in B}\operatorname{grad}L_i(\theta)
+\tag{10.2}\]</span></span></p>
+<p>where B is set of examples in the batch; <span class="math inline">\(L_{i}\)</span> is loss for example i; θ is trainable parameters.</p>
+<p>A batch gradient averages the per-example gradients so the update estimates the full-sample direction.</p>
+<p>Batch size controls the trade-off between update noise, memory use, and update frequency.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Gradient descent</strong></p>
+<p>Starting from parameter 1.0 with learning rate 0.1 and gradient 3.0, the next parameter value is 0.7.</p>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Mini-batch gradient</strong></p>
+<p>For gradients [1,3] and [-1,5], <span class="math inline">\(g_{B}=([1,3]+[-1,5])/2=[0,4]\)</span>.</p>
+</div>
+<p>SGD moves parameters using the current mini-batch gradient, so different batches introduce useful but noisy updates. Momentum and adaptive methods store information from earlier gradients to influence later steps.</p>
+</section>
+<section id="sec-m2-c10-s02" class="level2" data-number="10.2">
+<h2 data-number="10.2" class="anchored" data-anchor-id="sec-m2-c10-s02"><span class="header-section-number">10.2</span> Accelerating Convergence and Escaping Plateaus with Momentum</h2>
+<p>Plain gradient descent reacts only to the current batch. Momentum adds a running direction so a sequence of similar gradients reinforces a stable update instead of being treated as unrelated steps.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Momentum:</strong></span> An exponential moving average of gradients used to smooth update directions.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Adam:</strong></span> An optimizer that tracks moving averages of gradients and squared gradients.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Warmup:</strong></span> A schedule that starts with smaller learning rates before reaching the main rate.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decay:</strong></span> A schedule that reduces learning rate later in training.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Bias correction:</strong></span> The Adam adjustment that removes initialization bias from moving-average moment estimates.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Learning-rate warmup:</strong></span> A schedule that increases the learning rate gradually during early optimization steps.</li>
+</ul>
+<p>Momentum stores one velocity tensor for each parameter tensor. At step t, the new gradient is added to a decayed copy of the previous velocity; the parameter then moves along that combined direction.</p>
+<p>This helps when consecutive batches point roughly the same way. Unlike the adaptive methods that follow, momentum changes the direction of the update but does not give separate coordinates different step sizes.</p>
+<p>Momentum stores a velocity tensor with the same dimensions as each parameter. Every new gradient contributes to that velocity while earlier contributions decay geometrically.</p>
+<p>Consistent gradients build speed in one direction; alternating gradients partially cancel. Momentum therefore differs from simply increasing the learning rate because its update depends on recent direction history.</p>
+<p>Momentum smooths the update direction across steps.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Momentum:</strong></span></p>
+<p><span id="eq-m2-c10-e03"><span class="math display">\[
+v_{t} = \beta v_{t-1} + g_{t};\quad \theta_{t+1} = \theta_{t} - \eta v_{t}
+\tag{10.3}\]</span></span></p>
+<p>where <span class="math inline">\(g_{t}\)</span> is gradient at step t; <span class="math inline">\(v_{t}\)</span> is momentum buffer; β is decay coefficient; η is learning rate; <span class="math inline">\(\theta_{t}\)</span> is parameter value.</p>
+<p>Momentum keeps an exponentially weighted average of recent gradients. The parameter update uses that average, so repeated gradients reinforce one another while alternating noise is smoothed.</p>
+<p>Momentum adds one state tensor per parameter and changes the direction of the update without changing the model objective.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Momentum</strong></p>
+<p>With <span class="math inline">\(\beta=0.9\)</span>, <span class="math inline">\(v_{t-1}=0.2\)</span>, and <span class="math inline">\(g_t=0.5\)</span>, the unscaled momentum rule gives <span class="math inline">\(v_t=0.9\cdot0.2+0.5=0.68\)</span>.</p>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> One optimizer step on the running logistic-regression batch</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c10-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c10-c01-1"><a href="#lst-m2-c10-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="lst-m2-c10-c01-2"><a href="#lst-m2-c10-c01-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c10-c01-3"><a href="#lst-m2-c10-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m2-c10-c01-4"><a href="#lst-m2-c10-c01-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn.functional <span class="im">as</span> F</span>
+<span id="lst-m2-c10-c01-5"><a href="#lst-m2-c10-c01-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c10-c01-6"><a href="#lst-m2-c10-c01-6" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> torch.tensor([[<span class="fl">1.0</span>, <span class="fl">0.0</span>], [<span class="fl">0.0</span>, <span class="fl">1.0</span>], [<span class="fl">1.0</span>, <span class="fl">1.0</span>]])</span>
+<span id="lst-m2-c10-c01-7"><a href="#lst-m2-c10-c01-7" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> torch.tensor([<span class="fl">1.0</span>, <span class="fl">0.0</span>, <span class="fl">1.0</span>])</span>
+<span id="lst-m2-c10-c01-8"><a href="#lst-m2-c10-c01-8" aria-hidden="true" tabindex="-1"></a>w <span class="op">=</span> torch.tensor([<span class="fl">0.8</span>, <span class="op">-</span><span class="fl">0.3</span>], requires_grad<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m2-c10-c01-9"><a href="#lst-m2-c10-c01-9" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> torch.tensor(<span class="fl">0.1</span>, requires_grad<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m2-c10-c01-10"><a href="#lst-m2-c10-c01-10" aria-hidden="true" tabindex="-1"></a>optimizer <span class="op">=</span> torch.optim.SGD([w, b], lr<span class="op">=</span><span class="fl">0.1</span>)</span>
+<span id="lst-m2-c10-c01-11"><a href="#lst-m2-c10-c01-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c10-c01-12"><a href="#lst-m2-c10-c01-12" aria-hidden="true" tabindex="-1"></a>optimizer.zero_grad()</span>
+<span id="lst-m2-c10-c01-13"><a href="#lst-m2-c10-c01-13" aria-hidden="true" tabindex="-1"></a>loss <span class="op">=</span> F.binary_cross_entropy_with_logits(X <span class="op">@</span> w <span class="op">+</span> b, y)</span>
+<span id="lst-m2-c10-c01-14"><a href="#lst-m2-c10-c01-14" aria-hidden="true" tabindex="-1"></a>loss.backward()</span>
+<span id="lst-m2-c10-c01-15"><a href="#lst-m2-c10-c01-15" aria-hidden="true" tabindex="-1"></a>optimizer.step()</span>
+<span id="lst-m2-c10-c01-16"><a href="#lst-m2-c10-c01-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c10-c01-17"><a href="#lst-m2-c10-c01-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(loss.item(), w.detach(), b.detach())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The parameters change in the direction selected by the batch gradient.</p>
+<p>One step shows mechanics, not convergence or good hyperparameter choice.</p>
+<p>Momentum carries a smoothed update direction across steps. Adaptive methods additionally scale each parameter using a history of gradient magnitudes.</p>
+</section>
+<section id="sec-m2-c10-s03" class="level2" data-number="10.3">
+<h2 data-number="10.3" class="anchored" data-anchor-id="sec-m2-c10-s03"><span class="header-section-number">10.3</span> Adapting Per-Parameter Learning Rates with RMSprop and Adam</h2>
+<p>A single learning rate can be too large for one parameter coordinate and too small for another. AdaGrad and RMSProp keep a squared-gradient statistic for every coordinate and divide the update by its local scale.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Adaptive step size:</strong></span> A coordinatewise update size derived from a stored gradient-scale statistic.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Squared-gradient state:</strong></span> A nonnegative value that records either all past squared gradients or a decayed recent average.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Elementwise square:</strong></span> Squaring each coordinate separately; for <span class="math inline">\(g=(2,-3), g^{2}=(4,9)\)</span>.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Accumulator:</strong></span> A tensor stored by an optimizer between updates.</li>
+</ul>
+<p>The stored statistic is nonnegative because it is built from squared gradients. Squaring removes sign: a gradient of -2 and a gradient of 2 both contribute 4, so the statistic records scale rather than direction.</p>
+<p>AdaGrad adds every squared gradient to a cumulative total. Coordinates that repeatedly receive large gradients acquire a large denominator and therefore a smaller effective step. This can help sparse features, but the total never decreases and may eventually make later updates negligible.</p>
+<p>RMSProp replaces the cumulative total with an exponential moving average. The decay coefficient determines how quickly old squared gradients lose influence, so the denominator follows recent gradient scale instead of growing for the entire training run.</p>
+<p>Both methods rescale each parameter coordinate independently. Momentum stores signed direction; AdaGrad and RMSProp store unsigned scale. Adam combines both kinds of state in the next section.</p>
+<p>AdaGrad shrinks learning rates for coordinates with large accumulated gradients.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>AdaGrad:</strong></span></p>
+<p><span id="eq-m2-c10-e04"><span class="math display">\[
+G_{t} = G_{t-1} + g_{t}^{2};\quad \theta_{t+1} = \theta_{t} - \eta\,\frac{g_{t}}{\sqrt{G_{t}} + \epsilon}
+\tag{10.4}\]</span></span></p>
+<p>where <span class="math inline">\(g_{t}\)</span> is current gradient; <span class="math inline">\(G_{t}\)</span> is accumulated squared-gradient state; η is learning rate; ε is small numerical constant.</p>
+<p>AdaGrad accumulates squared gradients coordinatewise. Coordinates that have received large historical gradients receive smaller future steps.</p>
+<p>AdaGrad adapts each coordinate independently but its accumulated state can make later steps very small.</p>
+<p>RMSProp uses an exponential moving average of squared gradients.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>RMSProp:</strong></span></p>
+<p><span id="eq-m2-c10-e05"><span class="math display">\[
+s_{t} = \beta s_{t-1} + (1-\beta)g_{t}^{2};\quad \theta_{t+1} = \theta_{t} - \eta\,\frac{g_{t}}{\sqrt{s_{t}} + \epsilon}
+\tag{10.5}\]</span></span></p>
+<p>where <span class="math inline">\(g_{t}\)</span> is current gradient; <span class="math inline">\(s_{t}\)</span> is exponentially averaged squared-gradient state; β is state decay coefficient; η is learning rate; ε is small numerical constant.</p>
+<p>RMSProp replaces AdaGrad’s unbounded sum with an exponential average of recent squared gradients, retaining adaptation while allowing old gradients to decay.</p>
+<p>The state tracks recent scale rather than the entire training history.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: How squared-gradient state changes one parameter step</strong></p>
+<p>Use one scalar parameter with learning rate 0.1 and two successive gradients, 2 and 2.</p>
+<p><strong>First gradient:</strong></p>
+<p><span class="math inline">\(g_{1} = 2\)</span></p>
+<p><span class="math inline">\(g_{1}^{2} = 4\)</span></p>
+<p><strong>AdaGrad accumulation:</strong></p>
+<p><span class="math inline">\(G_{1} = 4\)</span></p>
+<p><span class="math inline">\(G_{2} = G_{1} + g_{2}^{2} = 4 + 4 = 8\)</span></p>
+<p><span class="math inline">\(\mathrm{step}_{1}=0.1\frac{2}{\sqrt{4}}=0.100\)</span></p>
+<p><span class="math inline">\(\mathrm{step}_{2}=0.1\frac{2}{\sqrt{8}}=0.071\)</span></p>
+<p><strong>RMSProp moving average:</strong></p>
+<p><span class="math inline">\(\beta = 0.5\)</span></p>
+<p><span class="math inline">\(s_{1} = 0.5(4) = 2\)</span></p>
+<p><span class="math inline">\(s_{2} = 0.5(2) + 0.5(4) = 3\)</span></p>
+<p>The RMSProp state follows recent gradient scale instead of accumulating without limit.</p>
+<p>The gradient direction is the same in this trace; the stored squared-gradient state changes only the size of the step.</p>
+</div>
+<p>RMSprop and Adam divide updates by a running scale derived from squared gradients, making coordinates with different gradient magnitudes easier to train together. AdamW then separates this update rule from weight decay.</p>
+</section>
+<section id="sec-m2-c10-s04" class="level2" data-number="10.4">
+<h2 data-number="10.4" class="anchored" data-anchor-id="sec-m2-c10-s04"><span class="header-section-number">10.4</span> Decoupling Weight Decay and Controlling Gradients with AdamW</h2>
+<p>Adam uses two summaries of the gradient at every parameter coordinate: a signed moving average for direction and a squared moving average for scale.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>First moment:</strong></span> An exponential moving average of gradients that preserves their direction.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Second moment:</strong></span> An exponential moving average of squared gradients that estimates local gradient scale.</li>
+</ul>
+<p>The first moment is an exponential moving average of signed gradients. Repeated gradients in one direction reinforce one another, so this state supplies the update direction in the same way that momentum does.</p>
+<p>The second moment is an exponential moving average of squared gradients. It supplies a separate nonnegative scale for every parameter coordinate, following the RMSProp idea.</p>
+<p>Both averages start at zero and are therefore too small during the first updates. Bias correction divides out the known initialization effect before the first moment is divided by the square root of the second.</p>
+<p>Adam stores two state tensors for every parameter and therefore uses more optimizer memory than SGD or momentum. The optimizer changes the update rule, not the loss being minimized.</p>
+<p>Adam tracks an exponential moving average of gradients.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Adam first moment:</strong></span></p>
+<p><span id="eq-m2-c10-e06"><span class="math display">\[
+m_{t} = \beta_{1}m_{t-1} + (1-\beta_{1})g_{t}
+\tag{10.6}\]</span></span></p>
+<p>where <span class="math inline">\(g_{t}\)</span> is gradient at step t; <span class="math inline">\(m_{t}\)</span> is first-moment state; <span class="math inline">\(v_{t}\)</span> is second-moment state; <span class="math inline">\(\beta_{1}\)</span>,<span class="math inline">\(\beta_{2}\)</span> is decay coefficients; t is update step index.</p>
+<p>Adam combines an exponential average of gradients with an exponential average of squared gradients. Both averages start at zero, so bias correction rescales them during the early steps.</p>
+<p>The first moment supplies direction; the second moment supplies a coordinatewise scale.</p>
+<p>Adam also tracks an exponential moving average of squared gradients.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Adam second moment:</strong></span></p>
+<p><span id="eq-m2-c10-e07"><span class="math display">\[
+v_{t} = \beta_{2}v_{t-1} + (1-\beta_{2})g_{t}^{2}
+\tag{10.7}\]</span></span></p>
+<p>where <span class="math inline">\(g_{t}\)</span> is gradient at step t; <span class="math inline">\(m_{t}\)</span> is first-moment state; <span class="math inline">\(v_{t}\)</span> is second-moment state; <span class="math inline">\(\beta_{1}\)</span>,<span class="math inline">\(\beta_{2}\)</span> is decay coefficients; t is update step index.</p>
+<p>Adam combines an exponential average of gradients with an exponential average of squared gradients. Both averages start at zero, so bias correction rescales them during the early steps.</p>
+<p>The first moment supplies direction; the second moment supplies a coordinatewise scale.</p>
+<p>Bias correction compensates for moments initialized at zero.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Adam bias correction:</strong></span></p>
+<p><span id="eq-m2-c10-e08"><span class="math display">\[
+\widehat{m}_{t} = \frac{m_{t}}{1-\beta_{1}^{t}},\quad \widehat{v}_{t} = \frac{v_{t}}{1-\beta_{2}^{t}}
+\tag{10.8}\]</span></span></p>
+<p>where <span class="math inline">\(g_{t}\)</span> is gradient at step t; <span class="math inline">\(m_{t}\)</span> is first-moment state; <span class="math inline">\(v_{t}\)</span> is second-moment state; <span class="math inline">\(\beta_{1}\)</span>,<span class="math inline">\(\beta_{2}\)</span> is decay coefficients; t is update step index.</p>
+<p>Adam combines an exponential average of gradients with an exponential average of squared gradients. Both averages start at zero, so bias correction rescales them during the early steps.</p>
+<p>The first moment supplies direction; the second moment supplies a coordinatewise scale.</p>
+<p>The Adam update rescales the first moment by the square root of the second moment.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Adam update:</strong></span></p>
+<p><span id="eq-m2-c10-e09"><span class="math display">\[
+\theta_{t+1} = \theta_{t} - \eta\,\frac{\widehat{m}_{t}}{\sqrt{\widehat{v}_{t}}+\epsilon}
+\tag{10.9}\]</span></span></p>
+<p>where <span class="math inline">\(\hat{m}_{t}\)</span> is bias-corrected first moment; <span class="math inline">\(\hat{v}_{t}\)</span> is bias-corrected second moment; ε is small stabilizer.</p>
+<p>Adam rescales the average gradient by the root mean square of recent gradients, so coordinates with consistently large gradients get smaller effective steps.</p>
+<p>Adam changes the scale of each coordinate’s update; it does not remove the need for validation or learning-rate tuning.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Adam moment updates:</strong></span></p>
+<p><span id="eq-m2-c10-e10"><span class="math display">\[
+m_{t} = \beta_{1}m_{t-1} + (1-\beta_{1})g_{t};\quad v_{t} = \beta_{2}v_{t-1} + (1-\beta_{2})g_{t}^{2}
+\tag{10.10}\]</span></span></p>
+<p>where <span class="math inline">\(m_{t}\)</span> is first-moment estimate; <span class="math inline">\(v_{t}\)</span> is second-moment estimate; <span class="math inline">\(g_{t}\)</span> is current gradient.</p>
+<p>Exponential moving averages retain recent gradient direction and magnitude.</p>
+<p>The moments are optimizer state stored alongside the parameters.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Using Adam’s direction and scale estimates in one update</strong></p>
+<p>Use <span class="math inline">\(g_{1} = 2\)</span>, <span class="math inline">\(\beta_{1} = 0.9\)</span>, <span class="math inline">\(\beta_{2} = 0.99\)</span>, and learning rate <span class="math inline">\(η = 0.1\)</span>.</p>
+<p><strong>First moment:</strong></p>
+<p><span class="math inline">\(m_{1} = 0.9(0) + 0.1(2) = 0.2\)</span></p>
+<p><span class="math inline">\(\hat{m}_{1} = \frac{0.2}{1-0.9} = 2\)</span></p>
+<p><strong>Second moment:</strong></p>
+<p><span class="math inline">\(v_{1} = 0.99(0) + 0.01(2^{2}) = 0.04\)</span></p>
+<p><span class="math inline">\(\hat{v}_{1} = \frac{0.04}{1-0.99} = 4\)</span></p>
+<p><strong>Parameter step:</strong></p>
+<p><span class="math inline">\(step = η \frac{\hat{m}_{1}}{\sqrt{\hat{v}_{1}}} = 0.1\frac{(2)}{\sqrt{4}} = 0.1\)</span></p>
+<p>The corrected first moment supplies the signed direction, while the corrected second moment divides by the gradient magnitude.</p>
+</div>
+<p>AdamW applies shrinkage directly to parameters instead of folding it into the adaptive gradient. Schedules and regularization determine how strongly that update acts over training.</p>
+</section>
+<section id="sec-m2-c10-s05" class="level2" data-number="10.5">
+<h2 data-number="10.5" class="anchored" data-anchor-id="sec-m2-c10-s05"><span class="header-section-number">10.5</span> Stabilizing Early Training with Warmup and Cosine Decay Schedules</h2>
+<p>AdamW combines Adam’s adaptive update with a separate parameter shrinkage term, and warmup controls the size of the earliest optimization steps.</p>
+<p>Decoupled weight decay is a direct parameter shrinkage applied separately from Adam’s gradient moments.</p>
+<p>In AdamW, weight decay shrinks the parameter directly instead of entering the gradient moments. This makes the regularization action easier to separate from Adam’s adaptive scaling.</p>
+<p>Warmup changes the size of the first updates, not the loss function. It is especially useful when randomly initialized or newly fine-tuned layers produce unstable early gradients.</p>
+<p>The Adam part first computes moment-adjusted steps from gradients. AdamW then subtracts a fraction of the current parameter value as a separate operation, so the shrinkage is not divided by the adaptive second-moment scale.</p>
+<p>Warmup applies a small learning rate while moment estimates and newly initialized layers are most unstable. After the warmup interval, a constant or decaying schedule takes over; the optimizer state continues across that transition.</p>
+<p>AdamW decouples weight decay from the adaptive gradient update.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>AdamW update:</strong></span></p>
+<p><span id="eq-m2-c10-e11"><span class="math display">\[
+\theta_{t+1} = \theta_{t} - \eta\,\frac{\widehat{m}_{t}}{\sqrt{\widehat{v}_{t}}+\epsilon} - \eta\lambda\theta_{t}
+\tag{10.11}\]</span></span></p>
+<p>where <span class="math inline">\(\theta_{t}\)</span> is parameter before the update; η is learning rate; <span class="math inline">\(u_{t}\)</span> is adaptive Adam update; λ is decoupled weight-decay coefficient.</p>
+<p>AdamW applies the adaptive gradient update and the weight-decay shrinkage as separate operations, so regularization is not mixed into the moment estimates.</p>
+<p>The parameter is changed by both the data gradient and a direct shrinkage term.</p>
+<p>A simple warmup schedule grows the learning rate linearly until a target value is reached.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Linear warmup:</strong></span></p>
+<p><span id="eq-m2-c10-e12"><span class="math display">\[
+\eta_{t} = \eta_{\max}\,\min\!\left(1,\frac{t}{T_{\mathrm{warmup}}}\right)
+\tag{10.12}\]</span></span></p>
+<p>where <span class="math inline">\(\eta_t\)</span> is the learning rate at step <span class="math inline">\(t\)</span>, and <span class="math inline">\(T_{\mathrm{warmup}}\)</span> is the number of warmup steps.</p>
+<p>The scale factor starts near zero and reaches one at the end of warmup.</p>
+<p>Warmup changes the update size, not the loss function.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: AdamW update</strong></p>
+<p>If <span class="math inline">\(\theta_t=1.0\)</span>, the adaptive step is <span class="math inline">\(0.02\)</span>, and the decoupled weight-decay step is <span class="math inline">\(0.001\)</span>, then AdamW gives <span class="math inline">\(\theta_{t+1}=1.0-0.02-0.001=0.979\)</span>.</p>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Linear warmup</strong></p>
+<p>With <span class="math inline">\(\eta_{\max}=0.001\)</span> and <span class="math inline">\(T_{\mathrm{warmup}}=1000\)</span>, step <span class="math inline">\(t=250\)</span> uses <span class="math inline">\(\eta_t=0.00025\)</span>.</p>
+</div>
+<p>A schedule changes the step size over training without changing the loss definition. Weight decay and dropout change the model or objective to limit overfitting.</p>
+</section>
+<section id="sec-m2-c10-s06" class="level2" data-number="10.6">
+<h2 data-number="10.6" class="anchored" data-anchor-id="sec-m2-c10-s06"><span class="header-section-number">10.6</span> Regularizing Parameters with L2 Weight Decay and Dropout</h2>
+<p>Regularization changes the learning problem so the model is less likely to fit accidental patterns in the training data. It trades training-set fit for better behavior on new examples.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Overfitting:</strong></span> Low training error paired with poor validation or test behavior.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Weight decay:</strong></span> A penalty or update rule that discourages large weights.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Dropout:</strong></span> Randomly zeroing activations during training to reduce co-adaptation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Early stopping:</strong></span> Stopping training when validation performance stops improving.</li>
+</ul>
+<p>In classical models, regularization often means adding a penalty to the objective. In neural networks, regularization also includes architecture choices, data augmentation, dropout, and training schedules.</p>
+<p>For LLM fine-tuning, overfitting can appear as a model that memorizes narrow examples, loses general instruction behavior, or becomes brittle outside the fine-tuning distribution.</p>
+<p>The gradient consequence of L2 regularization is shrinkage. Differentiating its squared-magnitude penalty adds a term proportional to the current parameter vector, so every update also pulls weights toward zero.</p>
+<p>L2 regularization adds a penalty proportional to squared parameter magnitude, producing a smooth shrinkage pressure on large weights. L1 regularization uses absolute magnitude and can drive some coefficients exactly to zero.</p>
+<p>Regularization changes the training objective, while early stopping uses validation behavior to decide when to stop applying updates. Both trade a small increase in training error for better behavior on unseen examples.</p>
+<p>L2 regularization adds a penalty proportional to the squared parameter magnitude.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>L2 regularization:</strong></span></p>
+<p><span id="eq-m2-c10-e13"><span class="math display">\[
+L_{\mathrm{total}} = L_{\mathrm{data}} + \lambda\,\theta^{T}\theta
+\tag{10.13}\]</span></span></p>
+<p>L1 regularization adds the absolute parameter magnitudes and can encourage sparse parameters.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>L1 regularization:</strong></span></p>
+<p><span id="eq-m2-c10-e14"><span class="math display">\[
+L_{\mathrm{total}} = L_{\mathrm{data}} + \lambda\sum_{i}\lvert\theta_{i}\rvert
+\tag{10.14}\]</span></span></p>
+<p>L2 regularization adds a shrinkage term to the gradient update.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>L2 update implication:</strong></span></p>
+<p><span id="eq-m2-c10-e15"><span class="math display">\[
+\theta_{t+1} = \theta_{t} - \eta\,(g_{t} + 2\lambda\theta_{t})
+\tag{10.15}\]</span></span></p>
+<p>where <span class="math inline">\(\theta_{t}\)</span> is current parameter value; <span class="math inline">\(g_{t}\)</span> is data-loss gradient; λ is L2 regularization strength.</p>
+<p>Differentiating the squared-magnitude penalty produces the extra shrinkage term in the update.</p>
+<p>The parameter moves both against the data gradient and toward zero.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>L2-regularized objective:</strong></span></p>
+<p><span id="eq-m2-c10-e16"><span class="math display">\[
+J(\theta) = \widehat{R}(\theta) + \lambda\,\theta^{T}\theta
+\tag{10.16}\]</span></span></p>
+<p>where <span class="math inline">\(\hat{R}\)</span> is empirical risk; λ is regularization strength; θ is parameter vector.</p>
+<p>Adding the squared parameter norm penalizes large weights while retaining the data-fitting term.</p>
+<p>Regularization changes the objective being minimized, not the meaning of the input data.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Keeping Weights from Fitting Noise</strong></p>
+<p><strong>L2 regularization:</strong></p>
+<p>For <span class="math inline">\(\theta=[3,4]\)</span> and <span class="math inline">\(\lambda=0.1\)</span>, the <span class="math inline">\(L_2\)</span> penalty adds <span class="math inline">\(0.1(3^2+4^2)=2.5\)</span> to the objective.</p>
+<p><strong>L1 regularization:</strong></p>
+<p>For <span class="math inline">\(\theta=[3,-4]\)</span> and <span class="math inline">\(\lambda=0.1\)</span>, the <span class="math inline">\(L_1\)</span> penalty adds <span class="math inline">\(0.1(|3|+|-4|)=0.7\)</span> to the objective.</p>
+<p><strong>L2 update implication:</strong></p>
+<p>With <span class="math inline">\(\theta_t=1\)</span>, <span class="math inline">\(g_t=0.4\)</span>, <span class="math inline">\(\eta=0.1\)</span>, and <span class="math inline">\(\lambda=0.01\)</span>, the <span class="math inline">\(L_2\)</span>-regularized update gives <span class="math inline">\(\theta_{t+1}=1-0.1(0.4+2\cdot0.01\cdot1)=0.958\)</span>.</p>
+<p><strong>L2-regularized objective:</strong></p>
+<p>For <span class="math inline">\(\theta=(3,4)\)</span> and <span class="math inline">\(\lambda=0.1\)</span>, the penalty in the regularized objective is <span class="math inline">\(0.1(3^2+4^2)=2.5\)</span>.</p>
+</div>
+<p>Regularization limits reliance on particular weights or activations. Gradient clipping separately limits a single unstable update before it can damage the parameters.</p>
+</section>
+<section id="sec-m2-c10-s07" class="level2" data-number="10.7">
+<h2 data-number="10.7" class="anchored" data-anchor-id="sec-m2-c10-s07"><span class="header-section-number">10.7</span> Bounding Gradient Norms with Gradient Clipping</h2>
+<p>Gradient clipping rescales an accumulated gradient when its norm exceeds a chosen bound, preserving direction while limiting update magnitude.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient norm:</strong></span> The vector length of the accumulated gradient over selected parameters.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Maximum norm:</strong></span> The clipping threshold allowed for the gradient vector.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Clipped gradient:</strong></span> A rescaled gradient with the same direction but bounded norm.</li>
+</ul>
+<p>Clipping is used when a single batch can create a very large gradient, as in recurrent models, long sequences, or unstable fine-tuning. It does not fix a wrong objective, but it can prevent one step from destroying useful weights.</p>
+<p>In PyTorch, clipping usually happens after <code>loss.backward()</code> has filled <code>.grad</code> buffers and before <code>optimizer.step()</code> reads those buffers.</p>
+<p>Clipping occurs after backpropagation has accumulated all selected parameter gradients. PyTorch computes their combined norm, compares it with the threshold, and multiplies every gradient by the same scale factor when the norm is too large.</p>
+<p>Because the same factor is applied to the whole gradient vector, clipping preserves its direction. It changes only the distance the optimizer can move because of that batch.</p>
+<p>Norm clipping rescales a gradient only when its norm exceeds the threshold.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient clipping:</strong></span></p>
+<p><span id="eq-m2-c10-e17"><span class="math display">\[
+g_{\mathrm{clipped}} = g\,\min\!\left(1,\frac{c}{\lVert g\rVert_{2}}\right)
+\tag{10.17}\]</span></span></p>
+<p>where g is original gradient vector; c is maximum allowed gradient norm; <span class="math inline">\(norm_{2}\)</span>(g) is euclidean norm of the gradient.</p>
+<p>If the norm is already below c, the multiplier is 1. If the norm exceeds c, the multiplier makes the new norm exactly c.</p>
+<p>Clipping preserves direction while limiting step size before optimizer-specific scaling.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Gradient clipping</strong></p>
+<p>If <span class="math inline">\(\lVert g\rVert_2=10\)</span> and <span class="math inline">\(c=1\)</span>, the gradient is multiplied by <span class="math inline">\(c/\lVert g\rVert_2=0.1\)</span>.</p>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Gradient clipping in a PyTorch training step</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c10-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c10-c02-1"><a href="#lst-m2-c10-c02-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m2-c10-c02-2"><a href="#lst-m2-c10-c02-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="lst-m2-c10-c02-3"><a href="#lst-m2-c10-c02-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c10-c02-4"><a href="#lst-m2-c10-c02-4" aria-hidden="true" tabindex="-1"></a>loss.backward()</span>
+<span id="lst-m2-c10-c02-5"><a href="#lst-m2-c10-c02-5" aria-hidden="true" tabindex="-1"></a>torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm<span class="op">=</span><span class="fl">1.0</span>)</span>
+<span id="lst-m2-c10-c02-6"><a href="#lst-m2-c10-c02-6" aria-hidden="true" tabindex="-1"></a>optimizer.step()</span>
+<span id="lst-m2-c10-c02-7"><a href="#lst-m2-c10-c02-7" aria-hidden="true" tabindex="-1"></a>optimizer.zero_grad()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><code>clip_grad_norm_</code> returns the pre-clipping norm and rescales the gradient buffers only when that norm exceeds 1.0.</p>
+<p>The snippet assumes <code>model</code>, <code>loss</code>, and <code>optimizer</code> already exist because clipping belongs inside an established training loop.</p>
+<p>Clipping preserves the update direction while limiting its magnitude. Stable training also requires choosing model and optimizer settings that fit the data and compute budget.</p>
+</section>
+<section id="sec-m2-c10-s08" class="level2" data-number="10.8">
+<h2 data-number="10.8" class="anchored" data-anchor-id="sec-m2-c10-s08"><span class="header-section-number">10.8</span> Selecting Hyperparameters for Stable Optimization</h2>
+<p>A hyperparameter is a training choice not directly learned by gradient descent. Hyperparameter tuning is part of the experimental method, so it must be separated from final testing.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Hyperparameter:</strong></span> A configuration value such as learning rate, batch size, weight decay, model width, or number of epochs.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Checkpoint:</strong></span> A saved model state at a training step or epoch.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Ablation:</strong></span> A controlled experiment that removes or changes one component to measure its effect.</li>
+</ul>
+<p>Module 2 labs ask students to vary models, tokenizers, optimizers, and representations. The mathematical point is that training behavior is a function of both model parameters and training choices.</p>
+<p>Good experiment records include the data split, seed, optimizer, schedule, batch size, number of steps, and evaluation metric. Without those details, a result is hard to reproduce.</p>
+<p>An optimizer specifies how a gradient becomes a parameter update. The next chapter derives the gradients that supply that update.</p>
+</section>
+<section id="sec-m2-c10-s09" class="level2" data-number="10.9">
+<h2 data-number="10.9" class="anchored" data-anchor-id="sec-m2-c10-s09"><span class="header-section-number">10.9</span> Optimizer update trace</h2>
+<p>Optimization is the repeated step that turns a gradient into a changed model. Full-batch gradient descent estimates the gradient from all examples, stochastic gradient descent uses one example, and mini-batch gradient descent uses a small subset. The difference is not only speed; it changes the noise in the update and the memory needed for each step.</p>
+<p>Adam adds state to the update. Instead of stepping only with the current gradient, it maintains running averages of gradients and squared gradients. Regularization adds another force: it changes the objective or the update so that large or complex weights have a cost.</p>
+<p>A parameter update is a repeated state transition: compute a loss, compute a gradient, choose a step size, and move the parameters.</p>
+<div id="fig-m2-c10-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Native gradient-descent contour diagram showing repeated parameter updates.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c10-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c10-f02.png" class="img-fluid figure-img" style="width:5.9in" alt="Native gradient-descent contour diagram showing repeated parameter updates.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c10-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10.2: The gradient sets the direction of a parameter update, while the learning rate sets its length.
+</figcaption>
+</figure>
+</div>
+<p>Each iteration computes a gradient, scales it by the learning rate, updates the parameters, and then evaluates the loss at the new parameter values.</p>
+<p>Gradient descent and Adam use gradients to update parameters, with Adam adding moment estimates. Each parameter, gradient, and optimizer state tensor has matching parameter dimensions. A mini-batch estimates a gradient; the optimizer reads gradients and mutates parameter storage.</p>
+<p>In PyTorch, <code>torch.optim.SGD</code>, <code>Adam</code>, and <code>AdamW</code> implement update state and <code>step()</code> mutation.</p>
+<p><strong>Performance note:</strong> Adam stores extra moment tensors and increases memory bandwidth compared with SGD.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: SGD vs Adam: one parameter update with concrete numbers</strong></p>
+<p>Scenario: one scalar parameter <span class="math inline">\(\theta=0.6\)</span>, gradient <span class="math inline">\(g=-0.4\)</span>, and learning rate <span class="math inline">\(\eta=0.1\)</span>.</p>
+<p><strong>SGD update:</strong></p>
+<p><span class="math inline">\(\theta_{\mathrm{new}}=0.6-0.1\cdot(-0.4)=0.640\)</span></p>
+<p><strong>Adam:</strong></p>
+<p>The first moment is <span class="math inline">\(m_1=0.9\cdot0+0.1\cdot(-0.4)=-0.040\)</span>.</p>
+<p>The second moment is <span class="math inline">\(v_1=0.999\cdot0+0.001\cdot0.16=0.00016\)</span>.</p>
+<p><strong>Bias correction:</strong></p>
+<p><span class="math inline">\(\hat{m} = -\frac{0.040}{1-0.9} = -0.400\)</span></p>
+<p><span class="math inline">\(\hat{v} = \frac{0.00016}{1-0.999} = 0.160\)</span></p>
+<p><strong>Adam step:</strong></p>
+<p><span class="math inline">\(\theta_{\mathrm{new}}=0.6-0.1\cdot(-0.400)/(\sqrt{0.160}+10^{-8})\)</span></p>
+<p><span class="math inline">\(= 0.6 + \frac{0.040}{0.400} = 0.6 + 0.100 = 0.700\)</span></p>
+<p>At <span class="math inline">\(t=1\)</span>, Adam’s step of <span class="math inline">\(0.100\)</span> is larger than SGD’s step of <span class="math inline">\(0.040\)</span>.</p>
+<p>Adam’s bias correction makes the early steps more aggressive.</p>
+<p>As t grows and variance accumulates, Adam’s effective step size decreases.</p>
+<p>SGD has no memory — it only uses the current gradient.</p>
+</div>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient descent:</strong></span></p>
+<p><span id="eq-m2-c10-e18"><span class="math display">\[
+\theta_{\mathrm{next}} = \theta - \mathrm{lr}\,\nabla_{\theta}L
+\tag{10.18}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Mini-batch gradient:</strong></span></p>
+<p><span id="eq-m2-c10-e19"><span class="math display">\[
+g_{B} = \frac{1}{\lvert B\rvert}\sum_{i\in B}\nabla_{\theta}\,\mathrm{loss}_{i}
+\tag{10.19}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>L2 objective:</strong></span></p>
+<p><span id="eq-m2-c10-e20"><span class="math display">\[
+L_{\mathrm{total}} = L_{\mathrm{data}} + \lambda\,\lVert\theta\rVert_{2}^{2}
+\tag{10.20}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Adam sketch:</strong></span></p>
+<p><span id="eq-m2-c10-e21"><span class="math display">\[
+\theta_{\mathrm{next}} = \theta - \mathrm{lr}\,\frac{\widehat{m}}{\sqrt{\widehat{v}}+\epsilon}
+\tag{10.21}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
+<p>These dimensions appear in the computation in order.</p>
+<ul>
+<li>Parameters θ: [P], a flattened view of all trainable values.</li>
+<li>Gradient g: [P], same dimensions as θ.</li>
+<li>Adam first moment m: [P], running average of gradients.</li>
+<li>Adam second moment v: [P], running average of squared gradients.</li>
+<li>Regularization term: scalar, added to the objective or applied as weight decay.</li>
+</ul>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
+<ul>
+<li>for Xb, yb in loader is part of the optimization algorithm because it defines the batch gradient.</li>
+<li>SGD uses the current gradient directly; AdamW also reads and updates optimizer state.</li>
+<li>A too-large learning rate can increase loss or cause oscillation; a too-small rate can make learning appear stuck.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>It should now be clear how to update one scalar parameter by hand and explain how batch size changes the gradient estimate.</strong></p>
+</div>
+<p>Optimizers are update rules that decide how gradients change parameters and optimizer state.</p>
+<p>Backpropagation computes gradients through composed operations.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../parts/part-m2-p03.html" class="pagination-link" aria-label="Part III: From Error to Learning">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part III: From Error to Learning</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m2-c11.html" class="pagination-link" aria-label="Backpropagation: Tracing Error Gradients via the Chain Rule">
+        <span class="nav-page-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Backpropagation: Tracing Error Gradients via the Chain Rule</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

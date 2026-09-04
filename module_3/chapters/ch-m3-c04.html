@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>4&nbsp; Measuring service health and model quality – MLOps: From Experiments to Reliable AI Systems</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m3-c05.html" rel="next">
+<link href="../chapters/ch-m3-c03.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: Reliable model services with measurement and retrieval</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m3-c04.html"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Measuring service health and model quality</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">MLOps: From Experiments to Reliable AI Systems</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">MLOps: From Experiments to Reliable AI Systems</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m3-index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction: the operating problem</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-i.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: Reproducible training at cluster scale</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Making ML runs reproducible</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Distributed training across devices and clusters</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-ii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: Reliable model services with measurement and retrieval</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Serving LLMs with predictable performance</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c04.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Measuring service health and model quality</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Keeping storage and retrieval state reliable</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-iii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: Automated workflows and reliable system operation</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Running repeatable ML workflows</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Operating a grounded-answer system end to end</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m3-app-a.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Formula reference</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m3-app-b.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">MLOps glossary</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m3-app-c.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">C</span>&nbsp; <span class="chapter-title">Questions and concise answers</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m3-c04-s01" id="toc-sec-m3-c04-s01" class="nav-link active" data-scroll-target="#sec-m3-c04-s01"><span class="header-section-number">4.1</span> Request telemetry with OpenTelemetry</a></li>
+  <li><a href="#sec-m3-c04-s02" id="toc-sec-m3-c04-s02" class="nav-link" data-scroll-target="#sec-m3-c04-s02"><span class="header-section-number">4.2</span> Detecting data and prediction drift</a></li>
+  <li><a href="#sec-m3-c04-s03" id="toc-sec-m3-c04-s03" class="nav-link" data-scroll-target="#sec-m3-c04-s03"><span class="header-section-number">4.3</span> Tracing multi-step AI requests</a></li>
+  <li><a href="#sec-m3-c04-s04" id="toc-sec-m3-c04-s04" class="nav-link" data-scroll-target="#sec-m3-c04-s04"><span class="header-section-number">4.4</span> Linking experiments to their artifacts</a></li>
+  <li><a href="#sec-m3-c04-s05" id="toc-sec-m3-c04-s05" class="nav-link" data-scroll-target="#sec-m3-c04-s05"><span class="header-section-number">4.5</span> Quality evaluation with LLM-as-a-judge</a></li>
+  <li><a href="#sec-m3-c04-s06" id="toc-sec-m3-c04-s06" class="nav-link" data-scroll-target="#sec-m3-c04-s06"><span class="header-section-number">4.6</span> Checking evaluator consistency and agreement</a></li>
+  <li><a href="#sec-m3-c04-s07" id="toc-sec-m3-c04-s07" class="nav-link" data-scroll-target="#sec-m3-c04-s07"><span class="header-section-number">4.7</span> Running a repeatable groundedness evaluation</a></li>
+  <li><a href="#sec-m3-c04-s08" id="toc-sec-m3-c04-s08" class="nav-link" data-scroll-target="#sec-m3-c04-s08"><span class="header-section-number">4.8</span> Structuring evaluation prompts as decision trees</a></li>
+  <li><a href="#sec-m3-c04-s09" id="toc-sec-m3-c04-s09" class="nav-link" data-scroll-target="#sec-m3-c04-s09"><span class="header-section-number">4.9</span> Evaluating agent trajectories and tool use</a></li>
+  <li><a href="#sec-m3-c04-s10" id="toc-sec-m3-c04-s10" class="nav-link" data-scroll-target="#sec-m3-c04-s10"><span class="header-section-number">4.10</span> Turning production failures into evaluation cases</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: Reliable model services with measurement and retrieval</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m3-c04.html"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Measuring service health and model quality</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m3-c04" class="quarto-section-identifier"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Measuring service health and model quality</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>How can operators distinguish an available service from a useful and trustworthy AI system? Chapter 3 produced a serving bundle with performance and quality gates. Infrastructure telemetry, drift signals, AI traces, experiments, repeated evaluator runs, and production feedback provide the evidence.</p>
+<p>The three panels connect service signals to experiment evidence, then to the quality decisions and feedback that change the next release.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chapter map</strong></p>
+<p><strong>4.1–4.4 Request Telemetry &amp; Experiment Lineage:</strong> Standardize OpenTelemetry traces, spans, and semantic attributes, detect input and prediction drift, and track hyperparameters and artifact versions.</p>
+<p><strong>4.5–4.8 LLM-as-a-Judge &amp; Groundedness Evaluation:</strong> Implement deterministic groundedness evaluators, structure evaluation prompts as decision trees, and measure Cohen’s kappa agreement across repeated runs.</p>
+<p><strong>4.9–4.10 Agent Trajectories &amp; Feedback Loops:</strong> Evaluate multi-step agent trajectories and tool-call accuracy, and feed production failures back into curated regression benchmark suites.</p>
+</div>
+<div id="fig-m3-c04-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled Chapter 4 map links telemetry signals and experiment lineage to evaluator evidence, quality decisions, and production feedback.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f01.png" class="img-fluid figure-img" alt="A labelled Chapter 4 map links telemetry signals and experiment lineage to evaluator evidence, quality decisions, and production feedback.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.1: How telemetry and evaluation turn service behavior into evidence. The three panels connect service signals to experiment evidence, then to the quality decisions and feedback that change the next release.
+</figcaption>
+</figure>
+</div>
+<section id="sec-m3-c04-s01" class="level2" data-number="4.1">
+<h2 data-number="4.1" class="anchored" data-anchor-id="sec-m3-c04-s01"><span class="header-section-number">4.1</span> Request telemetry with OpenTelemetry</h2>
+<p>A serving bundle emits work across gateway, router, engine, and storage components. A single signal cannot explain both a fleet trend and one failed request. A useful implementation combines the three telemetry types, preserves correlation identifiers, and routes them through a vendor-neutral pipeline.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Log.</strong></span> a discrete event record with time, severity, message, and structured context.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Metric.</strong></span> a numeric time series aggregated across events, such as request rate, p95 latency, or free KV blocks.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Trace.</strong></span> the causally ordered spans describing one request as it crosses components.</p>
+<div id="fig-m3-c04-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Logs, metrics, and traces answer different production questions and become stronger when correlated.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f02.jpg" class="img-fluid figure-img" alt="Logs, metrics, and traces answer different production questions and become stronger when correlated.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.2: Logs, metrics, and traces answer different production questions and become stronger when correlated.
+</figcaption>
+</figure>
+</div>
+<p>Metrics answer whether a population is changing, traces show where one request spent time, and logs preserve detailed events. A request ID or trace context connects all three. Without that correlation, a latency alert cannot be joined to the prompt length, selected replica, cache hit, or engine error that caused it.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>OpenTelemetry (OTel).</strong></span> an open instrumentation and telemetry standard whose SDKs and protocol represent traces, metrics, and logs.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>OpenTelemetry Collector.</strong></span> a vendor-neutral service that receives telemetry, processes or samples it, and exports it to storage backends.</p>
+<div id="fig-m3-c04-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The OpenTelemetry Collector receives, processes, and exports vendor-neutral telemetry.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f03.jpg" class="img-fluid figure-img" alt="The OpenTelemetry Collector receives, processes, and exports vendor-neutral telemetry.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.3: The OpenTelemetry Collector receives, processes, and exports vendor-neutral telemetry.
+</figcaption>
+</figure>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Prediction endpoint with one trace span and bounded-cardinality service metrics.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c04-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c04-c01-1"><a href="#lst-m3-c04-c01-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c04-c01-2"><a href="#lst-m3-c04-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> time</span>
+<span id="lst-m3-c04-c01-3"><a href="#lst-m3-c04-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> fastapi <span class="im">import</span> FastAPI</span>
+<span id="lst-m3-c04-c01-4"><a href="#lst-m3-c04-c01-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry <span class="im">import</span> metrics, trace</span>
+<span id="lst-m3-c04-c01-5"><a href="#lst-m3-c04-c01-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c04-c01-6"><a href="#lst-m3-c04-c01-6" aria-hidden="true" tabindex="-1"></a>app   <span class="op">=</span> FastAPI()</span>
+<span id="lst-m3-c04-c01-7"><a href="#lst-m3-c04-c01-7" aria-hidden="true" tabindex="-1"></a>meter <span class="op">=</span> metrics.get_meter(<span class="st">"prediction-service"</span>)</span>
+<span id="lst-m3-c04-c01-8"><a href="#lst-m3-c04-c01-8" aria-hidden="true" tabindex="-1"></a>tracer <span class="op">=</span> trace.get_tracer(<span class="st">"prediction-service"</span>)</span>
+<span id="lst-m3-c04-c01-9"><a href="#lst-m3-c04-c01-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c04-c01-10"><a href="#lst-m3-c04-c01-10" aria-hidden="true" tabindex="-1"></a>latency_ms <span class="op">=</span> meter.create_histogram(<span class="st">"prediction.latency_ms"</span>)</span>
+<span id="lst-m3-c04-c01-11"><a href="#lst-m3-c04-c01-11" aria-hidden="true" tabindex="-1"></a>requests   <span class="op">=</span> meter.create_counter(<span class="st">"prediction.requests"</span>)</span>
+<span id="lst-m3-c04-c01-12"><a href="#lst-m3-c04-c01-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c04-c01-13"><a href="#lst-m3-c04-c01-13" aria-hidden="true" tabindex="-1"></a><span class="at">@app.post</span>(<span class="st">"/predict"</span>)</span>
+<span id="lst-m3-c04-c01-14"><a href="#lst-m3-c04-c01-14" aria-hidden="true" tabindex="-1"></a><span class="cf">async</span> <span class="kw">def</span> predict(features: <span class="bu">dict</span>):</span>
+<span id="lst-m3-c04-c01-15"><a href="#lst-m3-c04-c01-15" aria-hidden="true" tabindex="-1"></a>    started <span class="op">=</span> time.perf_counter()</span>
+<span id="lst-m3-c04-c01-16"><a href="#lst-m3-c04-c01-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> tracer.start_as_current_span(<span class="st">"model.predict"</span>) <span class="im">as</span> span:</span>
+<span id="lst-m3-c04-c01-17"><a href="#lst-m3-c04-c01-17" aria-hidden="true" tabindex="-1"></a>        span.set_attribute(<span class="st">"model.version"</span>, MODEL_VERSION)</span>
+<span id="lst-m3-c04-c01-18"><a href="#lst-m3-c04-c01-18" aria-hidden="true" tabindex="-1"></a>        prediction <span class="op">=</span> model.predict(features)</span>
+<span id="lst-m3-c04-c01-19"><a href="#lst-m3-c04-c01-19" aria-hidden="true" tabindex="-1"></a>    requests.add(<span class="dv">1</span>, {<span class="st">"model.version"</span>: MODEL_VERSION})</span>
+<span id="lst-m3-c04-c01-20"><a href="#lst-m3-c04-c01-20" aria-hidden="true" tabindex="-1"></a>    latency_ms.record((time.perf_counter() <span class="op">-</span> started) <span class="op">*</span> <span class="dv">1000</span>)</span>
+<span id="lst-m3-c04-c01-21"><a href="#lst-m3-c04-c01-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {<span class="st">"prediction"</span>: prediction}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Code walkthrough</strong></p>
+<p>Instrumentation objects: The meter creates fleet-level counter and latency series; the tracer creates one causal record for an individual prediction.</p>
+<p>Request scope: <code>start_as_current_span</code> makes the prediction call the active span so downstream instrumented calls can inherit its trace context.</p>
+<p>Version join: <code>model.version</code> links both the trace and request counter to the deployed model identity.</p>
+<p>Measured span: <code>perf_counter</code> measures the complete endpoint work shown here, while child spans can isolate model, retrieval, or serialization time.</p>
+<p>Result: The same request contributes to aggregate health measurements and retains a trace path for case-level diagnosis.</p>
+<p>Limits: Raw prompts and user IDs create unbounded metric-label cardinality, which can overwhelm the time-series store and leak sensitive data. Governed traces or logs hold high-cardinality payloads under explicit retention.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Small-cluster example</strong></p>
+<p>A small cluster may run Prometheus, Loki, Tempo, and Grafana with straightforward Helm installations.</p>
+<p>Large GPU fleets generate enough telemetry to require sharding, retention design, sampling, high-performance stores, or a managed service. Observability has its own capacity plan.</p>
+</div>
+<p>The fragment assumes that the application has installed a meter provider, tracer provider, resource identity, processors, and an OTLP or other exporter before the endpoint starts. Exceptions set span status and record the error; inbound trace context is extracted so the span remains a child of the gateway request rather than a new unrelated trace.</p>
+</section>
+<section id="sec-m3-c04-s02" class="level2" data-number="4.2">
+<h2 data-number="4.2" class="anchored" data-anchor-id="sec-m3-c04-s02"><span class="header-section-number">4.2</span> Detecting data and prediction drift</h2>
+<p>Service telemetry reveals availability and performance. A model can return fast 200 responses while input data or output behavior moves away from the evaluated distribution. Data drift, prediction drift, delayed outcomes, and actual quality degradation are distinct conditions.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Data drift.</strong></span> a change in the distribution or schema of model inputs relative to a reference population.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Prediction drift.</strong></span> a change in the distribution of model outputs relative to a reference population.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Concept drift.</strong></span> a change in the relationship between inputs and the target outcome, so an unchanged model becomes less accurate.</p>
+<div id="fig-m3-c04-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Data drift changes inputs; prediction drift changes model outputs.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f04.jpg" class="img-fluid figure-img" alt="Data drift changes inputs; prediction drift changes model outputs.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.4: Data drift changes inputs; prediction drift changes model outputs.
+</figcaption>
+</figure>
+</div>
+<p>Drift is evidence of change, not proof of reduced quality. A new language distribution may be expected after a regional launch; a stable prediction distribution can still hide failure on one subgroup. Ground truth for credit, churn, or clinical outcomes may arrive weeks or months later, so production monitoring needs both proxy signals and delayed label joins.</p>
+<p>A practical record for each prediction contains bounded, governed fields:</p>
+<ul>
+<li><strong>Input features:</strong> raw or privacy-safe derived attributes needed for later slice analysis.</li>
+<li><strong>Output:</strong> score, class, generated answer, or tool decision.</li>
+<li><strong>Model and feature versions:</strong> identities needed to reproduce the prediction.</li>
+<li><strong>Request metadata:</strong> time, latency, endpoint, region, and trace identifier.</li>
+<li><strong>Outcome join key:</strong> a governed identifier that can attach delayed ground truth without exposing it broadly.</li>
+</ul>
+<p>Reference windows, alert thresholds, seasonality, missing-value rates, text length, language mix, and output histograms are defined per feature or slice. An alert leads to investigation and, when appropriate, evaluation on captured cases; the alert alone does not establish that the model is wrong.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: a language-mix drift alert</strong></p>
+<p><strong>Reference window:</strong> Four stable weeks contain 10% Spanish-language requests, with ordinary daily variation between 8% and 12%.</p>
+<p><strong>Current window:</strong> The latest complete day contains 35% Spanish-language requests after a regional product launch.</p>
+<p><strong>Change signal:</strong> The 23-percentage-point increase exceeds the threshold derived from stable historical windows.</p>
+<p><strong>Confounder check:</strong> Release records confirm the launch, and request volume is large enough that the shift is not a small-sample effect.</p>
+<p><strong>Quality decision:</strong> A Spanish evaluation slice and delayed outcome join determine whether quality changed; the distribution alert alone does not trigger retraining.</p>
+<p><strong>Conclusion:</strong> Drift detection identifies a population change, while labeled or calibrated evaluation evidence determines its effect on quality.</p>
+</div>
+</section>
+<section id="sec-m3-c04-s03" class="level2" data-number="4.3">
+<h2 data-number="4.3" class="anchored" data-anchor-id="sec-m3-c04-s03"><span class="header-section-number">4.3</span> Tracing multi-step AI requests</h2>
+<p>Drift monitoring works well for fixed feature and prediction schemas. An agent adds prompts, retrieved documents, tool calls, retries, branching paths, and non-deterministic outputs. AI-specific spans extend the trace while privacy, cost, and replay controls remain explicit.</p>
+<p>An AI trace records which model or provider handled each call, prompt or template version, sampling parameters, input and output token counts, retrieved context identifiers, tool inputs and outputs, errors, latency, and cost. The trace connects a final response to the decisions that produced it.</p>
+<div id="fig-m3-c04-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="An AI trace joins the request, model calls, timing, cost, retrieved context, and output.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f05.jpg" class="img-fluid figure-img" alt="An AI trace joins the request, model calls, timing, cost, retrieved context, and output.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.5: An AI trace joins the request, model calls, timing, cost, retrieved context, and output.
+</figcaption>
+</figure>
+</div>
+<p>A gateway such as LiteLLM can centralize provider routing and cost records. Agent-observability platforms such as Langfuse, MLflow GenAI, LangSmith, or W&amp;B Weave can visualize traces and experiments. These are concrete implementations; the general requirement is a queryable, versioned trajectory with governed payload storage.</p>
+<div id="tbl-m3-c04-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c04-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;4.1: AI traces preserve the lineage needed to explain and evaluate a trajectory.
+</figcaption>
+<div aria-describedby="tbl-m3-c04-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Span</th>
+<th>Minimum attributes</th>
+<th>Question answered</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>LLM call</td>
+<td>Model, prompt version, tokens, latency, cost, response status</td>
+<td>Which generation produced this text and at what cost?</td>
+</tr>
+<tr class="even">
+<td>Retrieval</td>
+<td>Query, embedding version, filters, document IDs, scores</td>
+<td>Which evidence was available to the model?</td>
+</tr>
+<tr class="odd">
+<td>Tool call</td>
+<td>Tool version, arguments hash, result status, duration</td>
+<td>What external action or observation changed the trajectory?</td>
+</tr>
+<tr class="even">
+<td>Decision/branch</td>
+<td>Rule or node identity, selected path</td>
+<td>Why did the agent choose the next step?</td>
+</tr>
+<tr class="odd">
+<td>Evaluation</td>
+<td>Evaluator version, case ID, raw verdict and rationale</td>
+<td>How was quality judged and can it be replayed?</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Parent-child span trace</strong></p>
+<p>Trace <code>7f2…</code> begins with gateway span <code>01</code>; router span <code>02</code> selects serving bundle <code>sb-27</code>; retrieval span <code>03</code> records embedding <code>emb-9</code>, index <code>idx-14</code>, and document IDs; model span <code>04</code> records prompt <code>p-31</code> and a timeout; retry span <code>05</code> succeeds on the same bundle.</p>
+<p>The error on span <code>04</code> remains visible even though the parent request succeeds. Sampling retains all errors and a governed sample of successful requests; prompt text stays in protected payload storage while ordinary span attributes carry identifiers and bounded measurements.</p>
+</div>
+</section>
+<section id="sec-m3-c04-s04" class="level2" data-number="4.4">
+<h2 data-number="4.4" class="anchored" data-anchor-id="sec-m3-c04-s04"><span class="header-section-number">4.4</span> Linking experiments to their artifacts</h2>
+<p>Production traces preserve what happened for real users. Research changes prompts, data, code, and models repeatedly, so comparable results retain their lineage. A run record keeps small metadata separate from large artifacts and links aggregate metrics to raw predictions.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Experiment run.</strong></span> one execution with immutable input identities, parameters, environment, outputs, and measured results.</p>
+<p>MLflow, W&amp;B, and similar systems store configurations, metrics, logs, and artifact references. Dataset tools such as DVC identify large data versions. The tracking server is not a substitute for source control or object storage: it links those systems so a chart point can be reproduced.</p>
+<p>A comparison-ready run contains:</p>
+<ul>
+<li><strong>Question:</strong> the hypothesis or change being tested.</li>
+<li><strong>Inputs:</strong> source revision, dataset/evaluation-suite version, base model, prompt, and environment.</li>
+<li><strong>Execution:</strong> hardware, seed, parameters, start/end time, and failure/retry history.</li>
+<li><strong>Outputs:</strong> checkpoint or serving bundle, raw model responses, evaluator verdicts, and derived tables.</li>
+<li><strong>Metrics:</strong> aggregate values plus slice definitions, confidence or variance, and cost/latency.</li>
+<li><strong>Decision:</strong> whether to promote, reject, rerun, or investigate, with the responsible reviewer.</li>
+</ul>
+<div id="fig-m3-c04-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Experiment tracking joins parameters and measurements to the artifacts that make a run reproducible.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f06.jpg" class="img-fluid figure-img" alt="Experiment tracking joins parameters and measurements to the artifacts that make a run reproducible.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.6: Experiment tracking joins parameters and measurements to the artifacts that make a run reproducible.
+</figcaption>
+</figure>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Experiment run with immutable inputs, aggregate measurements, and raw verdict evidence.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c04-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c04-c02-1"><a href="#lst-m3-c04-c02-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c04-c02-2"><a href="#lst-m3-c04-c02-2" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> mlflow.start_run():</span>
+<span id="lst-m3-c04-c02-3"><a href="#lst-m3-c04-c02-3" aria-hidden="true" tabindex="-1"></a>    mlflow.log_params({</span>
+<span id="lst-m3-c04-c02-4"><a href="#lst-m3-c04-c02-4" aria-hidden="true" tabindex="-1"></a>        <span class="st">"model_version"</span>: model_version,</span>
+<span id="lst-m3-c04-c02-5"><a href="#lst-m3-c04-c02-5" aria-hidden="true" tabindex="-1"></a>        <span class="st">"prompt_version"</span>: prompt_version,</span>
+<span id="lst-m3-c04-c02-6"><a href="#lst-m3-c04-c02-6" aria-hidden="true" tabindex="-1"></a>        <span class="st">"dataset_version"</span>: dataset_version,</span>
+<span id="lst-m3-c04-c02-7"><a href="#lst-m3-c04-c02-7" aria-hidden="true" tabindex="-1"></a>        <span class="st">"temperature"</span>: temperature,</span>
+<span id="lst-m3-c04-c02-8"><a href="#lst-m3-c04-c02-8" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="lst-m3-c04-c02-9"><a href="#lst-m3-c04-c02-9" aria-hidden="true" tabindex="-1"></a>    verdicts <span class="op">=</span> evaluate(cases, judge)</span>
+<span id="lst-m3-c04-c02-10"><a href="#lst-m3-c04-c02-10" aria-hidden="true" tabindex="-1"></a>    verdict_frame <span class="op">=</span> to_table(verdicts)</span>
+<span id="lst-m3-c04-c02-11"><a href="#lst-m3-c04-c02-11" aria-hidden="true" tabindex="-1"></a>    verdict_frame.to_parquet(<span class="st">"raw_verdicts.parquet"</span>, index<span class="op">=</span><span class="va">False</span>)</span>
+<span id="lst-m3-c04-c02-12"><a href="#lst-m3-c04-c02-12" aria-hidden="true" tabindex="-1"></a>    mlflow.log_metrics({</span>
+<span id="lst-m3-c04-c02-13"><a href="#lst-m3-c04-c02-13" aria-hidden="true" tabindex="-1"></a>        <span class="st">"accuracy"</span>: accuracy(verdicts),</span>
+<span id="lst-m3-c04-c02-14"><a href="#lst-m3-c04-c02-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">"consistent_rows"</span>: consistency(verdicts),</span>
+<span id="lst-m3-c04-c02-15"><a href="#lst-m3-c04-c02-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">"p95_latency_ms"</span>: p95_latency(verdicts),</span>
+<span id="lst-m3-c04-c02-16"><a href="#lst-m3-c04-c02-16" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="lst-m3-c04-c02-17"><a href="#lst-m3-c04-c02-17" aria-hidden="true" tabindex="-1"></a>    mlflow.log_artifact(<span class="st">"raw_verdicts.parquet"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Code walkthrough</strong></p>
+<p>Run identity: <code>start_run</code> creates one traceable experiment identity.</p>
+<p>Input identity: Model, prompt, dataset, and temperature parameters define the evaluator configuration being compared.</p>
+<p>Derived measurements: Accuracy, consistency, and p95 latency summarize different quality and operating dimensions from the same verdict set.</p>
+<p>Raw evidence: <code>raw_verdicts.parquet</code> preserves row-level outputs needed to reproduce slices, disagreements, and aggregate metrics.</p>
+<p>Result: A chart point remains auditable because its configuration and contributing row-level evidence share one run identity.</p>
+<p>Limits: Production records also include source revision, environment or image digest, evaluator version, case count, failure count, and artifact checksum.</p>
+</div>
+</section>
+<section id="sec-m3-c04-s05" class="level2" data-number="4.5">
+<h2 data-number="4.5" class="anchored" data-anchor-id="sec-m3-c04-s05"><span class="header-section-number">4.5</span> Quality evaluation with LLM-as-a-judge</h2>
+<p>Experiment tracking can preserve any metric faithfully. It cannot repair a metric whose target, labels, or decision rules are ambiguous. Observed failures and a label definition lead to smaller measurable quality decisions.</p>
+<div id="fig-m3-c04-f07" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A usable evaluator starts from real outputs, explicit bad/good criteria, and small metrics.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f07.png" class="img-fluid figure-img" alt="A usable evaluator starts from real outputs, explicit bad/good criteria, and small metrics.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.7: A usable evaluator starts from real outputs, explicit bad/good criteria, and small metrics.
+</figcaption>
+</figure>
+</div>
+<p>Observed outputs provide the starting point. A concrete disqualifying failure and a concrete desired property make the quality gap measurable. Smaller metrics separate factuality, relevance, style, safety, and task completion, which a broad question such as ‘is this answer good?’ mixes into one unstable judgment.</p>
+<div id="fig-m3-c04-f08" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Evaluator design balances complexity, context, accuracy, consistency, and efficiency.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f08-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f08.png" class="img-fluid figure-img" alt="Evaluator design balances complexity, context, accuracy, consistency, and efficiency.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f08-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.8: Evaluator design balances complexity, context, accuracy, consistency, and efficiency.
+</figcaption>
+</figure>
+</div>
+<p>Evaluator design balances complexity, context, accuracy, consistency, and efficiency. More context can improve evidence coverage but degrade long-context reasoning and increase latency. A powerful judge may improve difficult cases but make the evaluation too expensive to run on every experiment. Decomposition makes each decision smaller and its failure easier to diagnose.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Ground truth.</strong></span> the reference label or outcome treated as correct for evaluation, together with its annotation rules and provenance.</p>
+<p>Ground-truth calibration precedes judge calibration. Annotator disagreements, ambiguous cases, label errors, and policy gaps reveal problems in the reference set. A judge that disagrees with an incorrect label is not adjusted to imitate the mistake.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Rubric-to-verdict trace</strong></p>
+<p>Rubric: label <code>unsupported</code> when any answer claim is absent from or contradicted by the supplied context; otherwise label <code>supported</code>. Return <code>{label, claim, evidence_span, reason}</code>.</p>
+<p>Case: the answer says the contract renews in June, while the supplied context says July. The schema-valid verdict is <code>unsupported</code>, names the June claim, cites the July evidence span, and explains the contradiction.</p>
+<p>Calibration compares this structured verdict with adjudicated labels. Parse validity, label agreement, and evidence-span correctness are measured separately so a syntactically valid but poorly supported verdict does not pass silently.</p>
+</div>
+<p><span id="eq-m3-c04-e01"><span class="math display">\[
+\mathrm{Accuracy} = \frac{\mathrm{TP}+\mathrm{TN}}{\mathrm{TP}+\mathrm{TN}+\mathrm{FP}+\mathrm{FN}}
+\tag{4.1}\]</span></span></p>
+<p><span id="eq-m3-c04-e02"><span class="math display">\[
+\mathrm{F1} = \frac{2 \cdot \mathrm{Precision} \cdot \mathrm{Recall}}{\mathrm{Precision}+\mathrm{Recall}}
+\tag{4.2}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: hallucination-detector metrics</strong></p>
+<p><strong>Confusion counts:</strong> Across 20 cases: TP = 7, TN = 9, FP = 1, FN = 3.</p>
+<p><strong>Accuracy:</strong> (7 + 9) ÷ 20 = 0.80.</p>
+<p><strong>Precision:</strong> 7 ÷ (7 + 1) = 0.875.</p>
+<p><strong>Recall:</strong> 7 ÷ (7 + 3) = 0.70.</p>
+<p><strong>F1:</strong> 2 × 0.875 × 0.70 ÷ (0.875 + 0.70) <span class="math inline">\(\approx\)</span> 0.778.</p>
+<p><strong>Conclusion:</strong> The same 80% accuracy contains a recall problem that matters if missed hallucinations are costly.</p>
+</div>
+</section>
+<section id="sec-m3-c04-s06" class="level2" data-number="4.6">
+<h2 data-number="4.6" class="anchored" data-anchor-id="sec-m3-c04-s06"><span class="header-section-number">4.6</span> Checking evaluator consistency and agreement</h2>
+<p>Accuracy compares one set of verdicts with reference labels. An LLM judge can produce different verdicts for the same input, so one run may conceal an unstable verdict. Repeated runs reveal this variation, while accuracy measures correctness against the reference.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Consistency.</strong></span> the stability of an evaluator’s verdict across repeated runs of an unchanged case and configuration.</p>
+<p><span id="eq-m3-c04-e03"><span class="math display">\[
+C_i = \frac{\max_y \sum_{r=1}^{R} 1\left[\hat{y}_{i,r}=y\right]}{R}
+\tag{4.3}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: five votes on one evaluator case</strong></p>
+<p><strong>Votes:</strong> good, bad, good, good, bad.</p>
+<p><strong>Modal label:</strong> good appears three times.</p>
+<p><strong>Consistency:</strong> 3 ÷ 5 = 0.60.</p>
+<p><strong>Correctness:</strong> If the reference label is good, the majority is correct but the case remains unstable.</p>
+<p><strong>Conclusion:</strong> Correctness and consistency are independent dimensions of evaluator quality.</p>
+</div>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Cohen’s kappa.</strong></span> agreement between two labelers or a labeler and a reference after subtracting the agreement expected from their label frequencies.</p>
+<p><span id="eq-m3-c04-e04"><span class="math display">\[
+κ = \frac{p_o-p_e}{1-p_e}
+\tag{4.4}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: chance-adjusted agreement on 20 cases</strong></p>
+<p><strong>Observed agreement:</strong> TP = 7 and TN = 9, so p with subscript o = 16 ÷ 20 = 0.80.</p>
+<p><strong>Label shares:</strong> The reference is 50% positive; the judge is 40% positive and 60% negative.</p>
+<p><strong>Expected agreement:</strong> p with subscript e = 0.50 × 0.40 + 0.50 × 0.60 = 0.50.</p>
+<p><strong>Kappa:</strong> κ = (0.80 − 0.50) ÷ (1 − 0.50) = 0.60.</p>
+<p><strong>Conclusion:</strong> The evaluator agrees on 80% of cases, and 60% of the possible agreement beyond the marginal expectation is realized.</p>
+</div>
+<div id="fig-m3-c04-f09" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Repeated judgments expose rows whose verdict changes even when the input does not.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f09-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f09.png" class="img-fluid figure-img" alt="Repeated judgments expose rows whose verdict changes even when the input does not.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f09-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.9: Repeated judgments expose rows whose verdict changes even when the input does not.
+</figcaption>
+</figure>
+</div>
+<p>The evaluator configuration records the judge temperature and model revision. Temperature zero still allows variation across providers, kernels, or model updates. Raw responses and parse failures remain part of the evidence; malformed JSON is an evaluator failure rather than a discarded vote.</p>
+</section>
+<section id="sec-m3-c04-s07" class="level2" data-number="4.7">
+<h2 data-number="4.7" class="anchored" data-anchor-id="sec-m3-c04-s07"><span class="header-section-number">4.7</span> Running a repeatable groundedness evaluation</h2>
+<p>Repeated-run consistency now has a formal measurement. A groundedness evaluator turns that measurement into a concrete implementation. Its data record, judge prompt, API call, parser, voting loop, and held-out cases form one processing path.</p>
+<p>Each record contains <code>context</code>, <code>answer</code>, and <code>truth</code>. The judge prompt defines groundedness and a strict JSON result. The evaluator calls the judge five times for each record, parses <code>answer</code>, selects the majority verdict, and reports accuracy together with full 5/5 agreement.</p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Repeated-judge loop that preserves verdicts, majority label, and row-level stability.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c04-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c04-c03-1"><a href="#lst-m3-c04-c03-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c04-c03-2"><a href="#lst-m3-c04-c03-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> judge(context, answer):</span>
+<span id="lst-m3-c04-c03-3"><a href="#lst-m3-c04-c03-3" aria-hidden="true" tabindex="-1"></a>    raw <span class="op">=</span> ask(</span>
+<span id="lst-m3-c04-c03-4"><a href="#lst-m3-c04-c03-4" aria-hidden="true" tabindex="-1"></a>        JUDGE_PROMPT,</span>
+<span id="lst-m3-c04-c03-5"><a href="#lst-m3-c04-c03-5" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"CONTEXT:</span><span class="ch">\n</span><span class="sc">{</span>context<span class="sc">}</span><span class="ch">\n\n</span><span class="ss">ANSWER:</span><span class="ch">\n</span><span class="sc">{</span>answer<span class="sc">}</span><span class="ss">"</span>,</span>
+<span id="lst-m3-c04-c03-6"><a href="#lst-m3-c04-c03-6" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m3-c04-c03-7"><a href="#lst-m3-c04-c03-7" aria-hidden="true" tabindex="-1"></a>    parsed <span class="op">=</span> json.loads(raw)</span>
+<span id="lst-m3-c04-c03-8"><a href="#lst-m3-c04-c03-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> parsed[<span class="st">"answer"</span>].lower()</span>
+<span id="lst-m3-c04-c03-9"><a href="#lst-m3-c04-c03-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c04-c03-10"><a href="#lst-m3-c04-c03-10" aria-hidden="true" tabindex="-1"></a>rows <span class="op">=</span> []</span>
+<span id="lst-m3-c04-c03-11"><a href="#lst-m3-c04-c03-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> record <span class="kw">in</span> data:</span>
+<span id="lst-m3-c04-c03-12"><a href="#lst-m3-c04-c03-12" aria-hidden="true" tabindex="-1"></a>    votes <span class="op">=</span> [judge(record[<span class="st">"context"</span>], record[<span class="st">"answer"</span>]) <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>)]</span>
+<span id="lst-m3-c04-c03-13"><a href="#lst-m3-c04-c03-13" aria-hidden="true" tabindex="-1"></a>    majority, count <span class="op">=</span> Counter(votes).most_common(<span class="dv">1</span>)[<span class="dv">0</span>]</span>
+<span id="lst-m3-c04-c03-14"><a href="#lst-m3-c04-c03-14" aria-hidden="true" tabindex="-1"></a>    rows.append({</span>
+<span id="lst-m3-c04-c03-15"><a href="#lst-m3-c04-c03-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">"id"</span>: record[<span class="st">"id"</span>],</span>
+<span id="lst-m3-c04-c03-16"><a href="#lst-m3-c04-c03-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">"majority"</span>: majority,</span>
+<span id="lst-m3-c04-c03-17"><a href="#lst-m3-c04-c03-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">"truth"</span>: record[<span class="st">"truth"</span>],</span>
+<span id="lst-m3-c04-c03-18"><a href="#lst-m3-c04-c03-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">"consistent_votes"</span>: count,</span>
+<span id="lst-m3-c04-c03-19"><a href="#lst-m3-c04-c03-19" aria-hidden="true" tabindex="-1"></a>    })</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Code walkthrough</strong></p>
+<p>Evaluation case: Each record supplies one evidence context, one answer under test, and one reference label.</p>
+<p>Judge definition: <code>JUDGE_PROMPT</code> and the JSON parser define the judge version and its machine-readable result.</p>
+<p>Repeated measurements: <code>votes</code> retains five independent outputs instead of discarding disagreement behind a single majority.</p>
+<p>Two targets: <code>majority</code> supports correctness against <code>truth</code>, while <code>consistent_votes</code> supports row-level stability.</p>
+<p>Result: The output table preserves enough state to separate majority accuracy from repeated-run consistency.</p>
+<p>Limits: A production implementation includes label validation, explicit parse and API failures, a fixed model revision where available, and policy-governed retention of raw responses.</p>
+</div>
+<p>A held-out sample of 20 ANLI rows repeats the same procedure and tests distribution coverage. A prompt tuned on nine hand-picked cases can appear strong while failing on new language patterns. A fixed random seed makes the sample repeatable, while external API calls still incur cost and may change if the remote model alias changes.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Groundedness judge: purpose and limits</strong></p>
+<p>Works on: one context-answer pair with binary reference labels</p>
+<p>Helps when: the system identifies claims unsupported or contradicted by supplied evidence</p>
+<p>How it works: decomposes the answer into checkable claims, compares each with the context, and applies explicit tie-break rules</p>
+<p>Other limits: cannot verify facts outside the supplied context and inherits errors from ambiguous ground truth</p>
+<p>Why it matters: a narrow evaluator is easier to calibrate and diagnose than a single broad quality score</p>
+</div>
+</section>
+<section id="sec-m3-c04-s08" class="level2" data-number="4.8">
+<h2 data-number="4.8" class="anchored" data-anchor-id="sec-m3-c04-s08"><span class="header-section-number">4.8</span> Structuring evaluation prompts as decision trees</h2>
+<p>Repeated verdicts reveal unstable cases but not the structural reason a prompt is unstable. A natural-language evaluator can contain contradictory overrides, missing tie-breaks, and ambiguous scope. A decision tree makes the flow, rule precedence, and ambiguous cases inspectable while keeping every node linked to source text.</p>
+<div id="fig-m3-c04-f10" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A prompt can be inspected as ordered decisions, overrides, and terminal verdicts.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f10-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f10.png" class="img-fluid figure-img" alt="A prompt can be inspected as ordered decisions, overrides, and terminal verdicts.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f10-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.10: A prompt can be inspected as ordered decisions, overrides, and terminal verdicts.
+</figcaption>
+</figure>
+</div>
+<p>The implementation uses three model calls. <code>TREE_SYS</code> extracts entry, decision, subtask, rule, verdict, and side-note nodes. <code>ORDER_SYS</code> moves short-circuit overrides before the decisions they control and leaves the default fallback last. <code>ISSUE_SYS</code> reports gray zones, contradictions, redundancy, missing tie-breaks, and ambiguous scope.</p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Three-stage prompt analysis with inspectable intermediate representations.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c04-c04"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c04-c04-1"><a href="#lst-m3-c04-c04-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c04-c04-2"><a href="#lst-m3-c04-c04-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> analyze(prompt_text):</span>
+<span id="lst-m3-c04-c04-3"><a href="#lst-m3-c04-c04-3" aria-hidden="true" tabindex="-1"></a>    draft  <span class="op">=</span> extract_tree(prompt_text)</span>
+<span id="lst-m3-c04-c04-4"><a href="#lst-m3-c04-c04-4" aria-hidden="true" tabindex="-1"></a>    tree   <span class="op">=</span> reorder_tree(prompt_text, draft)</span>
+<span id="lst-m3-c04-c04-5"><a href="#lst-m3-c04-c04-5" aria-hidden="true" tabindex="-1"></a>    issues <span class="op">=</span> find_issues(prompt_text, tree)</span>
+<span id="lst-m3-c04-c04-6"><a href="#lst-m3-c04-c04-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
+<span id="lst-m3-c04-c04-7"><a href="#lst-m3-c04-c04-7" aria-hidden="true" tabindex="-1"></a>        <span class="st">"prompt_text"</span>: prompt_text,</span>
+<span id="lst-m3-c04-c04-8"><a href="#lst-m3-c04-c04-8" aria-hidden="true" tabindex="-1"></a>        <span class="st">"tree"</span>: tree,</span>
+<span id="lst-m3-c04-c04-9"><a href="#lst-m3-c04-c04-9" aria-hidden="true" tabindex="-1"></a>        <span class="st">"issues"</span>: issues,</span>
+<span id="lst-m3-c04-c04-10"><a href="#lst-m3-c04-c04-10" aria-hidden="true" tabindex="-1"></a>    }</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Code walkthrough</strong></p>
+<p>Extraction: <code>extract_tree</code> converts natural-language instructions into candidate decision and verdict nodes anchored to prompt text.</p>
+<p>Precedence: <code>reorder_tree</code> places short-circuit and override rules before the decisions they control.</p>
+<p>Audit: <code>find_issues</code> identifies gray zones, contradictions, redundancy, missing tie-breaks, and ambiguous scope.</p>
+<p>Returned evidence: The original prompt, repaired tree, and issue list remain together so every claimed rule can be traced back to source wording.</p>
+<p>Result: Separating extraction, ordering, and critique prevents one opaque model call from silently inventing or repairing evaluator logic.</p>
+<p>Limits: Every node retains a verbatim source anchor. Mutually exclusive and collectively exhaustive branches reduce ambiguity, and human review remains part of release-gate approval.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Before-and-after decision flow</strong></p>
+<p>Before: <code>Mark unsupported answers as bad unless they are harmless, except when the context strongly implies them.</code> The terms harmless and strongly implies have no ordered test, so the same claim can reach different verdicts.</p>
+<p>After: first test whether every factual claim has an evidence span; next test whether any evidence contradicts a claim; then apply the explicit unsupported-claim policy; finally use one named fallback for cases with missing context. Each branch names its terminal label.</p>
+<p>The measurable comparison is disagreement and adjudication time on the same ambiguous-case slice before and after the rewrite, together with checks that no source rule disappeared.</p>
+</div>
+<div id="fig-m3-c04-f11" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Long-context evaluation becomes tractable when claims are decomposed and checked locally.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f11-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f11.png" class="img-fluid figure-img" alt="Long-context evaluation becomes tractable when claims are decomposed and checked locally.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f11-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.11: Long-context evaluation becomes tractable when claims are decomposed and checked locally.
+</figcaption>
+</figure>
+</div>
+<p>Long answers make one global groundedness decision too complex. A stronger design decomposes the output into atomic claims, retrieves or selects the relevant context for each claim, scores the claims independently, and aggregates with an explicit policy. The aggregation rule states whether one unsupported critical claim fails the whole answer or produces a fractional score.</p>
+</section>
+<section id="sec-m3-c04-s09" class="level2" data-number="4.9">
+<h2 data-number="4.9" class="anchored" data-anchor-id="sec-m3-c04-s09"><span class="header-section-number">4.9</span> Evaluating agent trajectories and tool use</h2>
+<p>A decision tree makes one evaluator’s logic explicit. An agent can still reach a plausible final answer through unsafe, wasteful, or accidental intermediate actions. Trajectory evidence, tool definitions, recovery behavior, and the terminal output together describe agent quality.</p>
+<div id="fig-m3-c04-f12" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Agent evaluation includes the trajectory as well as the final answer.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f12-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f12.png" class="img-fluid figure-img" alt="Agent evaluation includes the trajectory as well as the final answer.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f12-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.12: Agent evaluation includes the trajectory as well as the final answer.
+</figcaption>
+</figure>
+</div>
+<p>Agent evaluation needs at least three scopes. Outcome metrics test whether the task was completed. Trajectory metrics inspect tool choice, order, arguments, repeated actions, and policy violations. Runtime metrics record latency, token use, tool cost, retries, and failure recovery. A final-answer judge alone cannot tell whether the system leaked data, relied on a tool error, or succeeded by chance.</p>
+<div id="tbl-m3-c04-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c04-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;4.2: Agent quality requires outcome, trajectory, robustness, and efficiency evidence.
+</figcaption>
+<div aria-describedby="tbl-m3-c04-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Scope</th>
+<th>Example metric</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Outcome</td>
+<td>Task success, correctness, accepted patch/test</td>
+<td>Final artifact and deterministic verifier</td>
+</tr>
+<tr class="even">
+<td>Trajectory</td>
+<td>Correct tool choice, forbidden action rate, loop count</td>
+<td>Ordered tool-call spans and state changes</td>
+</tr>
+<tr class="odd">
+<td>Retrieval</td>
+<td>Evidence coverage, citation precision, context use</td>
+<td>Retrieved IDs, scores, claims, final citations</td>
+</tr>
+<tr class="even">
+<td>Robustness</td>
+<td>Recovery after timeout or malformed tool result</td>
+<td>Injected-failure runs and retry traces</td>
+</tr>
+<tr class="odd">
+<td>Efficiency</td>
+<td>Cost, latency, calls, tokens, steps</td>
+<td>Trace-level resource measurements</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: a plausible answer reached through an invalid action</strong></p>
+<p><strong>Outcome:</strong> The agent returns the correct invoice total, so the final-answer score is 1.0.</p>
+<p><strong>Trajectory:</strong> It first calls an unapproved broad customer-search tool, then retries the approved invoice tool after a timeout.</p>
+<p><strong>Robustness:</strong> The timeout recovery succeeds, but the first call violates the tool allowlist and exposes more data than the task requires.</p>
+<p><strong>Efficiency:</strong> Three calls and two retries cost more and take longer than the reference one-call path.</p>
+<p><strong>Decision:</strong> The case fails the policy gate despite a correct terminal answer; the trace supplies the invalid action and its arguments for diagnosis.</p>
+<p><strong>Conclusion:</strong> Outcome, trajectory, robustness, and efficiency scores reveal different properties of the same run.</p>
+</div>
+</section>
+<section id="sec-m3-c04-s10" class="level2" data-number="4.10">
+<h2 data-number="4.10" class="anchored" data-anchor-id="sec-m3-c04-s10"><span class="header-section-number">4.10</span> Turning production failures into evaluation cases</h2>
+<p>Telemetry, drift signals, experiments, evaluators, and trajectory evidence are now versioned. They create value only when production failures become reproducible cases and validated changes return safely. The loop contains evidence capture, triage, dataset expansion, experimentation, release, and post-release verification.</p>
+<div id="fig-m3-c04-f13" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Production evidence becomes research cases, then validated changes return to production.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c04-f13-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c04-f13.jpg" class="img-fluid figure-img" alt="Production evidence becomes research cases, then validated changes return to production.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c04-f13-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4.13: Production evidence becomes research cases, then validated changes return to production.
+</figcaption>
+</figure>
+</div>
+<p>The loop uses an ordered evidence path:</p>
+<ol type="1">
+<li><strong>Captured evidence.</strong> Low-quality outputs, failed traces, drift alerts, user feedback, and incidents are sampled under a governed retention policy.</li>
+<li><strong>Triage.</strong> Each case receives a failure category and a responsible component: data, prompt, model, retrieval, tool, runtime, or product policy.</li>
+<li><strong>Replay case.</strong> The relevant context, expected behavior, and evaluator definition form a minimized reproducible case.</li>
+<li><strong>Suite expansion.</strong> The case enters a versioned evaluation suite together with nearby cases that reveal broader failure patterns.</li>
+<li><strong>Controlled experiment.</strong> One identified component changes, and the recorded run compares quality, latency, cost, and safety slices.</li>
+<li><strong>Candidate release.</strong> The validated change becomes a new serving bundle that passes the performance and quality checks from Chapter 3.</li>
+<li><strong>Post-release verification.</strong> The same production signal and guardrail metrics remain under observation while rollback stays available through the evidence window.</li>
+</ol>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Incident-to-regression-case example</strong></p>
+<p>A support answer cites an expired policy after retrieval selected an older document version. The minimized replay case retains the query, retrieved IDs, timestamps, answer, expected current-policy citation, bundle IDs, and evaluator verdict.</p>
+<p>The candidate change adds an effective-date filter. The expanded suite includes the original case, nearby policy dates, and a control set of undated documents. Release evidence compares retrieval recall, groundedness, latency, and authorization behavior before promotion.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chapter 4 summary</strong></p>
+<p>Core mechanisms: OpenTelemetry standardized spans and traces; distribution drift detection; repeatable LLM-as-a-judge groundedness evaluation; decision tree prompt structuring.</p>
+<p>Governing tradeoffs: Evaluator prompt expressiveness vs.&nbsp;deterministic reproducibility; full-corpus sampling cost vs.&nbsp;statistical significance.</p>
+<p>Failure modes &amp; defenses: Cohen’s kappa chance-adjusted agreement; regression gates that preserve production failure cases.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chapter 4 mastery check</strong></p>
+<p>Can one request be joined across gateway, router, engine, retriever, evaluator, and release identities?</p>
+<p>Can a drift alert be separated from confirmed quality loss and connected to delayed ground truth?</p>
+<p>Can an experiment be reproduced from immutable cases, prompt, model, runtime, evaluator, and raw verdicts?</p>
+<p>Can evaluator correctness, consistency, latency, and cost be measured before the evaluator becomes a release gate?</p>
+<p>Can a production failure become a replay case whose post-release signal is verified?</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Carry-forward result</strong></p>
+<p>The evidence layer now correlates telemetry, drift, AI traces, experiments, calibrated evaluators, and replayable failure cases. Chapter 5 places the durable and derived data they consume.</p>
+</div>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../chapters/ch-m3-c03.html" class="pagination-link" aria-label="Serving LLMs with predictable performance">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Serving LLMs with predictable performance</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m3-c05.html" class="pagination-link" aria-label="Keeping storage and retrieval state reliable">
+        <span class="nav-page-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Keeping storage and retrieval state reliable</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

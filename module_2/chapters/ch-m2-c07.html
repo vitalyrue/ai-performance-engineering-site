@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>7&nbsp; Decoding Strategies: Generating Text Token by Token – Mathematical Foundations of LLM Training and Inference</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m2-c08.html" rel="next">
+<link href="../chapters/ch-m2-c06.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p02.html">Part II: From Scores to Loss</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c07.html"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Decoding Strategies: Generating Text Token by Token</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Mathematical Foundations of LLM Training and Inference</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Mathematical Foundations of LLM Training and Inference</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-roadmap.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Roadmap</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-notation.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Notation</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-library-map.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library Map</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: From Text to Mathematical Objects</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Prediction Targets: Defining What the Model Learns</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Token IDs: Discretizing Text into Numbers and Batches</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Subword Tokenization: Building Compact Vocabularies</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Count Vectors &amp; TF-IDF: Extracting Word Frequencies and Their Limits</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: From Scores to Loss</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Linear Hyperplanes: Scoring Features with Matrix Math</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Sigmoid &amp; Softmax: Turning Raw Scores into Probabilities</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c07.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Decoding Strategies: Generating Text Token by Token</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Cross-Entropy &amp; Perplexity: Measuring Prediction Error and Uncertainty</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Validation &amp; Testing: Catching Overfitting and Measuring Generalization</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: From Error to Learning</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">AdamW &amp; Momentum: Steering Parameter Updates</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Backpropagation: Tracing Error Gradients via the Chain Rule</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Activation Functions: Bending Decision Boundaries with MLPs</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Embedding Tables: Looking Up Dense Word Vectors</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c14.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">14</span>&nbsp; <span class="chapter-title">Word2Vec: Learning Word Geometry from Context</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part IV: Modeling Sequences</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c15.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">Recurrent Networks: Why Sequential Memory Hits a Wall</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c16.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">16</span>&nbsp; <span class="chapter-title">Attention Mathematics</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c17.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">17</span>&nbsp; <span class="chapter-title">Transformer Blocks: Building Deep, Order-Aware Networks</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c18.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">18</span>&nbsp; <span class="chapter-title">Transformer Topologies: Choosing the Right Architecture</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c19.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">19</span>&nbsp; <span class="chapter-title">Pretraining Data and Scaling</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part V: Adapting and Running LLMs</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c20.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">20</span>&nbsp; <span class="chapter-title">Low-Rank Adaptation and Preference Alignment</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c21.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">21</span>&nbsp; <span class="chapter-title">KV Cache: Speeding Up Generation</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part VI: Implementation and Extensions</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c22.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">22</span>&nbsp; <span class="chapter-title">Multimodal Transformers: Processing Images and Audio</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c24.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">24</span>&nbsp; <span class="chapter-title">Computational Labs: Verifying the Math in Code</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m2-dictionary.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Dictionary</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m2-c07-s01" id="toc-sec-m2-c07-s01" class="nav-link active" data-scroll-target="#sec-m2-c07-s01"><span class="header-section-number">7.1</span> Deterministic Next-Token Selection with Greedy Argmax</a></li>
+  <li><a href="#sec-m2-c07-s02" id="toc-sec-m2-c07-s02" class="nav-link" data-scroll-target="#sec-m2-c07-s02"><span class="header-section-number">7.2</span> Controlling Sampling Diversity with Temperature and Truncation</a></li>
+  <li><a href="#sec-m2-c07-s03" id="toc-sec-m2-c07-s03" class="nav-link" data-scroll-target="#sec-m2-c07-s03"><span class="header-section-number">7.3</span> Searching High-Probability Sequences with Beam Search</a></li>
+  <li><a href="#sec-m2-c07-s04" id="toc-sec-m2-c07-s04" class="nav-link" data-scroll-target="#sec-m2-c07-s04"><span class="header-section-number">7.4</span> Probability-decoding trace</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p02.html">Part II: From Scores to Loss</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c07.html"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Decoding Strategies: Generating Text Token by Token</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m2-c07" class="quarto-section-identifier"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Decoding Strategies: Generating Text Token by Token</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>A next-token model returns probabilities for many possible continuations. Generation needs an additional rule that selects one token and repeats the process.</p>
+<p>A next-token distribution still leaves one decision to make: which token to emit. Greedy decoding, sampling, truncation, and beam search apply different selection rules to the same probability model.</p>
+<p>In code, <code>torch.topk</code> and <code>torch.multinomial</code> expose candidate filtering and sampling; <code>transformers.GenerationConfig</code> and <code>generate</code> apply the same choices to pretrained models.</p>
+<p>Chapter 7 develops one required stage of the guide’s computation.</p>
+<div id="fig-m2-c07-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 7 opener for Decoding from probability distributions, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c07-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c07-f01.png" class="img-fluid figure-img" style="width:5.9in" alt="Chapter 7 opener for Decoding from probability distributions, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c07-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;7.1: Greedy choice and sampling filters convert token probabilities into generated continuations.
+</figcaption>
+</figure>
+</div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
+<section id="sec-m2-c07-s01" class="level2" data-number="7.1">
+<h2 data-number="7.1" class="anchored" data-anchor-id="sec-m2-c07-s01"><span class="header-section-number">7.1</span> Deterministic Next-Token Selection with Greedy Argmax</h2>
+<p>An inference decision turns a trained model’s probability distribution into a usable class prediction or next token.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Vocabulary distribution:</strong></span> The softmax-normalized probabilities over all token IDs.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decoder step:</strong></span> One forward computation that produces the next-token logits for the current context.</li>
+</ul>
+<p>A classifier usually performs one forward pass and selects a class with a threshold or argmax rule. An autoregressive language model performs the same probability computation repeatedly, selecting one token and then using that token as part of the next context.</p>
+<p>The same model can produce deterministic or diverse outputs depending on decoding settings. These settings are inference-time choices, not changes to the trained parameters.</p>
+<p>Logits and probability filtering are shared by many model families. Any classifier or language model that outputs a probability vector must apply a decision rule before it produces an observable prediction.</p>
+<p>A decoding rule changes the selected output, whereas a serving optimization changes how the same logits are computed or reused. KV caching, batching, and prefix reuse therefore leave the probability distribution mathematically unchanged.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Token distribution:</strong></span></p>
+<p><span id="eq-m2-c07-e01"><span class="math display">\[
+P(\mathrm{next}=i\mid\mathrm{context})=\operatorname{softmax}(\mathrm{logits})_i
+\tag{7.1}\]</span></span></p>
+<p>where i is candidate token index; context is tokens already observed; logits is model scores for candidate tokens.</p>
+<p>Softmax converts the vocabulary logits into the categorical distribution used for selection.</p>
+<p>Decoding operates on this distribution; it does not change the model weights.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Token distribution</strong></p>
+<p>For probabilities (0.6,0.3,0.1), greedy selection returns candidate 1.</p>
+</div>
+<p>Greedy decoding is fast because it selects the largest probability at each step, but it does not explore alternatives. Sampling changes the selection rule while keeping the model probabilities fixed.</p>
+</section>
+<section id="sec-m2-c07-s02" class="level2" data-number="7.2">
+<h2 data-number="7.2" class="anchored" data-anchor-id="sec-m2-c07-s02"><span class="header-section-number">7.2</span> Controlling Sampling Diversity with Temperature and Truncation</h2>
+<p>A decoding rule selects the next token from the model’s distribution. The rule changes output diversity, repetition, and reliability.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Greedy decoding:</strong></span> Always choose the highest-probability token.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Temperature:</strong></span> A divisor on logits before softmax; lower values sharpen, higher values flatten.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Top-k sampling:</strong></span> Sample only from the k highest-probability tokens.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Top-p sampling:</strong></span> Sample from the smallest token set whose cumulative probability exceeds p.</li>
+</ul>
+<p>Greedy decoding is stable but can be dull or trapped in repetitive continuations. Temperature and truncation sampling expose controlled randomness.</p>
+<p>Top-p is adaptive: it may keep many tokens when the distribution is flat and few tokens when the distribution is sharp.</p>
+<p><strong>Origin note:</strong> Temperature borrows its metaphor from statistical mechanics: rescaling energies changes how concentrated a distribution is. In decoding, dividing logits by temperature changes softmax sharpness before sampling.</p>
+<p>Decoding changes the visible output without changing the trained parameters. Temperature rescales all candidate logits, top-k removes all but the largest <code>k</code>, and top-p keeps the smallest high-probability prefix whose cumulative mass reaches the threshold. Sampling then draws from the remaining normalized distribution.</p>
+<p>Greedy decoding chooses the highest-probability class or token.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Greedy decoding:</strong></span></p>
+<p><span id="eq-m2-c07-e02"><span class="math display">\[
+\mathrm{next}=\operatorname*{arg\,max}_{i}p_i
+\tag{7.2}\]</span></span></p>
+<p>where <span class="math inline">\(p_{i}\)</span> is probability of candidate token i.</p>
+<p>Greedy decoding solves the one-step maximization problem by selecting the token with largest probability mass.</p>
+<p>greedy decoding is deterministic and can miss better global continuations.</p>
+<p>Temperature greater than 1 flattens the distribution; temperature below 1 sharpens it.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Temperature softmax:</strong></span></p>
+<p><span id="eq-m2-c07-e03"><span class="math display">\[
+p_i^{(T)}=\frac{e^{z_i/T}}{\sum_j e^{z_j/T}}
+\tag{7.3}\]</span></span></p>
+<p>where T is temperature; <span class="math inline">\(z_{i}\)</span> is logit for token i.</p>
+<p>Temperature rescales logits before softmax; dividing by a larger T reduces logit gaps, while dividing by a smaller T increases them.</p>
+<p>temperature changes sampling entropy without changing model weights.</p>
+<p>After sorting probabilities from largest to smallest, <span class="math inline">\(p_{k}\)</span> is the k-th largest probability. Top-k sampling retains exactly the token indices in <span class="math inline">\(S_{k}\)</span>.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Top-k support:</strong></span></p>
+<p><span id="eq-m2-c07-e04"><span class="math display">\[
+S_k=\{i\mid p_i\ge p_k\}
+\tag{7.4}\]</span></span></p>
+<p>After sorting probabilities in nonincreasing order, m is the smallest prefix length whose cumulative probability reaches the threshold.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Top-p support:</strong></span></p>
+<p><span id="eq-m2-c07-e05"><span class="math display">\[
+S_p=(i_1,\ldots,i_m),\quad\sum_{j=1}^{m}p_{i_j}\ge p
+\tag{7.5}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Sampling the Next Token During Generation</strong></p>
+<p><strong>Greedy decoding:</strong></p>
+<p>If <span class="math inline">\(p=(0.1,0.7,0.2)\)</span> and token indices start at zero, greedy decoding selects index <span class="math inline">\(1\)</span>, whose probability is <span class="math inline">\(0.7\)</span>.</p>
+<p><strong>Temperature softmax:</strong></p>
+<p>For logits <span class="math inline">\((2,1)\)</span>, setting <span class="math inline">\(T=2\)</span> rescales them to <span class="math inline">\((1,0.5)\)</span> and produces a flatter softmax distribution than <span class="math inline">\(T=1\)</span>.</p>
+<p><strong>Top-k support:</strong></p>
+<p>For probabilities <span class="math inline">\((0.5,0.3,0.2)\)</span> and <span class="math inline">\(k=2\)</span>, the support contains the two indices with the largest probabilities.</p>
+<p><strong>Top-p support:</strong></p>
+<p>For sorted probabilities (0.5, 0.3, 0.2) and threshold 0.8, the first two tokens are the smallest set whose cumulative mass reaches the threshold.</p>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Temperature and top-k filtering for one next-token decision</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c07-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c07-c01-1"><a href="#lst-m2-c07-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m2-c07-c01-2"><a href="#lst-m2-c07-c01-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c07-c01-3"><a href="#lst-m2-c07-c01-3" aria-hidden="true" tabindex="-1"></a>logits <span class="op">=</span> torch.tensor([<span class="fl">2.0</span>, <span class="fl">1.0</span>, <span class="fl">0.5</span>, <span class="op">-</span><span class="fl">1.0</span>])</span>
+<span id="lst-m2-c07-c01-4"><a href="#lst-m2-c07-c01-4" aria-hidden="true" tabindex="-1"></a>temperature <span class="op">=</span> <span class="fl">0.8</span></span>
+<span id="lst-m2-c07-c01-5"><a href="#lst-m2-c07-c01-5" aria-hidden="true" tabindex="-1"></a>top_k <span class="op">=</span> <span class="dv">2</span></span>
+<span id="lst-m2-c07-c01-6"><a href="#lst-m2-c07-c01-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c07-c01-7"><a href="#lst-m2-c07-c01-7" aria-hidden="true" tabindex="-1"></a>scaled <span class="op">=</span> logits <span class="op">/</span> temperature</span>
+<span id="lst-m2-c07-c01-8"><a href="#lst-m2-c07-c01-8" aria-hidden="true" tabindex="-1"></a>values, indices <span class="op">=</span> torch.topk(scaled, top_k)</span>
+<span id="lst-m2-c07-c01-9"><a href="#lst-m2-c07-c01-9" aria-hidden="true" tabindex="-1"></a>filtered <span class="op">=</span> torch.full_like(scaled, <span class="bu">float</span>(<span class="st">"-inf"</span>))</span>
+<span id="lst-m2-c07-c01-10"><a href="#lst-m2-c07-c01-10" aria-hidden="true" tabindex="-1"></a>filtered[indices] <span class="op">=</span> values</span>
+<span id="lst-m2-c07-c01-11"><a href="#lst-m2-c07-c01-11" aria-hidden="true" tabindex="-1"></a>probabilities <span class="op">=</span> torch.softmax(filtered, dim<span class="op">=-</span><span class="dv">1</span>)</span>
+<span id="lst-m2-c07-c01-12"><a href="#lst-m2-c07-c01-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c07-c01-13"><a href="#lst-m2-c07-c01-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(probabilities)</span>
+<span id="lst-m2-c07-c01-14"><a href="#lst-m2-c07-c01-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(torch.multinomial(probabilities, num_samples<span class="op">=</span><span class="dv">1</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Only the two retained token IDs receive nonzero probability.</p>
+<p>Sampling is random; set a generator seed when exact repeatability matters.</p>
+<p>Temperature and truncation reshape the candidate distribution before a token is drawn. Sequence-level search instead compares several partial continuations at once.</p>
+</section>
+<section id="sec-m2-c07-s03" class="level2" data-number="7.3">
+<h2 data-number="7.3" class="anchored" data-anchor-id="sec-m2-c07-s03"><span class="header-section-number">7.3</span> Searching High-Probability Sequences with Beam Search</h2>
+<p>Beam search is a decoding algorithm that keeps several high-scoring partial sequences instead of committing to one token at each step.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Beam width:</strong></span> The number of partial sequences kept after each expansion step.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Sequence score:</strong></span> The accumulated log probability of a candidate continuation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Length penalty:</strong></span> A correction that prevents the search from always preferring short sequences.</li>
+</ul>
+<p>Greedy decoding keeps one path. Beam search keeps k paths, expands each by possible next tokens, scores the expanded paths, and keeps the best k again. It is useful in translation and summarization because a locally second-best token can lead to a better full sequence.</p>
+<p>Beam search is not the same as sampling. It is a deterministic approximate search over high-probability sequences when the model and beam settings are fixed.</p>
+<p>At each generation step, every retained sequence is expanded by candidate next tokens. The algorithm adds log probabilities along each path, ranks the expanded sequences, and keeps only the configured beam width.</p>
+<p>Longer sequences accumulate more negative log probability terms, so practical implementations may use length normalization and explicit end-of-sequence handling. Beam search remains approximate because discarded paths are never reconsidered.</p>
+<p>Beam search ranks partial output sequences by accumulated log probability.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Beam sequence score:</strong></span></p>
+<p><span id="eq-m2-c07-e06"><span class="math display">\[
+score(y_{1:t})=\sum_{i=1}^{t}\log P(y_i\mid y_{&lt;i},x)
+\tag{7.6}\]</span></span></p>
+<p>where <span class="math inline">\(y_{1:t}\)</span> is candidate output prefix; x is input or prompt context.</p>
+<p>The sequence probability is a product of conditional probabilities; logs turn the product into a sum.</p>
+<p>A larger log score means a more probable candidate under the model.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Beam sequence score</strong></p>
+<p>If a two-token candidate has probabilities 0.5 and 0.4, its log score is <span class="math inline">\(\log(0.5)+\log(0.4)=-1.609\)</span>.</p>
+</div>
+<p>Beam search keeps multiple partial continuations, trading additional computation for a broader search. Every decoding rule depends on probabilities that must be trained against observed targets.</p>
+</section>
+<section id="sec-m2-c07-s04" class="level2" data-number="7.4">
+<h2 data-number="7.4" class="anchored" data-anchor-id="sec-m2-c07-s04"><span class="header-section-number">7.4</span> Probability-decoding trace</h2>
+<p>Decoding begins after the model has produced one vector of logits for the next position. The logits are not yet a decision; they are scores that must be normalized, filtered, or sampled.</p>
+<p>The same probability vector can support several decisions. Greedy decoding takes the largest probability, temperature changes how sharp the distribution is, top-k keeps a fixed number of candidates, and top-p keeps the shortest sorted prefix whose cumulative probability reaches the threshold before sampling.</p>
+<p>During generation, the model converts the current context into vocabulary logits, normalizes them, and applies a selection rule to obtain the next token.</p>
+<div id="fig-m2-c07-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram showing context IDs becoming logits, probabilities, and a selected next token.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c07-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c07-f02.png" class="img-fluid figure-img" style="width:5.9in" alt="Diagram showing context IDs becoming logits, probabilities, and a selected next token.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c07-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;7.2: Greedy selection and sampling filters operate on one probability distribution without changing model weights.
+</figcaption>
+</figure>
+</div>
+<p>Greedy decoding, temperature, top-k, and top-p act on the same vocabulary distribution. They change how an output is selected without changing the model weights.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Next-token choice from three logits</strong></p>
+<p>Start with logits for three candidate tokens.</p>
+<p><span class="math inline">\(z = [2.0, 1.0, 0.0]\)</span></p>
+<p><span class="math inline">\(\operatorname{softmax}(z) = [0.665, 0.245, 0.090]\)</span></p>
+<p><span class="math inline">\(greedy_{next} = 0\)</span></p>
+<p>Temperature 2 halves the logit gaps before softmax.</p>
+<p><span class="math inline">\(\frac{z}{T} = [1.0, 0.5, 0.0]\)</span></p>
+<p><span class="math inline">\(\operatorname{softmax}\frac{z}{T} = [0.506, 0.307, 0.186]\)</span></p>
+<p>Top-k with two kept candidates keeps tokens 0 and 1, then renormalizes.</p>
+<p><span class="math inline">\(topk_{probs}\)</span> = [0.731, 0.269, 0.000]</p>
+<p>Top-p with threshold 0.8 sorts probabilities and keeps the first two tokens.</p>
+<p><span class="math inline">\(0.665 + 0.245 = 0.910\)</span></p>
+</div>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Temperature softmax:</strong></span></p>
+<p><span id="eq-m2-c07-e07"><span class="math display">\[
+p_i(T)=\frac{\exp(z_i/T)}{\sum_j\exp(z_j/T)}
+\tag{7.7}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
+<p>These dimensions appear in the computation in order.</p>
+<ul>
+<li>Last-position logits: [V], one score per vocabulary item.</li>
+<li>Softmax probabilities: [V], nonnegative values that sum to 1.</li>
+<li>Top-k support: at most k candidate indices.</li>
+<li>Top-p support: the smallest prefix of sorted probabilities whose mass reaches the threshold.</li>
+<li>Sampled token id: scalar integer appended to the sequence.</li>
+</ul>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
+<ul>
+<li><code>torch.softmax(logits, dim=-1)</code> turns logits into probabilities when probabilities are explicitly needed.</li>
+<li><code>transformers.generate</code> applies decoding settings such as <code>do_sample</code>, <code>temperature</code>, <code>top_k</code>, and <code>top_p</code> after the model produces logits.</li>
+<li>Filtering should happen before the random draw; it changes the candidate distribution, not the model weights.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>It should now be clear how to start from a three-logit vector and compute greedy, temperature, top-k, and top-p decisions by hand.</strong></p>
+</div>
+<p>Decoding is the rule that turns a probability distribution into a class or next token.</p>
+<p>Loss functions turn probability predictions into trainable scalar objectives.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../chapters/ch-m2-c06.html" class="pagination-link" aria-label="Sigmoid &amp; Softmax: Turning Raw Scores into Probabilities">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Sigmoid &amp; Softmax: Turning Raw Scores into Probabilities</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m2-c08.html" class="pagination-link" aria-label="Cross-Entropy &amp; Perplexity: Measuring Prediction Error and Uncertainty">
+        <span class="nav-page-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Cross-Entropy &amp; Perplexity: Measuring Prediction Error and Uncertainty</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

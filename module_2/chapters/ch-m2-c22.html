@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>22&nbsp; Multimodal Transformers: Processing Images and Audio – Mathematical Foundations of LLM Training and Inference</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m2-c23.html" rel="next">
+<link href="../parts/part-m2-p06.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p06.html">Part VI: Implementation and Extensions</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c22.html"><span class="chapter-number">22</span>&nbsp; <span class="chapter-title">Multimodal Transformers: Processing Images and Audio</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Mathematical Foundations of LLM Training and Inference</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Mathematical Foundations of LLM Training and Inference</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-roadmap.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Roadmap</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-notation.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Notation</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-library-map.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library Map</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: From Text to Mathematical Objects</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Prediction Targets: Defining What the Model Learns</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Token IDs: Discretizing Text into Numbers and Batches</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Subword Tokenization: Building Compact Vocabularies</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Count Vectors &amp; TF-IDF: Extracting Word Frequencies and Their Limits</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: From Scores to Loss</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Linear Hyperplanes: Scoring Features with Matrix Math</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Sigmoid &amp; Softmax: Turning Raw Scores into Probabilities</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Decoding Strategies: Generating Text Token by Token</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Cross-Entropy &amp; Perplexity: Measuring Prediction Error and Uncertainty</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Validation &amp; Testing: Catching Overfitting and Measuring Generalization</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: From Error to Learning</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">AdamW &amp; Momentum: Steering Parameter Updates</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Backpropagation: Tracing Error Gradients via the Chain Rule</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Activation Functions: Bending Decision Boundaries with MLPs</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Embedding Tables: Looking Up Dense Word Vectors</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c14.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">14</span>&nbsp; <span class="chapter-title">Word2Vec: Learning Word Geometry from Context</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part IV: Modeling Sequences</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c15.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">Recurrent Networks: Why Sequential Memory Hits a Wall</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c16.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">16</span>&nbsp; <span class="chapter-title">Attention Mathematics</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c17.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">17</span>&nbsp; <span class="chapter-title">Transformer Blocks: Building Deep, Order-Aware Networks</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c18.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">18</span>&nbsp; <span class="chapter-title">Transformer Topologies: Choosing the Right Architecture</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c19.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">19</span>&nbsp; <span class="chapter-title">Pretraining Data and Scaling</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part V: Adapting and Running LLMs</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c20.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">20</span>&nbsp; <span class="chapter-title">Low-Rank Adaptation and Preference Alignment</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c21.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">21</span>&nbsp; <span class="chapter-title">KV Cache: Speeding Up Generation</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part VI: Implementation and Extensions</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c22.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">22</span>&nbsp; <span class="chapter-title">Multimodal Transformers: Processing Images and Audio</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c24.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">24</span>&nbsp; <span class="chapter-title">Computational Labs: Verifying the Math in Code</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m2-dictionary.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Dictionary</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m2-c22-s01" id="toc-sec-m2-c22-s01" class="nav-link active" data-scroll-target="#sec-m2-c22-s01"><span class="header-section-number">22.1</span> Tokenizing Images into Patches with Vision Transformers (ViT)</a></li>
+  <li><a href="#sec-m2-c22-s02" id="toc-sec-m2-c22-s02" class="nav-link" data-scroll-target="#sec-m2-c22-s02"><span class="header-section-number">22.2</span> Aligning Visual and Text Embeddings with CLIP Contrastive Loss</a></li>
+  <li><a href="#sec-m2-c22-s03" id="toc-sec-m2-c22-s03" class="nav-link" data-scroll-target="#sec-m2-c22-s03"><span class="header-section-number">22.3</span> Converting Continuous Speech Spectrograms to Text with Whisper</a></li>
+  <li><a href="#sec-m2-c22-s04" id="toc-sec-m2-c22-s04" class="nav-link" data-scroll-target="#sec-m2-c22-s04"><span class="header-section-number">22.4</span> Benchmarking Tabular Transformers against Gradient-Boosted Trees</a></li>
+  <li><a href="#sec-m2-c22-s05" id="toc-sec-m2-c22-s05" class="nav-link" data-scroll-target="#sec-m2-c22-s05"><span class="header-section-number">22.5</span> Choosing a Model Family for a New Input Modality</a></li>
+  <li><a href="#sec-m2-c22-s06" id="toc-sec-m2-c22-s06" class="nav-link" data-scroll-target="#sec-m2-c22-s06"><span class="header-section-number">22.6</span> Multimodal trace</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p06.html">Part VI: Implementation and Extensions</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c22.html"><span class="chapter-number">22</span>&nbsp; <span class="chapter-title">Multimodal Transformers: Processing Images and Audio</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m2-c22" class="quarto-section-identifier"><span class="chapter-number">22</span>&nbsp; <span class="chapter-title">Multimodal Transformers: Processing Images and Audio</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Transformer-style models can process more than text once images, audio, or table fields are converted into suitable input representations. The input structure and baseline model remain important when choosing an architecture.</p>
+<p>Images, audio, and tables need modality-specific inputs before transformer-style processing can begin. Patches, spectrograms, contrastive pairs, and strong baselines show what changes when the data is not ordinary text.</p>
+<p>In code, PyTorch image, audio, and tabular tensors feed modality-specific front ends; Hugging Face processors package images, audio, and text for pretrained multimodal models.</p>
+<p>Chapter 22 develops one required stage of the guide’s computation.</p>
+<div id="fig-m2-c22-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 22 opener for Beyond text and multimodal models, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c22-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c22-f01.png" class="img-fluid figure-img" style="width:5.9in" alt="Chapter 22 opener for Beyond text and multimodal models, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c22-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;22.1: Images, audio, and table fields become vectors that can share learning objectives with text.
+</figcaption>
+</figure>
+</div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
+<section id="sec-m2-c22-s01" class="level2" data-number="22.1">
+<h2 data-number="22.1" class="anchored" data-anchor-id="sec-m2-c22-s01"><span class="header-section-number">22.1</span> Tokenizing Images into Patches with Vision Transformers (ViT)</h2>
+<p>Vision models first turn pixels into local features or patch vectors before a classifier or transformer can combine them.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Convolution:</strong></span> A local sliding filter with shared weights.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Patch token:</strong></span> A vector representation of a fixed-size image patch.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Vision transformer:</strong></span> A transformer that processes patch embeddings plus positional information.</li>
+</ul>
+<p>A convolution keeps the image as a spatial grid and applies the same learned filter at many locations. A vision transformer first divides the image into patches, flattens each patch, and projects each patch into the same kind of vector sequence used by text transformers.</p>
+<p>The causal link to earlier chapters is sequence length. Smaller patches create more tokens, and more tokens make attention more expensive. The image preprocessing choice therefore changes both the mathematical input object and the compute cost of later transformer layers.</p>
+<p>A convolutional layer slides a learned kernel across local image neighborhoods. Stride controls how far the kernel moves, padding controls border treatment, and the output-size equation determines the spatial dimensions passed to the next layer.</p>
+<p>A residual network (ResNet) adds an identity path around one or more convolutional transformations. The residual sum gives gradients a shorter route through deep networks and lets a block learn a correction to its input rather than a completely new representation.</p>
+<p>A vision transformer divides the image into fixed-size patches, flattens each patch, and projects it to the model width. The resulting patch sequence has the same mathematical role as a token sequence, although its positions refer to image regions rather than text tokens.</p>
+<p>A convolutional neural network keeps an image as a spatial grid. A convolutional kernel reads local pixel neighborhoods, reusing the same weights across the image. Stacked layers then build from edges and textures up to complex visual patterns. A ResNet adds a shortcut around convolutional transformations so a deep block learns a correction to its input.</p>
+<p>A vision transformer works differently. It divides an image into patches, projects each patch to a vector, adds position encodings, and applies standard transformer attention across all patches. CNNs therefore build in locality and translation reuse; vision transformers trade that prior for global patch interactions. Both ultimately produce features for classification, image-text matching, or generation.</p>
+<p>A convolutional layer is a local weighted sum. One output location is formed by placing a small kernel over one image neighborhood, multiplying matching pixel and kernel entries, and adding the products. Moving the kernel to the next location reuses the same learned weights.</p>
+<p>A vision-transformer patch token is a different object: it is a flattened image region followed by a learned linear projection. The patch token plays the same role as a text token vector, but its position refers to an image region rather than a word or subword.</p>
+<p>Vision Transformers divide 2D images into non-overlapping patches (e.g., 16x16 pixels), flatten each patch into a vector, and linearly project them into standard transformer embedding dimensions.</p>
+<p>By treating image patches as visual tokens, the same multi-head attention architecture processes vision, text, and multimodal tokens seamlessly.</p>
+<p>A convolution computes a weighted local sum over spatial offsets and channels.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Convolution:</strong></span></p>
+<p><span id="eq-m2-c22-e01"><span class="math display">\[
+Y[i,j,c]=\sum_{u,v,c\prime}W[u,v,c\prime,c]X[i+u,j+v,c\prime]
+\tag{22.1}\]</span></span></p>
+<p>where X is input image or feature map; W is convolution kernel; Y is output feature map.</p>
+<p>A convolution output is a local weighted sum: move the kernel over spatial positions and reuse the same weights at each position.</p>
+<p>convolution encodes locality before any transformer-style global mixing.</p>
+<p>Output size depends on padding p, kernel size k, and stride s.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Convolution output size:</strong></span></p>
+<p><span id="eq-m2-c22-e02"><span class="math display">\[
+\mathrm{out}=\left\lfloor\frac{\mathrm{input}+2p-k}{s}\right\rfloor+1
+\tag{22.2}\]</span></span></p>
+<p>where input is input width or height; p is padding; k is kernel size; s is stride.</p>
+<p>The kernel can start at every stride-spaced position whose final covered index remains inside the padded input. Counting those legal starts gives the floor expression.</p>
+<p>patch and convolution choices directly set sequence length for vision models.</p>
+<p>An H by W image with P by P patches becomes a sequence of patch tokens.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>ViT patch count:</strong></span></p>
+<p><span id="eq-m2-c22-e03"><span class="math display">\[
+N_{\mathrm{patches}}=\left(\frac{H}{P}\right)\left(\frac{W}{P}\right)
+\tag{22.3}\]</span></span></p>
+<p>where H,W is image height and width; P is patch side length.</p>
+<p>Patchification divides the image height and width by the patch side length, then multiplies those two counts to get sequence length.</p>
+<p>patch size directly controls transformer sequence length for images.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Patch sequence length for a 224-pixel image</strong></p>
+<p>Divide a 224 by 224 image into non-overlapping 16 by 16 patches.</p>
+<p><strong>Patches per side:</strong></p>
+<p><span class="math inline">\(\frac{224}{16} = 14\)</span></p>
+<p><strong>Sequence positions:</strong></p>
+<p><span class="math inline">\(14  \cdot  14 = 196\)</span></p>
+<p>Adding one class token would produce 197 transformer positions.</p>
+<p><strong>Dimensions:</strong></p>
+<p>image: B x 3 x 224 x 224</p>
+<p>patch sequence: B x 196 x D</p>
+<p>Halving patch width to 8 would quadruple sequence length and substantially increase attention cost.</p>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Comparing one convolution output with one image patch token</strong></p>
+<p>Use a two-by-two image patch with values [[1,2],[3,4]].</p>
+<p><strong>Convolution:</strong></p>
+<p>With a two-by-two kernel of ones, the local output is <span class="math inline">\(1+2+3+4 = 10\)</span>.</p>
+<p>The same kernel can be reused at another image location.</p>
+<p><strong>Vision-transformer patch:</strong></p>
+<p>Flatten the patch to (1,2,3,4).</p>
+<p>A learned projection maps those four pixel values to one D-dimensional patch vector.</p>
+<p>Convolution keeps local grid structure through a sliding kernel; a vision transformer converts regions into a sequence of vector tokens.</p>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Patchifying an image with a strided convolution</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c22-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c22-c01-1"><a href="#lst-m2-c22-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m2-c22-c01-2"><a href="#lst-m2-c22-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="lst-m2-c22-c01-3"><a href="#lst-m2-c22-c01-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c22-c01-4"><a href="#lst-m2-c22-c01-4" aria-hidden="true" tabindex="-1"></a>images <span class="op">=</span> torch.randn(<span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">224</span>, <span class="dv">224</span>)</span>
+<span id="lst-m2-c22-c01-5"><a href="#lst-m2-c22-c01-5" aria-hidden="true" tabindex="-1"></a>patch_projection <span class="op">=</span> nn.Conv2d(in_channels<span class="op">=</span><span class="dv">3</span>, out_channels<span class="op">=</span><span class="dv">64</span>, kernel_size<span class="op">=</span><span class="dv">16</span>, stride<span class="op">=</span><span class="dv">16</span>)</span>
+<span id="lst-m2-c22-c01-6"><a href="#lst-m2-c22-c01-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c22-c01-7"><a href="#lst-m2-c22-c01-7" aria-hidden="true" tabindex="-1"></a>patch_grid <span class="op">=</span> patch_projection(images)          <span class="co"># [2, 64, 14, 14]</span></span>
+<span id="lst-m2-c22-c01-8"><a href="#lst-m2-c22-c01-8" aria-hidden="true" tabindex="-1"></a>patch_sequence <span class="op">=</span> patch_grid.flatten(<span class="dv">2</span>).transpose(<span class="dv">1</span>, <span class="dv">2</span>)  <span class="co"># [2, 196, 64]</span></span>
+<span id="lst-m2-c22-c01-9"><a href="#lst-m2-c22-c01-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c22-c01-10"><a href="#lst-m2-c22-c01-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(patch_grid.shape)</span>
+<span id="lst-m2-c22-c01-11"><a href="#lst-m2-c22-c01-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(patch_sequence.shape)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>A 224 by 224 image with 16 by 16 patches produces 196 patch vectors.</p>
+<p>This example omits class tokens, positional embeddings, and subsequent transformer blocks.</p>
+<p>Patch tokens let a transformer process images. Contrastive learning connects those image representations with text representations.</p>
+</section>
+<section id="sec-m2-c22-s02" class="level2" data-number="22.2">
+<h2 data-number="22.2" class="anchored" data-anchor-id="sec-m2-c22-s02"><span class="header-section-number">22.2</span> Aligning Visual and Text Embeddings with CLIP Contrastive Loss</h2>
+<p>Multimodal models either align representations from different encoders or condition a generator on projected visual representations.</p>
+<p>CLIP is a contrastive image-text model that aligns paired examples in a shared embedding space.</p>
+<p>Tabular transformers tokenize fields rather than words, but the same embedding and attention machinery can apply. The course also notes that classical tabular baselines often remain strong, so the mathematical object should fit the data rather than forcing every input into the same architecture.</p>
+<p>CLIP encodes images and text separately, compares every image with every caption in the batch, and uses a contrastive loss to raise matched similarities in both directions. The similarity matrix is therefore both a computational object and the set of candidate negatives for the batch.</p>
+<p>VQ-VAE converts image regions into discrete codebook entries that can be modeled as tokens. ViLT removes a separate heavy visual encoder and applies transformer computation more directly to projected image patches and text tokens.</p>
+<p>For image captioning or visual question answering, a vision encoder produces image features and a language decoder generates text conditioned on those features. The course homework evaluates both successful outputs and systematic failures such as counting or attribute errors.</p>
+<p>A batch similarity matrix S trains matching image-text pairs to align.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>CLIP contrastive loss:</strong></span></p>
+<p><span id="eq-m2-c22-e04"><span class="math display">\[
+L=\operatorname{CE}(\operatorname{softmax}(S/\tau),\mathrm{image\,to\,text\,targets})+\operatorname{CE}(\operatorname{softmax}(S^{T}/\tau),\mathrm{text\,to\,image\,targets})
+\tag{22.4}\]</span></span></p>
+<p>where S is batch image-text similarity matrix; τ is learned or fixed temperature; CE is cross-entropy over matched pairs.</p>
+<p>Each image row is normalized into probabilities over captions, and each text column is normalized into probabilities over images. Cross-entropy rewards the paired entry in both directions.</p>
+<p>CLIP learns a shared embedding space in which matched image-text pairs score higher than mismatched pairs in the same batch.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: CLIP contrastive loss</strong></p>
+<p>If correct image-text probabilities are 0.9 and 0.8, the row-direction CE average is <span class="math inline">\((-\log 0.9 - \log 0.8)/2=0.164\)</span>.</p>
+</div>
+<p>CLIP compares whole-image and whole-text representations. Speech recognition instead turns a time sequence into a token sequence.</p>
+</section>
+<section id="sec-m2-c22-s03" class="level2" data-number="22.3">
+<h2 data-number="22.3" class="anchored" data-anchor-id="sec-m2-c22-s03"><span class="header-section-number">22.3</span> Converting Continuous Speech Spectrograms to Text with Whisper</h2>
+<p>Speech models convert a one-dimensional waveform into a time-frequency representation before sequence modeling begins.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Waveform:</strong></span> A sequence of sampled audio amplitudes indexed by time.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Short-time Fourier transform:</strong></span> A Fourier transform applied to overlapping local windows of a waveform.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Mel spectrogram:</strong></span> A time-frequency magnitude representation whose frequency axis is remapped to mel bands.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Whisper:</strong></span> An encoder-decoder speech model that maps audio features to text tokens.</li>
+</ul>
+<p>Windowing preserves when frequency content occurs. Each frame contributes one spectrum; stacking frame spectra creates a matrix whose rows or columns represent time and frequency. Mel filtering then groups frequencies according to a perceptual scale.</p>
+<p>Whisper treats the feature sequence as encoder input and generates transcript tokens with a decoder. The mathematical path is therefore waveform to feature matrix to encoded sequence to autoregressive text, rather than raw audio values directly to words.</p>
+<p>The lecture notes that performance varies by language and available training data. A strong result on a high-resource language does not establish the same quality for every language represented in the benchmark.</p>
+<p>A waveform is a sequence of amplitude samples. The short-time Fourier transform divides it into overlapping windows and computes the frequency content of each window. Stacking the window spectra creates a time-frequency matrix that a speech encoder can process as a sequence.</p>
+<p>The window is essential because one Fourier transform over a whole recording would show which frequencies occur but not when they occur. The mel filterbank then groups frequency bins into bands, producing a smaller representation that is commonly used by speech models.</p>
+<p>A local window selects part of the waveform before its frequency components are measured.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Short-time Fourier transform:</strong></span></p>
+<p><span id="eq-m2-c22-e05"><span class="math display">\[
+X(t,\omega)=\sum_nx[n]w[n-t]\exp(-i\omega n)
+\tag{22.5}\]</span></span></p>
+<p>where x[n] is audio sample n; w[n-t] is window centered near time t; ω is angular frequency; X(t,ω) is complex local spectrum.</p>
+<p>Repeating the calculation at shifted windows creates a time-frequency matrix.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Turning a short waveform window into one spectral frame</strong></p>
+<p>Take four consecutive waveform samples as one short analysis window.</p>
+<p><strong>Window:</strong></p>
+<p><span class="math inline">\(x = (1,0,-1,0)\)</span></p>
+<p>The four samples preserve a short segment of time.</p>
+<p><strong>Frequency calculation:</strong></p>
+<p>For the zero-frequency component, add the samples: <span class="math inline">\(1+0+(-1)+0 = 0\)</span>.</p>
+<p>Other Fourier components use the same samples with complex frequency weights.</p>
+<p><strong>Sequence representation:</strong></p>
+<p>Repeat the calculation for overlapping windows.</p>
+<p>The resulting spectral frames form a time-by-frequency matrix before mel filtering and speech encoding.</p>
+<p>Speech models receive these time-indexed feature vectors rather than the raw waveform as their main sequence input.</p>
+</div>
+<p>Audio frames and image patches are modality-specific inputs. Tabular data requires a different baseline because its fields do not form a natural sequence.</p>
+</section>
+<section id="sec-m2-c22-s04" class="level2" data-number="22.4">
+<h2 data-number="22.4" class="anchored" data-anchor-id="sec-m2-c22-s04"><span class="header-section-number">22.4</span> Benchmarking Tabular Transformers against Gradient-Boosted Trees</h2>
+<p>Tabular models operate on named fields whose scales, types, and missing-value patterns differ from text-token sequences.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>TabTransformer:</strong></span> A model that embeds categorical fields and applies attention across field representations.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient-boosted decision trees:</strong></span> An ensemble of decision trees trained sequentially to correct earlier residuals.</li>
+</ul>
+<p>Categorical values can be assigned embedding rows, while continuous values require normalization or a learned projection. Attention then compares fields within one record rather than words within one sentence.</p>
+<p>The Week 8 material retains gradient-boosted trees as a strong baseline. A transformer is most useful when field interactions, pretraining, multimodal inputs, or transfer learning justify its additional complexity; it should not replace a simpler baseline by default.</p>
+<p>Tabular inputs mix numeric, categorical, missing, and sometimes time-dependent fields. Strong baselines such as regularized linear models and gradient-boosted decision trees often remain competitive because they handle heterogeneous columns and limited data efficiently.</p>
+<p>A tabular transformer embeds categorical fields, normalizes numeric fields, and uses attention to model interactions between columns. Tabular transformers are useful when complex feature interactions justify extra compute. For standard tabular data, gradient-boosted decision trees often remain faster and more accurate.</p>
+<p>Model choice starts with the input structure and a strong baseline, then asks whether richer interactions justify the additional cost.</p>
+</section>
+<section id="sec-m2-c22-s05" class="level2" data-number="22.5">
+<h2 data-number="22.5" class="anchored" data-anchor-id="sec-m2-c22-s05"><span class="header-section-number">22.5</span> Choosing a Model Family for a New Input Modality</h2>
+<p>The input structure determines the first representation and the useful comparison baseline; it does not automatically require a transformer.</p>
+<p>Images have local two-dimensional neighborhoods. A convolutional network uses shared local kernels and remains a strong baseline when translation-like local patterns matter. A vision transformer turns patches into a sequence and is useful when long-range patch relationships or transfer from large-scale pretraining matter.</p>
+<p>Audio begins as a waveform, but speech models commonly receive a time-frequency array such as a mel spectrogram. The sequence axis represents time frames, so recurrent, convolutional, and transformer encoders can all be relevant depending on context length and deployment constraints.</p>
+<p>Tables contain heterogeneous named fields rather than a natural spatial or token order. Gradient-boosted decision trees are often the practical baseline. Tabular transformers become compelling when categorical embeddings, field interactions, transfer learning, or multimodal connections justify their extra capacity.</p>
+<p>Multimodal tasks need both a representation for each input type and a way to connect them. CLIP aligns independent image and text encoders for retrieval and matching. Captioning and visual question answering instead condition a language decoder on visual features, so the final output remains a token sequence.</p>
+<p>The next chapter maps these representations and computations to the tensors and operations that implement them.</p>
+</section>
+<section id="sec-m2-c22-s06" class="level2" data-number="22.6">
+<h2 data-number="22.6" class="anchored" data-anchor-id="sec-m2-c22-s06"><span class="header-section-number">22.6</span> Multimodal trace</h2>
+<p>Beyond-text transformers reuse the same central idea: turn the input into a sequence of vectors with a consistent hidden width. Images become patch tokens, audio becomes frame or spectrogram tokens, tables become field tokens, and multimodal systems align several token streams.</p>
+<p>Mixture-of-experts models add conditional computation. A router scores experts for each token representation, selects a small subset, and combines their outputs. The mathematical issue is no longer only representation quality; load balancing and routing stability become part of the model behavior.</p>
+<p>Residual connections let a deep vision block learn a correction while preserving a direct path for the input and its gradient.</p>
+<div id="fig-m2-c22-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Course page showing a ResNet residual block with an identity path around convolutional transformations.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c22-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c22-f02.png" class="img-fluid figure-img" style="width:5.9in" alt="Course page showing a ResNet residual block with an identity path around convolutional transformations.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c22-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;22.2: The identity path preserves an input while the learned branch adds a compatible correction.
+</figcaption>
+</figure>
+</div>
+<p>The identity path and transformed path must have compatible dimensions before they are added, the same constraint later used by transformer residual connections.</p>
+<p>A vision transformer turns an image grid into a sequence by flattening and projecting fixed-size patches.</p>
+<div id="fig-m2-c22-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Course page showing image patches flattened and projected into a sequence of vision-transformer embeddings.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c22-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c22-f03.png" class="img-fluid figure-img" style="width:5.9in" alt="Course page showing image patches flattened and projected into a sequence of vision-transformer embeddings.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c22-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;22.3: Patch size trades spatial detail for the number of positions that attention must process.
+</figcaption>
+</figure>
+</div>
+<p>Patch size fixes sequence length: smaller patches preserve more spatial detail but increase the number of attention positions.</p>
+<p>Speech recognition uses a time-frequency feature sequence as encoder input and generates transcript tokens with a decoder.</p>
+<div id="fig-m2-c22-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Course page showing the Whisper pipeline from audio features through an encoder-decoder model to text tokens.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c22-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c22-f04.png" class="img-fluid figure-img" style="width:5.9in" alt="Course page showing the Whisper pipeline from audio features through an encoder-decoder model to text tokens.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c22-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;22.4: A time-frequency feature sequence becomes encoder context for autoregressive transcript generation.
+</figcaption>
+</figure>
+</div>
+<p>The modality-specific step ends at the audio feature matrix; encoder-decoder sequence modeling then uses the same conditional generation ideas developed for text.</p>
+<p>Multimodal models often align image and text encoders by training paired examples to be close and mismatched examples to be far apart.</p>
+<div id="fig-m2-c22-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Lecture page explaining CLIP contrastive learning over image-caption pairs.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c22-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c22-f05.png" class="img-fluid figure-img" style="width:5.9in" alt="Lecture page explaining CLIP contrastive learning over image-caption pairs.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c22-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;22.5: Contrastive training pulls paired image-text vectors together and pushes mismatched pairs apart.
+</figcaption>
+</figure>
+</div>
+<p>CLIP makes the shared embedding space a training objective. The same idea later supports retrieval, captioning, and vision-language prompting.</p>
+<p>Audio enters transformer-style models only after a signal representation step. The Week 8 PCM page names the raw sampling objects before spectrogram features appear.</p>
+<div id="fig-m2-c22-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Lecture page explaining PCM audio data with channels, bit depth, and sampling rate.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c22-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c22-f06.png" class="img-fluid figure-img" style="width:5.9in" alt="Lecture page explaining PCM audio data with channels, bit depth, and sampling rate.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c22-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;22.6: Sampling rate, channel count, and amplitude values define the signal before spectral features are computed.
+</figcaption>
+</figure>
+</div>
+<p>This figure grounds the audio formulas: sampling rate, channels, and amplitude values are the raw objects transformed into time-frequency features.</p>
+<p>Non-text models first convert modality-specific data into token-like vectors or routed expert computations. Images use <code>[B,C,H,W]</code> before patches <code>[B,N,D]</code>; audio frames and table fields become sequence axes. A modality-specific front end creates vectors, then transformer-style blocks or contrastive losses operate on them.</p>
+<p>In PyTorch, Convolutions, patch projections, spectrogram transforms, and contrastive losses implement the conversions.</p>
+<p><strong>Performance note:</strong> The expensive step can be front-end feature extraction, quadratic attention over many patches, or MoE routing imbalance.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Patch count example</strong></p>
+<p>A 32 by 32 RGB image split into 8 by 8 patches has <span class="math inline">\(\frac{32}{8}·\frac{32}{8}=16\)</span> patch tokens.</p>
+<p>Each patch contains <span class="math inline">\(8·8·3=192\)</span> raw numbers before projection.</p>
+<p>A projection to width <span class="math inline">\(D=64\)</span> produces transformer input dimensions <span class="math inline">\([B,16,64]\)</span>, plus an optional class token.</p>
+</div>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>ViT patch count:</strong></span></p>
+<p><span id="eq-m2-c22-e06"><span class="math display">\[
+N_{\mathrm{patches}}=\left(\frac{H}{P}\right)\left(\frac{W}{P}\right)
+\tag{22.6}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Patch projection:</strong></span></p>
+<p><span id="eq-m2-c22-e07"><span class="math display">\[
+\mathrm{patch\,tokens}=\operatorname{flatten}(\mathrm{patches})\mathbin{@}W_{\mathrm{patch}}
+\tag{22.7}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>MoE routing:</strong></span></p>
+<p><span id="eq-m2-c22-e08"><span class="math display">\[
+\mathrm{expert}=\operatorname{top}_k(\operatorname{softmax}(W_{\mathrm{gate}}x))
+\tag{22.8}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Audio framing:</strong></span></p>
+<p><span id="eq-m2-c22-e09"><span class="math display">\[
+\mathrm{frames}=\left\lfloor\frac{\mathrm{samples}-\mathrm{window}}{\mathrm{hop}}\right\rfloor+1
+\tag{22.9}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
+<p>These dimensions appear in the computation in order.</p>
+<ul>
+<li>Image: [B, C, H, W].</li>
+<li>Flattened patches: [B, N, P·P·C].</li>
+<li>Patch embeddings: [B, N, D].</li>
+<li>Tabular field tokens: [B, F, D].</li>
+<li>Router scores: [B, T, E] for E experts.</li>
+</ul>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
+<ul>
+<li>Patchification changes a spatial grid into a sequence before attention begins.</li>
+<li>Projection layers align modality-specific features with the transformer hidden width.</li>
+<li>MoE routing creates conditional compute and therefore requires load-balancing checks.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>It should now be clear how to compute the number of image patches and the transformer input dimensions for one ViT example.</strong></p>
+</div>
+<p>Beyond-text models first turn modality-specific inputs into vectors before reusing transformer-style computation.</p>
+<p>PyTorch maps these mathematical objects to tensors, modules, losses, and optimizers.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../parts/part-m2-p06.html" class="pagination-link" aria-label="Part VI: Implementation and Extensions">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part VI: Implementation and Extensions</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m2-c23.html" class="pagination-link" aria-label="GPU Memory &amp; Strides: Maximizing Tensor Throughput">
+        <span class="nav-page-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>11&nbsp; Backpropagation: Tracing Error Gradients via the Chain Rule – Mathematical Foundations of LLM Training and Inference</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m2-c12.html" rel="next">
+<link href="../chapters/ch-m2-c10.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p03.html">Part III: From Error to Learning</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c11.html"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Backpropagation: Tracing Error Gradients via the Chain Rule</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Mathematical Foundations of LLM Training and Inference</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Mathematical Foundations of LLM Training and Inference</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-roadmap.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Roadmap</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-notation.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Notation</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-library-map.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Library Map</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: From Text to Mathematical Objects</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Prediction Targets: Defining What the Model Learns</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Token IDs: Discretizing Text into Numbers and Batches</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Subword Tokenization: Building Compact Vocabularies</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Count Vectors &amp; TF-IDF: Extracting Word Frequencies and Their Limits</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: From Scores to Loss</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Linear Hyperplanes: Scoring Features with Matrix Math</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Sigmoid &amp; Softmax: Turning Raw Scores into Probabilities</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Decoding Strategies: Generating Text Token by Token</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Cross-Entropy &amp; Perplexity: Measuring Prediction Error and Uncertainty</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Validation &amp; Testing: Catching Overfitting and Measuring Generalization</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: From Error to Learning</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">AdamW &amp; Momentum: Steering Parameter Updates</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c11.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Backpropagation: Tracing Error Gradients via the Chain Rule</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Activation Functions: Bending Decision Boundaries with MLPs</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Embedding Tables: Looking Up Dense Word Vectors</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c14.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">14</span>&nbsp; <span class="chapter-title">Word2Vec: Learning Word Geometry from Context</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part IV: Modeling Sequences</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c15.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">Recurrent Networks: Why Sequential Memory Hits a Wall</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c16.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">16</span>&nbsp; <span class="chapter-title">Attention Mathematics</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c17.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">17</span>&nbsp; <span class="chapter-title">Transformer Blocks: Building Deep, Order-Aware Networks</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c18.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">18</span>&nbsp; <span class="chapter-title">Transformer Topologies: Choosing the Right Architecture</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c19.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">19</span>&nbsp; <span class="chapter-title">Pretraining Data and Scaling</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part V: Adapting and Running LLMs</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c20.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">20</span>&nbsp; <span class="chapter-title">Low-Rank Adaptation and Preference Alignment</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c21.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">21</span>&nbsp; <span class="chapter-title">KV Cache: Speeding Up Generation</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m2-p06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part VI: Implementation and Extensions</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c22.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">22</span>&nbsp; <span class="chapter-title">Multimodal Transformers: Processing Images and Audio</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m2-c24.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">24</span>&nbsp; <span class="chapter-title">Computational Labs: Verifying the Math in Code</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m2-dictionary.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Dictionary</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m2-c11-s01" id="toc-sec-m2-c11-s01" class="nav-link active" data-scroll-target="#sec-m2-c11-s01"><span class="header-section-number">11.1</span> Calculating Derivatives and Multivariable Gradients</a></li>
+  <li><a href="#sec-m2-c11-s02" id="toc-sec-m2-c11-s02" class="nav-link" data-scroll-target="#sec-m2-c11-s02"><span class="header-section-number">11.2</span> Tracing Forward Dependencies on Computational Graphs</a></li>
+  <li><a href="#sec-m2-c11-s03" id="toc-sec-m2-c11-s03" class="nav-link" data-scroll-target="#sec-m2-c11-s03"><span class="header-section-number">11.3</span> Accumulating Gradients Efficiently via Vector-Jacobian Products</a></li>
+  <li><a href="#sec-m2-c11-s04" id="toc-sec-m2-c11-s04" class="nav-link" data-scroll-target="#sec-m2-c11-s04"><span class="header-section-number">11.4</span> Executing Reverse-Mode Automatic Differentiation</a></li>
+  <li><a href="#sec-m2-c11-s05" id="toc-sec-m2-c11-s05" class="nav-link" data-scroll-target="#sec-m2-c11-s05"><span class="header-section-number">11.5</span> Managing Optimizer Memory State and Gradient Buffers</a></li>
+  <li><a href="#sec-m2-c11-s06" id="toc-sec-m2-c11-s06" class="nav-link" data-scroll-target="#sec-m2-c11-s06"><span class="header-section-number">11.6</span> Backpropagation trace</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p03.html">Part III: From Error to Learning</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c11.html"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Backpropagation: Tracing Error Gradients via the Chain Rule</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m2-c11" class="quarto-section-identifier"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Backpropagation: Tracing Error Gradients via the Chain Rule</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Every trainable parameter affects the loss through a sequence of intermediate calculations. The chain rule traces how a small change at one point changes the final loss.</p>
+<p>A loss depends on every parameter through many intermediate calculations. Computation graphs and the chain rule organize those dependencies so reverse-mode autodiff can calculate all required gradients efficiently.</p>
+<p>In code, <code>torch.autograd</code> records differentiable operations implicitly; <code>loss.backward()</code> populates <code>.grad</code>, and <code>torch.no_grad()</code> separates parameter updates from graph construction.</p>
+<p>Chapter 11 develops one required stage of the guide’s computation.</p>
+<div id="fig-m2-c11-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 11 opener for Chain rule and backpropagation, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c11-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c11-f01.png" class="img-fluid figure-img" style="width:5.9in" alt="Chapter 11 opener for Chain rule and backpropagation, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c11-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;11.1: Forward values and local derivatives determine every backward gradient.
+</figcaption>
+</figure>
+</div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
+<section id="sec-m2-c11-s01" class="level2" data-number="11.1">
+<h2 data-number="11.1" class="anchored" data-anchor-id="sec-m2-c11-s01"><span class="header-section-number">11.1</span> Calculating Derivatives and Multivariable Gradients</h2>
+<p>A derivative is a local rate of change, and a gradient collects the partial derivatives of one scalar loss with respect to many parameters.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Derivative:</strong></span> Local rate of change of one scalar with respect to another.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient:</strong></span> Vector of partial derivatives of a scalar with respect to many variables.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Partial derivative:</strong></span> Derivative with respect to one variable while holding others fixed.</li>
+</ul>
+<p>The sign of a gradient says which direction increases the loss locally. Gradient descent moves parameters in the opposite direction so the loss should decrease for a small enough step.</p>
+<p>The magnitude is not a guarantee of global importance. It is a local slope at the current parameter values and current batch.</p>
+<p>A downstream loss changes x through the local derivative of y with respect to x.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Single-variable chain rule:</strong></span></p>
+<p><span id="eq-m2-c11-e01"><span class="math display">\[
+\frac{dL}{dx} = \frac{dL}{dy}\,\frac{dy}{dx}
+\tag{11.1}\]</span></span></p>
+<p>where L is scalar loss; y is intermediate value; x is earlier input or parameter.</p>
+<p>A small change in x changes y, and that change in y changes L; multiplying local rates gives the total local rate.</p>
+<p>backpropagation applies this local multiplication repeatedly in reverse graph order.</p>
+<p>Backpropagation passes gradients backward through local Jacobians.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Vector-Jacobian view:</strong></span></p>
+<p><span id="eq-m2-c11-e02"><span class="math display">\[
+\frac{dL}{dx} = \frac{dL}{dy}\,J_{y,x}
+\tag{11.2}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient descent direction:</strong></span></p>
+<p><span id="eq-m2-c11-e03"><span class="math display">\[
+\theta_{\mathrm{new}} = \theta - \eta\,\nabla_{\theta}L(\theta)
+\tag{11.3}\]</span></span></p>
+<p>where θ is current parameters; η is learning rate; grad L is loss gradient.</p>
+<p>The negative gradient is the local direction of steepest first-order decrease.</p>
+<p>The update is one step; training repeats it over batches and records the resulting loss.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Measuring Local Sensitivity</strong></p>
+<p><strong>Single-variable chain rule:</strong></p>
+<p>If <span class="math inline">\(∂L/∂y\)</span> = 5 and <span class="math inline">\(∂y/∂x\)</span> = 3, then <span class="math inline">\(∂L/∂x\)</span> = 15.</p>
+<p><strong>Vector-Jacobian view:</strong></p>
+<p>If <span class="math inline">\(∂L/∂y\)</span>=[2,3] and J has diagonal [1,4], then <span class="math inline">\(∂L/∂x\)</span>=[2,12].</p>
+<p><strong>Gradient descent direction:</strong></p>
+<p>For <span class="math inline">\(\theta=1\)</span>, <span class="math inline">\(η=0.1\)</span>, and <span class="math inline">\(gradient=3\)</span>, the update gives 0.7.</p>
+</div>
+<p>A gradient gives one local change rate for every parameter or input coordinate. A computation graph records which local operations must be connected by the chain rule.</p>
+</section>
+<section id="sec-m2-c11-s02" class="level2" data-number="11.2">
+<h2 data-number="11.2" class="anchored" data-anchor-id="sec-m2-c11-s02"><span class="header-section-number">11.2</span> Tracing Forward Dependencies on Computational Graphs</h2>
+<p>A computation graph records the operations that produced a tensor. PyTorch autograd uses this graph to apply the chain rule backward from the scalar loss to every tensor that requires gradients.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Node:</strong></span> An operation or tensor in the computation graph.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Edge:</strong></span> A data dependency between operations.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Leaf tensor:</strong></span> A tensor created by the user, often a parameter, rather than by an operation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Autograd:</strong></span> PyTorch’s automatic differentiation system.</li>
+</ul>
+<p>The forward pass builds values and, when gradients are enabled, stores enough history for the backward pass. The backward pass visits the graph in reverse dependency order and accumulates derivatives.</p>
+<p>This is why in-place operations and detached tensors can be dangerous. They may change or remove information that the backward pass expects.</p>
+<p>A graph node is a stored value such as x, z, p, or L. An edge is the operation that produced the next value. PyTorch needs the operation history because the value alone is not enough to determine its derivative with respect to earlier tensors.</p>
+<p>When the same parameter contributes to more than one path, autograd adds the gradient contributions. This accumulation is why gradients live in a buffer such as <code>w.grad</code> until the optimizer reads and clears it.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Computation map</strong></span></p>
+<p>The computation starts with input tensors and produces parameter gradients through the intermediate objects shown below.</p>
+<div id="fig-m2-c11-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Native computation diagram: Forward operations create a scalar loss, and the backward pass assigns a gradient to each trainable dependency.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c11-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c11-f02.png" class="img-fluid figure-img" style="width:5.9in" alt="Native computation diagram: Forward operations create a scalar loss, and the backward pass assigns a gradient to each trainable dependency.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c11-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;11.2: Forward operations create a scalar loss, and the backward pass assigns a gradient to each trainable dependency.
+</figcaption>
+</figure>
+</div>
+<p>The output of input tensors is the input required by parameter gradients; the intermediate stages name the stored objects that make the transition possible.</p>
+<p>A computation graph records the intermediate values that connect one input and parameter set to a scalar loss.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>A small computation graph:</strong></span></p>
+<p><span id="eq-m2-c11-e04"><span class="math display">\[
+z = wx+b,\quad p=\sigma(z),\quad L=-\log(p)
+\tag{11.4}\]</span></span></p>
+<p>where x is input scalar; w,b is trainable weight and bias; z is logit; p is predicted probability; L is scalar loss.</p>
+<p>The forward pass evaluates the equations from left to right. The backward pass starts at L and uses the local derivative of each operation in the reverse order.</p>
+<p>The three operations are affine scoring, sigmoid probability, and negative log loss.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Tracing one forward pass and one backward pass</strong></p>
+<p>Use <span class="math inline">\(x=2\)</span>, <span class="math inline">\(w=0.5\)</span>, <span class="math inline">\(b=0.1\)</span>, and a positive target so the loss is <span class="math inline">\(L=-\log(\operatorname{sigmoid}(z))\)</span>.</p>
+<p><strong>Forward values:</strong></p>
+<p><span class="math inline">\(z = 2  \cdot  0.5 + 0.1 = 1.1\)</span></p>
+<p><span class="math inline">\(p = \operatorname{sigmoid}(1.1) = 0.750\)</span></p>
+<p><span class="math inline">\(L = -\log(0.750) = 0.288\)</span></p>
+<p><strong>Local derivatives:</strong></p>
+<p><span class="math inline">\(\partial L / \partial z = p - 1 = -0.250\)</span></p>
+<p><span class="math inline">\(\partial z / \partial w = x = 2\)</span></p>
+<p><span class="math inline">\(\partial z / \partial b = 1\)</span></p>
+<p><strong>Accumulated parameter gradients:</strong></p>
+<p><span class="math inline">\(\partial L / \partial w = -0.250  \cdot  2 = -0.500\)</span></p>
+<p><span class="math inline">\(\partial L / \partial b = -0.250  \cdot  1 = -0.250\)</span></p>
+<p>Autograd stores the forward operations so <code>loss.backward()</code> can produce these parameter gradients without manually writing the reverse calculation.</p>
+</div>
+<p>The forward graph stores the intermediate values needed to evaluate local derivatives. Reverse-mode differentiation reuses that graph in the opposite direction to accumulate parameter gradients.</p>
+</section>
+<section id="sec-m2-c11-s03" class="level2" data-number="11.3">
+<h2 data-number="11.3" class="anchored" data-anchor-id="sec-m2-c11-s03"><span class="header-section-number">11.3</span> Accumulating Gradients Efficiently via Vector-Jacobian Products</h2>
+<p>A Jacobian records how every output coordinate changes with every input coordinate; reverse-mode differentiation multiplies it by an upstream gradient without storing the full matrix.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Jacobian:</strong></span> A matrix of partial derivatives whose row i describes how output i changes with every input coordinate.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Vector-Jacobian product:</strong></span> A row-vector combination of Jacobian rows that propagates an upstream gradient to the inputs.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Reverse mode:</strong></span> A differentiation direction that starts from output sensitivities and moves toward the inputs.</li>
+</ul>
+<p>For a vector output <span class="math inline">\(y=f(x)\)</span>, the Jacobian contains every local sensitivity. If the final objective is <span class="math inline">\(L\)</span>, the backward pass combines the upstream loss gradient with the Jacobian instead of computing a separate derivative for each input-output pair.</p>
+<p>This is why a neural-network backward pass can reuse local derivatives. Each operation receives an upstream gradient and returns the gradient with respect to its own inputs and parameters.</p>
+<p>The Jacobian records how every output coordinate changes with every input coordinate.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Jacobian definition:</strong></span></p>
+<p><span id="eq-m2-c11-e05"><span class="math display">\[
+J_{i,j}=\frac{\partial y_{i}}{\partial x_{j}}
+\tag{11.5}\]</span></span></p>
+<p>where x is input vector in <span class="math inline">\(\mathbb{R}^{n}\)</span>; y is output vector in <span class="math inline">\(\mathbb{R}^{m}\)</span>; J is m by n Jacobian matrix.</p>
+<p>Differentiate each output coordinate with respect to each input coordinate and arrange the results in a matrix. The scalar derivative is the special case <span class="math inline">\(m=n=1\)</span>.</p>
+<p>Rows correspond to output coordinates and columns correspond to input coordinates.</p>
+<p>The vector-Jacobian product maps an upstream loss gradient to the input coordinates.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Vector-Jacobian product:</strong></span></p>
+<p><span id="eq-m2-c11-e06"><span class="math display">\[
+\frac{dL}{dx}=\frac{dL}{dy}\,J
+\tag{11.6}\]</span></span></p>
+<p>where <span class="math inline">\(∂L/∂y\)</span> is upstream row-vector gradient; J is jacobian of y with respect to x; <span class="math inline">\(∂L/∂x\)</span> is gradient with respect to x.</p>
+<p>The multivariable chain rule adds the contribution from every output path that depends on the same input coordinate. Those sums are exactly the entries of the row-vector product.</p>
+<p>The multiplication sums every output path that depends on the same input coordinate.</p>
+<p>For one input coordinate, the total derivative adds the contribution from every output coordinate that depends on it.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Coordinate form of the chain rule:</strong></span></p>
+<p><span id="eq-m2-c11-e07"><span class="math display">\[
+\frac{\partial L}{\partial x_{j}}=\sum_{i}\frac{\partial L}{\partial y_{i}}\,\frac{\partial y_{i}}{\partial x_{j}}
+\tag{11.7}\]</span></span></p>
+<p>where <span class="math inline">\(x_{j}\)</span> is input coordinate j; <span class="math inline">\(y_{i}\)</span> is output coordinate i; L is scalar loss.</p>
+<p>The derivative of the loss with respect to <span class="math inline">\(x_{j}\)</span> is the sum of local output sensitivities multiplied by the corresponding input sensitivities.</p>
+<p>The index j selects an input coordinate; i runs over output coordinates.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Jacobians and vector-Jacobian products</strong></p>
+<p><strong>Jacobian definition:</strong></p>
+<p>For <span class="math inline">\(y=(x_{1}+2x_{2}, 3x_{1}-x_{2})\)</span>, <span class="math inline">\(J=[[1,2],[3,-1]]\)</span>.</p>
+<p><strong>Vector-Jacobian product:</strong></p>
+<p>If <span class="math inline">\(\partial L/\partial y=(2,3)\)</span> and <span class="math inline">\(J=\begin{bmatrix}1&amp;2\\3&amp;-1\end{bmatrix}\)</span>, then <span class="math inline">\(\partial L/\partial x=(2,3)J=(11,1)\)</span>.</p>
+<p><strong>Coordinate form of the chain rule:</strong></p>
+<p>If the two products are 2 and 9, then the derivative with respect to <span class="math inline">\(x_{j}\)</span> is <span class="math inline">\(2 + 9 = 11\)</span>.</p>
+</div>
+<p>A vector-Jacobian product passes one accumulated gradient backward through one operation without materializing a full Jacobian. Automatic differentiation applies that procedure across the graph.</p>
+</section>
+<section id="sec-m2-c11-s04" class="level2" data-number="11.4">
+<h2 data-number="11.4" class="anchored" data-anchor-id="sec-m2-c11-s04"><span class="header-section-number">11.4</span> Executing Reverse-Mode Automatic Differentiation</h2>
+<p>Backpropagation is the chain rule applied systematically to a computation graph. It is not a separate learning algorithm; it is the derivative computation used by gradient-based optimizers.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Chain rule:</strong></span> A rule for differentiating a composition of functions.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Backward pass:</strong></span> The reverse traversal that computes gradients.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient accumulation:</strong></span> Adding gradient contributions from multiple graph paths or multiple backward calls.</li>
+</ul>
+<p>If a parameter affects the loss through several paths, its final gradient is the sum of contributions from those paths. This is common in shared embeddings and recurrent networks.</p>
+<p>The loss must be scalar for the common <code>loss.backward()</code> call. If a tensor has multiple outputs, a vector-Jacobian product must specify which weighted combination of outputs is being differentiated.</p>
+<p><strong>Origin note:</strong> Backpropagation is reverse-mode automatic differentiation applied to neural networks; it was popularized for neural-network training by Rumelhart, Hinton, and Williams.</p>
+<p>For logistic regression, the local derivative of binary cross-entropy with respect to the logit simplifies to <code>p-y</code>. The gradient of the weights is therefore the input vector multiplied by that logit derivative, averaged over the batch. Backpropagation obtains the same result by composing the local derivatives recorded during the forward pass.</p>
+<p>In a multilayer network, a hidden activation can influence many outputs. Reverse-mode automatic differentiation accumulates all downstream contributions before continuing to earlier nodes. This is why a tensor’s <code>.grad</code> is a sum and why repeated calls to <code>backward()</code> accumulate unless gradients are cleared.</p>
+<p>If a tensor feeds multiple downstream operations, its gradient is the sum of all path contributions.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient accumulation:</strong></span></p>
+<p><span id="eq-m2-c11-e08"><span class="math display">\[
+\operatorname{grad}_{x}=\sum_{\text{paths }p}\operatorname{contribution}_{p}
+\tag{11.8}\]</span></span></p>
+<p>Backpropagation connects adjacent local derivatives along each path from the scalar loss to a parameter.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Chain rule:</strong></span></p>
+<p><span id="eq-m2-c11-e09"><span class="math display">\[
+\frac{dL}{dx}=\frac{dL}{dy}\,\frac{dy}{dx}\quad\text{for }y=f(x)
+\tag{11.9}\]</span></span></p>
+<p>where L is scalar loss; x,y is adjacent values in the computation graph.</p>
+<p>A change in x affects L through y, so local sensitivities multiply.</p>
+<p>Backpropagation applies this multiplication in reverse graph order.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Gradient accumulation</strong></p>
+<p>If two downstream paths contribute 2 and 5 to the same tensor, the accumulated gradient is 7.</p>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Chain rule</strong></p>
+<p>If <span class="math inline">\(∂L/∂y\)</span>=5 and <span class="math inline">\(∂y/∂x\)</span>=3, then <span class="math inline">\(∂L/∂x\)</span>=15.</p>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> A scalar loss creates gradients on tensors that require them.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c11-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c11-c01-1"><a href="#lst-m2-c11-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m2-c11-c01-2"><a href="#lst-m2-c11-c01-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c11-c01-3"><a href="#lst-m2-c11-c01-3" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> torch.tensor([<span class="fl">2.0</span>], requires_grad<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m2-c11-c01-4"><a href="#lst-m2-c11-c01-4" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> <span class="dv">3</span> <span class="op">*</span> x <span class="op">**</span> <span class="dv">2</span> <span class="op">+</span> <span class="dv">1</span></span>
+<span id="lst-m2-c11-c01-5"><a href="#lst-m2-c11-c01-5" aria-hidden="true" tabindex="-1"></a>y.backward()</span>
+<span id="lst-m2-c11-c01-6"><a href="#lst-m2-c11-c01-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.grad)  <span class="co"># 12, because d(3x^2+1)/dx = 6x</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The printed gradient is 12 because the local derivative of 3x² + 1 at <span class="math inline">\(x = 2\)</span> is 6<span class="math inline">\(x = 12\)</span>.</p>
+<p>The scalar is intentionally small. Neural-network autograd applies the same reverse accumulation to many tensor operations and parameter paths.</p>
+<p>Reverse-mode autodiff produces gradients for trainable parameters from one scalar loss. Optimizers store those gradients and any additional state needed for the next update.</p>
+</section>
+<section id="sec-m2-c11-s05" class="level2" data-number="11.5">
+<h2 data-number="11.5" class="anchored" data-anchor-id="sec-m2-c11-s05"><span class="header-section-number">11.5</span> Managing Optimizer Memory State and Gradient Buffers</h2>
+<p>After backpropagation computes gradients, the optimizer changes parameter tensors. This update is a state transition: parameters and sometimes optimizer buffers move from one step to the next.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Learning rate:</strong></span> The step-size multiplier applied to the update direction.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Optimizer step:</strong></span> The operation that mutates parameters based on gradients and optimizer state.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Zero grad:</strong></span> The operation that clears accumulated gradients before the next backward pass.</li>
+</ul>
+<p>A training loop alternates between forward pass, loss computation, backward pass, optimizer step, and gradient clearing. The same loop can train logistic regression or a transformer; the difference is the model graph.</p>
+<p>Forgetting to clear gradients changes the effective update because PyTorch accumulates gradient values. That behavior is useful for intentional gradient accumulation but wrong when accidental.</p>
+<p>The backward pass fills gradient buffers; the optimizer step consumes those buffers and any optimizer state. Gradient clipping, when used, sits between those two moments: it modifies the stored gradients before the optimizer reads them.</p>
+<p>Backpropagation leaves one gradient tensor attached to each parameter that required a gradient. The optimizer reads that buffer, updates its own momentum or second-moment state, and changes the parameter tensor in place.</p>
+<p>Because PyTorch accumulates gradients by addition, a training loop must zero or clear gradients before the next backward pass. Failing to clear them turns the next update into a sum over multiple batches.</p>
+<ul>
+<li>Forward pass: compute predictions and loss.</li>
+<li>Backward pass: populate <code>.grad</code> fields.</li>
+<li>Optimizer step: update parameters.</li>
+<li>Gradient reset: clear gradients for the next batch.</li>
+</ul>
+<p>Gradient buffers and optimizer state are the software form of repeated learning updates. Nonlinear networks use the same mechanism through more layers and intermediate representations.</p>
+</section>
+<section id="sec-m2-c11-s06" class="level2" data-number="11.6">
+<h2 data-number="11.6" class="anchored" data-anchor-id="sec-m2-c11-s06"><span class="header-section-number">11.6</span> Backpropagation trace</h2>
+<p>Backpropagation should be read as a reverse computation over a graph. The forward pass creates tensors such as z, p, and L. Each tensor knows which operation produced it, so when L.backward() starts from the scalar loss, PyTorch can walk backward through the graph and multiply local derivatives.</p>
+<p>The gradient buffer is a separate storage location from the graph itself. For a parameter tensor <code>w</code>, <code>w.grad</code> is a tensor with the same dimensions as <code>w</code>, filled after backward. PyTorch accumulates into this buffer, which is why <code>zero_grad()</code> is part of the training computation.</p>
+<p>Backpropagation is an execution over saved tensor operations: a scalar loss sends derivatives backward through the graph.</p>
+<div id="fig-m2-c11-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="PyTorch lecture visual showing tensors, operations, scalar loss, and gradients produced by backward computation.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c11-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c11-f03.png" class="img-fluid figure-img" style="width:5.9in" alt="PyTorch lecture visual showing tensors, operations, scalar loss, and gradients produced by backward computation.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c11-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;11.3: Reverse accumulation reuses stored forward values to assign a derivative to each parameter.
+</figcaption>
+</figure>
+</div>
+<p>The forward operations create intermediate values. The backward pass applies their local derivatives in reverse order and accumulates one gradient for each trainable parameter.</p>
+<p>Backpropagation multiplies local derivatives in reverse topological order from a scalar loss. Every gradient buffer has the same dimensions as the parameter or activation it differentiates. The forward pass stores operation history; the backward pass walks that history and accumulates gradients.</p>
+<p>In PyTorch, <code>loss.backward()</code>, parameter <code>.grad</code>, and <code>optimizer.zero_grad()</code> expose the graph and buffers.</p>
+<p><strong>Performance note:</strong> Backward often stores or recomputes activations; memory pressure can exceed the cost of the arithmetic.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Annotated computation graph for one binary classifier step</strong></p>
+<p><strong>Nodes and their local derivatives for one scalar example:</strong></p>
+<p><strong>Forward graph (single example, scalar ops):</strong></p>
+<p><span class="math inline">\(z_{\mathrm{mul}}=x\cdot w=2\cdot0.5=1.0\)</span></p>
+<p><span class="math inline">\(z=z_{\mathrm{mul}}+b=1.0+0.1=1.1\)</span></p>
+<p><span class="math inline">\(p = \operatorname{sigmoid}(z) = 1/(1+\exp(-1.1)) = 0.750\)</span></p>
+<p><span class="math inline">\(L = -\log(p) = -\log(0.750) = 0.288  (y=1)\)</span></p>
+<p><strong>Local derivatives at each node:</strong></p>
+<p><span class="math inline">\(\frac{dL}{dp}  = -\frac{1}{p} = -\frac{1}{0.750} = -1.333\)</span></p>
+<p><span class="math inline">\(\frac{dp}{dz}  = p^{\star}(1-p) = 0.750 \cdot 0.250 = 0.188\)</span></p>
+<p><span class="math inline">\(\frac{dz}{dw}  = x = 2.0\)</span></p>
+<p><span class="math inline">\(\frac{dz}{db}  = 1.0\)</span></p>
+<p><strong>Backward pass (chain rule):</strong></p>
+<p><span class="math inline">\(\frac{dL}{dz}  = \frac{dL}{dp}  \cdot  \frac{dp}{dz} = -1.333  \cdot  0.188 = -0.250\)</span></p>
+<p>(Equivalently: <span class="math inline">\(∂L/∂z\)</span> = p - <span class="math inline">\(y = 0.750 - 1.0\)</span> = -0.250 check)</p>
+<p><span class="math inline">\(\frac{dL}{dw}  = \frac{dL}{dz}  \cdot  \frac{dz}{dw} = -0.250  \cdot  2.0 = -0.500\)</span></p>
+<p><span class="math inline">\(\frac{dL}{db}  = \frac{dL}{dz}  \cdot  \frac{dz}{db} = -0.250  \cdot  1.0 = -0.250\)</span></p>
+<p>These values appear in <code>w.grad</code> and <code>b.grad</code> after <code>loss.backward()</code>.</p>
+</div>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Chain rule:</strong></span></p>
+<p><span id="eq-m2-c11-e10"><span class="math display">\[
+\frac{dL}{dw}=\frac{dL}{dz}\,\frac{dz}{dw}
+\tag{11.10}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Affine local derivative:</strong></span></p>
+<p><span id="eq-m2-c11-e11"><span class="math display">\[
+\frac{dz}{dw}=x
+\tag{11.11}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Update:</strong></span></p>
+<p><span id="eq-m2-c11-e12"><span class="math display">\[
+w_{\mathrm{next}}=w-\mathrm{lr}\,\frac{dL}{dw}
+\tag{11.12}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
+<p>These dimensions appear in the computation in order.</p>
+<ul>
+<li>Input batch X: [B, D].</li>
+<li>Parameter w: [D, H], a leaf tensor with <code>requires_grad=True</code>.</li>
+<li>Activation h: [B, H], an intermediate tensor whose <code>grad_fn</code> links to the operation that produced it.</li>
+<li>Loss L: [], a scalar endpoint for backward.</li>
+<li>Gradient buffer w.grad: [D, H], the same dimensions as the parameter.</li>
+</ul>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
+<ul>
+<li><code>loss = criterion(model(X), y)</code> computes the final scalar from the forward graph.</li>
+<li><code>loss.backward()</code> fills <code>.grad</code> on leaf parameters.</li>
+<li>optimizer.step() mutates parameters using those gradients.</li>
+<li><code>optimizer.zero_grad()</code> prevents gradients from previous batches from being added again.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>It should now be clear how to mark every node in the sequence <span class="math inline">\(z=Xw+b\)</span>, sigmoid, and binary cross-entropy, and describe the local derivative attached to each node.</strong></p>
+</div>
+<p>Backpropagation is reverse-mode chain rule over the computation graph created by the forward pass.</p>
+<p>Multilayer classifiers apply these gradients to affine maps and nonlinearities.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../chapters/ch-m2-c10.html" class="pagination-link" aria-label="AdamW &amp; Momentum: Steering Parameter Updates">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">AdamW &amp; Momentum: Steering Parameter Updates</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m2-c12.html" class="pagination-link" aria-label="Activation Functions: Bending Decision Boundaries with MLPs">
+        <span class="nav-page-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Activation Functions: Bending Decision Boundaries with MLPs</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

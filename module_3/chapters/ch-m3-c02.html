@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>2&nbsp; Distributed training across devices and clusters – MLOps: From Experiments to Reliable AI Systems</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../parts/part-ii.html" rel="next">
+<link href="../chapters/ch-m3-c01.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-i.html">Part I: Reproducible training at cluster scale</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m3-c02.html"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Distributed training across devices and clusters</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">MLOps: From Experiments to Reliable AI Systems</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">MLOps: From Experiments to Reliable AI Systems</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m3-index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction: the operating problem</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-i.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: Reproducible training at cluster scale</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Making ML runs reproducible</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c02.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Distributed training across devices and clusters</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-ii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: Reliable model services with measurement and retrieval</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Serving LLMs with predictable performance</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Measuring service health and model quality</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Keeping storage and retrieval state reliable</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-iii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: Automated workflows and reliable system operation</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Running repeatable ML workflows</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m3-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Operating a grounded-answer system end to end</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m3-app-a.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Formula reference</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m3-app-b.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">MLOps glossary</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m3-app-c.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">C</span>&nbsp; <span class="chapter-title">Questions and concise answers</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m3-c02-s01" id="toc-sec-m3-c02-s01" class="nav-link active" data-scroll-target="#sec-m3-c02-s01"><span class="header-section-number">2.1</span> Accounting for single-GPU memory use</a></li>
+  <li><a href="#sec-m3-c02-s02" id="toc-sec-m3-c02-s02" class="nav-link" data-scroll-target="#sec-m3-c02-s02"><span class="header-section-number">2.2</span> Matching communication paths to model traffic</a></li>
+  <li><a href="#sec-m3-c02-s03" id="toc-sec-m3-c02-s03" class="nav-link" data-scroll-target="#sec-m3-c02-s03"><span class="header-section-number">2.3</span> Gradient synchronization in distributed training</a></li>
+  <li><a href="#sec-m3-c02-s04" id="toc-sec-m3-c02-s04" class="nav-link" data-scroll-target="#sec-m3-c02-s04"><span class="header-section-number">2.4</span> Model-state sharding with ZeRO and FSDP</a></li>
+  <li><a href="#sec-m3-c02-s05" id="toc-sec-m3-c02-s05" class="nav-link" data-scroll-target="#sec-m3-c02-s05"><span class="header-section-number">2.5</span> Coordinating workers through rendezvous</a></li>
+  <li><a href="#sec-m3-c02-s06" id="toc-sec-m3-c02-s06" class="nav-link" data-scroll-target="#sec-m3-c02-s06"><span class="header-section-number">2.6</span> Workload scheduling on GPU clusters</a></li>
+  <li><a href="#sec-m3-c02-s07" id="toc-sec-m3-c02-s07" class="nav-link" data-scroll-target="#sec-m3-c02-s07"><span class="header-section-number">2.7</span> Recovering distributed jobs from checkpoints</a></li>
+  <li><a href="#sec-m3-c02-s08" id="toc-sec-m3-c02-s08" class="nav-link" data-scroll-target="#sec-m3-c02-s08"><span class="header-section-number">2.8</span> Measuring scaling efficiency and diagnosing stragglers</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-i.html">Part I: Reproducible training at cluster scale</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m3-c02.html"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Distributed training across devices and clusters</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m3-c02" class="quarto-section-identifier"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Distributed training across devices and clusters</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>How can one training job use many GPUs without turning communication, scheduling, or failure into the real bottleneck? Chapter 1 defined the versioned artifacts and software layers around a run. Single-GPU limits lead to network and process identities, then to recoverable distributed execution and measurement.</p>
+<p>The three panels move from the limits of an individual accelerator to coordinated workers, then to the recovery and efficiency measures that make a long run practical.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chapter map</strong></p>
+<p><strong>2.1–2.2 Memory Limits &amp; Interconnects:</strong> Analyze single-GPU memory bounds across weights, optimizer states, and activations, and evaluate PCIe, NVLink, and InfiniBand network hierarchies.</p>
+<p><strong>2.3–2.4 Gradient Synchronization &amp; State Sharding:</strong> Trace PyTorch DDP ring all-reduce communication, and compare tensor and pipeline parallelism with Zero Redundancy Optimizer (ZeRO) and Fully Sharded Data Parallel (FSDP) model-state sharding.</p>
+<p><strong>2.5–2.6 Worker Coordination &amp; Gang Scheduling:</strong> Manage process group rendezvous, world size, and ranks, and configure Kubernetes gang scheduling and topology-aware pod placement.</p>
+<p><strong>2.7–2.8 Fault Recovery &amp; Hardware Efficiency:</strong> Structure distributed checkpoint recovery and atomic resumption, and measure Model FLOPs Utilization (MFU) to diagnose cluster stragglers.</p>
+</div>
+<div id="fig-m3-c02-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled Chapter 2 map links device memory limits to distributed workers, communication, scheduling, checkpoints, and efficiency measurements.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c02-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c02-f01.png" class="img-fluid figure-img" alt="A labelled Chapter 2 map links device memory limits to distributed workers, communication, scheduling, checkpoints, and efficiency measurements.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.1: How distributed training fits model state to coordinated hardware. The three panels move from the limits of an individual accelerator to coordinated workers, then to the recovery and efficiency measures that make a long run practical.
+</figcaption>
+</figure>
+</div>
+<section id="sec-m3-c02-s01" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="sec-m3-c02-s01"><span class="header-section-number">2.1</span> Accounting for single-GPU memory use</h2>
+<p>A reproducible run can still be physically impossible on one device. The first question is whether model state, optimizer state, and activations fit, followed by whether the run finishes in an acceptable time. The memory objects reveal which parallelism strategies can satisfy the constraint.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Device.</strong></span> one accelerator visible to a training process, such as one NVIDIA GPU.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Server or node.</strong></span> one physical or virtual machine containing CPUs, host memory, storage interfaces, networking, and one or more devices.</p>
+<p><span id="eq-m3-c02-e01"><span class="math display">\[
+M_{\mathrm{train}} ≈ P\left(b_w + b_g + b_{\mathrm{master}} + b_{\mathrm{opt}}\right) + A
+\tag{2.1}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: memory for an 8-billion-parameter Adam run</strong></p>
+<p><strong>Weights:</strong> Eight billion BF16 weights at 2 bytes each require 16 GB.</p>
+<p><strong>Gradients:</strong> BF16 gradients add 16 GB.</p>
+<p><strong>Master weights:</strong> Eight billion FP32 master weights at 4 bytes each add 32 GB.</p>
+<p><strong>Adam state:</strong> Two FP32 moment buffers use 8 bytes per parameter and add 64 GB.</p>
+<p><strong>Persistent subtotal:</strong> Weights, gradients, master weights, and Adam state total 128 GB before activations, temporary buffers, and allocator reserve.</p>
+<p><strong>Activations:</strong> For illustration, 40 GB at a short micro-batch gives about 168 GB total, while 160 GB at a longer sequence or larger micro-batch gives about 288 GB. A profiler or shape-based activation estimate supplies the value for a real run.</p>
+<p><strong>Conclusion:</strong> An 8B model that is easy to load for inference can require multiple high-memory GPUs for ordinary Adam training.</p>
+</div>
+<div id="fig-m3-c02-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Distributed-training memory includes weights, gradients, master weights, optimizer state, and activations.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c02-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c02-f02.png" class="img-fluid figure-img" alt="Distributed-training memory includes weights, gradients, master weights, optimizer state, and activations.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.2: Distributed-training memory includes weights, gradients, master weights, optimizer state, and activations.
+</figcaption>
+</figure>
+</div>
+<p>The second limit is elapsed time. Data parallelism can reduce time by processing more samples or tokens per step, but only while extra computation exceeds the communication and synchronization cost. Model sharding addresses memory; data replication addresses throughput. Large jobs usually combine both.</p>
+</section>
+<section id="sec-m3-c02-s02" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="sec-m3-c02-s02"><span class="header-section-number">2.2</span> Matching communication paths to model traffic</h2>
+<p>Memory accounting tells us why multiple devices are necessary. The devices cannot cooperate until their physical links, communication library, framework API, and parallelism strategy are distinguished. The stack runs from physical links through communication software to the parallelism strategy.</p>
+<p>Distributed training uses four different kinds of technology:</p>
+<ul>
+<li><strong>Physical fabric:</strong> PCIe, NVLink/NVSwitch, InfiniBand, RoCE, or Ethernet moves bytes between devices or nodes.</li>
+<li><strong>Communication backend:</strong> NCCL implements GPU collectives and selects supported transport paths; Gloo or MPI cover other process and data patterns.</li>
+<li><strong>Framework API:</strong> <code>torch.distributed</code> creates process groups and exposes collectives to PyTorch code.</li>
+<li><strong>Parallelism strategy:</strong> DDP, Fully Sharded Data Parallel (FSDP), tensor parallelism, pipeline parallelism, context parallelism, or expert parallelism decides which state and computation are split.</li>
+</ul>
+<p>NVLink is not NCCL: NVLink is a high-bandwidth intra-server fabric, whereas NCCL is a software library that may use NVLink, InfiniBand, RoCE, or sockets. <code>torch.distributed</code> is not a physical network either; it is the PyTorch API that requests collective operations from a backend.</p>
+<div id="tbl-m3-c02-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c02-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;2.1: Fabric scope constrains the placement of communication-heavy parallelism.
+</figcaption>
+<div aria-describedby="tbl-m3-c02-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Connection type</th>
+<th>Typical scope</th>
+<th>Why placement matters</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>PCIe / NVLink / NVSwitch</td>
+<td>Within one server</td>
+<td>Tensor-parallel communication can occur every layer and needs very high bandwidth.</td>
+</tr>
+<tr class="even">
+<td>InfiniBand / RoCE</td>
+<td>Between servers</td>
+<td>Data, pipeline, or context groups exchange gradients, activations, or KV state across nodes.</td>
+</tr>
+<tr class="odd">
+<td>Ethernet sockets</td>
+<td>Control or fallback data path</td>
+<td>Functional for rendezvous and small transfers but often too slow for large synchronized tensors.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: placing one communication-heavy group</strong></p>
+<p><strong>Tensor payload:</strong> Four tensor-parallel ranks exchange layer outputs on nearly every transformer layer.</p>
+<p><strong>Fast local fabric:</strong> One server contains four GPUs connected through NVLink or NVSwitch, so the group remains inside that server.</p>
+<p><strong>Across servers:</strong> A larger data-parallel group crosses InfiniBand or RoCE only at gradient synchronization points.</p>
+<p><strong>Failure signal:</strong> If a tensor-parallel rank is placed across ordinary Ethernet, per-layer collective time rises and every downstream stage waits.</p>
+<p><strong>Conclusion:</strong> Communication frequency and payload size determine which parallel group benefits most from the fastest available link.</p>
+</div>
+</section>
+<section id="sec-m3-c02-s03" class="level2" data-number="2.3">
+<h2 data-number="2.3" class="anchored" data-anchor-id="sec-m3-c02-s03"><span class="header-section-number">2.3</span> Gradient synchronization in distributed training</h2>
+<p>The communication stack now has distinct layers. The simplest scaling baseline is a full model replica on each device, with one consistent update shared across replicas. Data sharding, local backpropagation, all-reduce, and optimizer stepping form the update sequence.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Distributed Data Parallel (DDP).</strong></span> a replicated-model strategy in which each process trains on a distinct batch shard and synchronizes gradients before applying the same optimizer update.</p>
+<p>A DDP process owns one model replica and usually one GPU. A <code>DistributedSampler</code> gives each rank a different sample subset. During backpropagation, DDP groups parameter gradients into buckets and launches asynchronous all-reduce operations as soon as a bucket is ready. Overlap hides some communication behind the remaining backward computation.</p>
+<p><span id="eq-m3-c02-e02"><span class="math display">\[
+g_{\mathrm{global}} = \frac{\sum_{r=1}^{N} g_r}{N}
+\tag{2.2}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: one gradient component across four ranks</strong></p>
+<p><strong>Local values:</strong> The same bucket component is 0.8, 1.2, 1.0, and 1.4 on ranks 0 through 3.</p>
+<p><strong>Reduction:</strong> All-reduce sums the four values to 4.4.</p>
+<p><strong>Average:</strong> Dividing by world size 4 produces a synchronized component value of 1.1.</p>
+<p><strong>Update state:</strong> Every replica receives 1.1 before applying the optimizer step, so parameter values remain aligned.</p>
+<p><strong>Conclusion:</strong> Distinct data shards may produce different local gradients; synchronization makes the optimizer input identical on every replica.</p>
+</div>
+<p>The equation does not require every implementation to perform a literal gather followed by division. Ring, tree, or hierarchical collective algorithms can produce the same result with different communication schedules.</p>
+<p><span id="eq-m3-c02-e03"><span class="math display">\[
+B_{\mathrm{ring}} ≈ \frac{2 \cdot \left(N-1\right)}{N} \cdot G
+\tag{2.3}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: ring all-reduce traffic for eight ranks</strong></p>
+<p><strong>Gradient bucket:</strong> The synchronized bucket is 1 GB.</p>
+<p><strong>Rank count:</strong> Eight ranks participate.</p>
+<p><strong>Traffic:</strong> 2 × (8 - 1) ÷ 8 × 1 GB = 1.75 GB per rank.</p>
+<p><strong>Interpretation:</strong> That transfer repeats for many buckets each step; effective fabric bandwidth and overlap determine the exposed delay.</p>
+<p><strong>Conclusion:</strong> A compute-light model can become communication-bound even when every GPU reports activity.</p>
+</div>
+<div id="fig-m3-c02-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Data parallelism replicates the model while each process consumes a different data shard.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c02-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c02-f03.png" class="img-fluid figure-img" alt="Data parallelism replicates the model while each process consumes a different data shard.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.3: Data parallelism replicates the model while each process consumes a different data shard.
+</figcaption>
+</figure>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> One DDP process: device binding, data partition, gradient synchronization, and optimizer update.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c02-c01-1"><a href="#lst-m3-c02-c01-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c01-2"><a href="#lst-m3-c02-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="lst-m3-c02-c01-3"><a href="#lst-m3-c02-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m3-c02-c01-4"><a href="#lst-m3-c02-c01-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.distributed <span class="im">as</span> dist</span>
+<span id="lst-m3-c02-c01-5"><a href="#lst-m3-c02-c01-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.nn.parallel <span class="im">import</span> DistributedDataParallel <span class="im">as</span> DDP</span>
+<span id="lst-m3-c02-c01-6"><a href="#lst-m3-c02-c01-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.utils.data <span class="im">import</span> DataLoader, DistributedSampler</span>
+<span id="lst-m3-c02-c01-7"><a href="#lst-m3-c02-c01-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c01-8"><a href="#lst-m3-c02-c01-8" aria-hidden="true" tabindex="-1"></a>dist.init_process_group(backend<span class="op">=</span><span class="st">"nccl"</span>)</span>
+<span id="lst-m3-c02-c01-9"><a href="#lst-m3-c02-c01-9" aria-hidden="true" tabindex="-1"></a>local_rank <span class="op">=</span> <span class="bu">int</span>(os.environ[<span class="st">"LOCAL_RANK"</span>])</span>
+<span id="lst-m3-c02-c01-10"><a href="#lst-m3-c02-c01-10" aria-hidden="true" tabindex="-1"></a>torch.cuda.set_device(local_rank)</span>
+<span id="lst-m3-c02-c01-11"><a href="#lst-m3-c02-c01-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c01-12"><a href="#lst-m3-c02-c01-12" aria-hidden="true" tabindex="-1"></a>model   <span class="op">=</span> DDP(build_model().cuda(local_rank), device_ids<span class="op">=</span>[local_rank])</span>
+<span id="lst-m3-c02-c01-13"><a href="#lst-m3-c02-c01-13" aria-hidden="true" tabindex="-1"></a>sampler <span class="op">=</span> DistributedSampler(dataset, shuffle<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m3-c02-c01-14"><a href="#lst-m3-c02-c01-14" aria-hidden="true" tabindex="-1"></a>loader  <span class="op">=</span> DataLoader(dataset, sampler<span class="op">=</span>sampler, batch_size<span class="op">=</span>micro_batch)</span>
+<span id="lst-m3-c02-c01-15"><a href="#lst-m3-c02-c01-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c01-16"><a href="#lst-m3-c02-c01-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(epochs):</span>
+<span id="lst-m3-c02-c01-17"><a href="#lst-m3-c02-c01-17" aria-hidden="true" tabindex="-1"></a>    sampler.set_epoch(epoch)</span>
+<span id="lst-m3-c02-c01-18"><a href="#lst-m3-c02-c01-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> batch <span class="kw">in</span> loader:</span>
+<span id="lst-m3-c02-c01-19"><a href="#lst-m3-c02-c01-19" aria-hidden="true" tabindex="-1"></a>        loss <span class="op">=</span> model(batch.cuda(local_rank))</span>
+<span id="lst-m3-c02-c01-20"><a href="#lst-m3-c02-c01-20" aria-hidden="true" tabindex="-1"></a>        loss.backward()</span>
+<span id="lst-m3-c02-c01-21"><a href="#lst-m3-c02-c01-21" aria-hidden="true" tabindex="-1"></a>        optimizer.step()</span>
+<span id="lst-m3-c02-c01-22"><a href="#lst-m3-c02-c01-22" aria-hidden="true" tabindex="-1"></a>        optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Code walkthrough</strong></p>
+<p>Process group: <code>init_process_group</code> joins the rank to the NCCL collective group created by the launcher.</p>
+<p>Device assignment: <code>LOCAL_RANK</code> binds this process and its model replica to one GPU on the node.</p>
+<p>Data partition: <code>DistributedSampler</code> gives the rank a non-overlapping slice; <code>set_epoch</code> changes the deterministic shuffle between epochs.</p>
+<p>Synchronization point: <code>loss.backward()</code> activates DDP bucket hooks, and <code>optimizer.step()</code> consumes the reduced gradients after the required collectives finish.</p>
+<p>Result: Every rank computes on different examples but applies the same synchronized update.</p>
+<p>Limits: The compact loop omits mixed precision, gradient accumulation, checkpointing, validation, failure handling, and a sampler configuration for uneven dataset sizes.</p>
+</div>
+</section>
+<section id="sec-m3-c02-s04" class="level2" data-number="2.4">
+<h2 data-number="2.4" class="anchored" data-anchor-id="sec-m3-c02-s04"><span class="header-section-number">2.4</span> Model-state sharding with ZeRO and FSDP</h2>
+<p>DDP increases throughput when one full training replica fits on each device. When persistent state or activations exceed device memory, replication is the wrong baseline. The constrained memory object determines what is sharded, and the resulting communication is placed on the available topology.</p>
+<p>The strategy options address progressively harder memory and sequence constraints:</p>
+<ul>
+<li><strong>FSDP or Zero Redundancy Optimizer stage 3 (ZeRO-3):</strong> shards parameters, gradients, and optimizer state across data-parallel ranks, gathering parameter shards when a layer executes.</li>
+<li><strong>Tensor parallelism:</strong> splits matrix operations across devices and communicates partial results within each layer.</li>
+<li><strong>Pipeline parallelism:</strong> places consecutive layer groups on stages and streams micro-batches through them.</li>
+<li><strong>Sequence or context parallelism:</strong> splits token-dependent state and computation for long sequences.</li>
+<li><strong>Expert parallelism:</strong> places Mixture-of-Experts sub-networks on different devices and routes tokens to their selected experts.</li>
+</ul>
+<p>FSDP reduces replicated state but increases parameter communication. Tensor parallelism reduces per-device matrix state but adds frequent collective operations. Pipeline parallelism reduces layer residency but creates bubbles when stages wait. Context and expert parallelism add workload-specific routing and balance problems. Large runs combine strategies only after measuring the simpler baseline.</p>
+<div id="tbl-m3-c02-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c02-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;2.2: Parallelism selection begins with the resource that does not fit or scale.
+</figcaption>
+<div aria-describedby="tbl-m3-c02-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Condition</th>
+<th>Initial strategy</th>
+<th>Primary new cost</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Model fits; training is too slow</td>
+<td>DDP</td>
+<td>Gradient all-reduce</td>
+</tr>
+<tr class="even">
+<td>Model barely misses one device</td>
+<td>FSDP / ZeRO-3</td>
+<td>Parameter gather and reduce-scatter</td>
+</tr>
+<tr class="odd">
+<td>Individual layers or matrices are too large</td>
+<td>Tensor parallelism</td>
+<td>Per-layer activation collectives</td>
+</tr>
+<tr class="even">
+<td>Layer stack is too large</td>
+<td>Pipeline parallelism</td>
+<td>Pipeline bubbles and activation transfer</td>
+</tr>
+<tr class="odd">
+<td>Context dominates memory</td>
+<td>Context/sequence parallelism</td>
+<td>Attention communication and load balance</td>
+</tr>
+<tr class="even">
+<td>Sparse experts dominate model size</td>
+<td>Expert parallelism</td>
+<td>All-to-all token routing</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: how FSDP changes per-rank persistent state</strong></p>
+<p><strong>Replicated baseline:</strong> Four DDP ranks each hold the complete 128 GB persistent-state subtotal from the 8B Adam example.</p>
+<p><strong>Ideal four-way shard:</strong> Sharding parameters, gradients, master weights, and optimizer buffers divides that subtotal to about 32 GB per rank before temporary gathers and activations.</p>
+<p><strong>Execution trace:</strong> Before one layer executes, each rank gathers the required parameter shards; after backward computation, reduce-scatter leaves each rank with its gradient shard.</p>
+<p><strong>New constraint:</strong> Temporary all-gathers, activation memory, allocator reserve, and communication overlap still determine whether the run fits and performs well.</p>
+<p><strong>Conclusion:</strong> Sharding changes state residency rather than making memory free; the saved persistent state is exchanged for temporary buffers and communication.</p>
+</div>
+<div id="fig-m3-c02-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Hybrid parallelism places communication-heavy strategies according to network topology.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c02-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c02-f04.png" class="img-fluid figure-img" alt="Hybrid parallelism places communication-heavy strategies according to network topology.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.4: Hybrid parallelism places communication-heavy strategies according to network topology.
+</figcaption>
+</figure>
+</div>
+</section>
+<section id="sec-m3-c02-s05" class="level2" data-number="2.5">
+<h2 data-number="2.5" class="anchored" data-anchor-id="sec-m3-c02-s05"><span class="header-section-number">2.5</span> Coordinating workers through rendezvous</h2>
+<p>A selected strategy describes state placement. Processes still need unique identities and a common group before they can exchange any tensor. Ranks and rendezvous form the process group before the communication backend carries collective traffic.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Rank.</strong></span> the unique integer identity of one process inside a distributed process group.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>World size.</strong></span> the total number of participating processes in that group.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Local rank.</strong></span> the process index within one node, commonly used to select the local GPU.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Rendezvous.</strong></span> the control-plane handshake through which processes discover one another, agree on membership, and obtain group metadata.</p>
+<p><code>torchrun</code> starts processes and supplies <code>LOCAL_RANK</code>, <code>RANK</code>, and <code>WORLD_SIZE</code>. A store reachable through <code>MASTER_ADDR</code> and <code>MASTER_PORT</code> coordinates rendezvous. After <code>init_process_group</code> completes, NCCL establishes the data paths used for collectives; the rendezvous store is not the channel that carries every gradient.</p>
+<div id="fig-m3-c02-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Global rank, node rank, and local rank identify every distributed process.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c02-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c02-f05.png" class="img-fluid figure-img" alt="Global rank, node rank, and local rank identify every distributed process.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.5: Global rank, node rank, and local rank identify every distributed process.
+</figcaption>
+</figure>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Two-node <code>torchrun</code> launch definition for sixteen training processes.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c02-c02-1"><a href="#lst-m3-c02-c02-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c02-2"><a href="#lst-m3-c02-c02-2" aria-hidden="true" tabindex="-1"></a>torchrun <span class="op">\</span></span>
+<span id="lst-m3-c02-c02-3"><a href="#lst-m3-c02-c02-3" aria-hidden="true" tabindex="-1"></a>  <span class="op">--</span>nnodes<span class="op">=</span><span class="dv">2</span> <span class="op">\</span></span>
+<span id="lst-m3-c02-c02-4"><a href="#lst-m3-c02-c02-4" aria-hidden="true" tabindex="-1"></a>  <span class="op">--</span>nproc<span class="op">-</span>per<span class="op">-</span>node<span class="op">=</span><span class="dv">8</span> <span class="op">\</span></span>
+<span id="lst-m3-c02-c02-5"><a href="#lst-m3-c02-c02-5" aria-hidden="true" tabindex="-1"></a>  <span class="op">--</span>node<span class="op">-</span>rank<span class="op">=</span><span class="st">"$</span><span class="sc">{NODE_RANK}</span><span class="st">"</span> <span class="op">\</span></span>
+<span id="lst-m3-c02-c02-6"><a href="#lst-m3-c02-c02-6" aria-hidden="true" tabindex="-1"></a>  <span class="op">--</span>master<span class="op">-</span>addr<span class="op">=</span><span class="st">"$</span><span class="sc">{MASTER_ADDR}</span><span class="st">"</span> <span class="op">\</span></span>
+<span id="lst-m3-c02-c02-7"><a href="#lst-m3-c02-c02-7" aria-hidden="true" tabindex="-1"></a>  <span class="op">--</span>master<span class="op">-</span>port<span class="op">=</span><span class="dv">29500</span> <span class="op">\</span></span>
+<span id="lst-m3-c02-c02-8"><a href="#lst-m3-c02-c02-8" aria-hidden="true" tabindex="-1"></a>  train.py</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Code walkthrough</strong></p>
+<p>Cluster shape: <code>--nnodes=2</code> and <code>--nproc-per-node=8</code> declare sixteen expected processes.</p>
+<p>Node identity: <code>--node-rank</code> gives each launcher a unique identity within the rendezvous.</p>
+<p>Rendezvous endpoint: The master address and port identify the shared control endpoint used to form the process group.</p>
+<p>Injected state: <code>torchrun</code> supplies global rank, local rank, and world size to each <code>train.py</code> process.</p>
+<p>Result: The launcher describes membership; the training program still initializes the process group and binds each local rank to a GPU.</p>
+<p>Limits: Both nodes share rendezvous settings, reachable networking, matching code and environment, and a scheduler allocation that starts the full group.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Rendezvous diagnosis</strong></p>
+<p>A wrong rank count, unreachable master address, blocked port, or partially scheduled job often looks like a hang because processes wait for missing peers.</p>
+<p>Process identities and control-plane connectivity are the first checks because either can create a hang before NCCL bandwidth becomes relevant.</p>
+</div>
+</section>
+<section id="sec-m3-c02-s06" class="level2" data-number="2.6">
+<h2 data-number="2.6" class="anchored" data-anchor-id="sec-m3-c02-s06"><span class="header-section-number">2.6</span> Workload scheduling on GPU clusters</h2>
+<p>Rendezvous requires every expected rank to appear. A cluster scheduler that starts only part of a multi-node job can therefore consume GPUs while making no progress. A complete scheduling setup exposes devices, admits the full worker group together, and isolates resources.</p>
+<p>Kubernetes sees a GPU only after the host driver, container runtime integration, and NVIDIA device plugin or GPU Operator expose <code>nvidia.com/gpu</code>. A pod requests an integer device count; labels and node affinity select the GPU family, while taints keep ordinary CPU workloads from occupying expensive GPU nodes.</p>
+<div id="fig-m3-c02-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Kubernetes exposes GPUs as schedulable resources and uses labels, taints, and tolerations to place workloads.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c02-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c02-f06.png" class="img-fluid figure-img" alt="Kubernetes exposes GPUs as schedulable resources and uses labels, taints, and tolerations to place workloads.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.6: Kubernetes exposes GPUs as schedulable resources and uses labels, taints, and tolerations to place workloads.
+</figcaption>
+</figure>
+</div>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Kubernetes GPU resource declaration for two distributed worker pods.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c02-c03-1"><a href="#lst-m3-c02-c03-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c03-2"><a href="#lst-m3-c02-c03-2" aria-hidden="true" tabindex="-1"></a>apiVersion: batch<span class="op">/</span>v1</span>
+<span id="lst-m3-c02-c03-3"><a href="#lst-m3-c02-c03-3" aria-hidden="true" tabindex="-1"></a>kind: Job</span>
+<span id="lst-m3-c02-c03-4"><a href="#lst-m3-c02-c03-4" aria-hidden="true" tabindex="-1"></a>metadata:</span>
+<span id="lst-m3-c02-c03-5"><a href="#lst-m3-c02-c03-5" aria-hidden="true" tabindex="-1"></a>  name: ddp<span class="op">-</span>worker</span>
+<span id="lst-m3-c02-c03-6"><a href="#lst-m3-c02-c03-6" aria-hidden="true" tabindex="-1"></a>spec:</span>
+<span id="lst-m3-c02-c03-7"><a href="#lst-m3-c02-c03-7" aria-hidden="true" tabindex="-1"></a>  completions: <span class="dv">2</span></span>
+<span id="lst-m3-c02-c03-8"><a href="#lst-m3-c02-c03-8" aria-hidden="true" tabindex="-1"></a>  parallelism: <span class="dv">2</span></span>
+<span id="lst-m3-c02-c03-9"><a href="#lst-m3-c02-c03-9" aria-hidden="true" tabindex="-1"></a>  template:</span>
+<span id="lst-m3-c02-c03-10"><a href="#lst-m3-c02-c03-10" aria-hidden="true" tabindex="-1"></a>    spec:</span>
+<span id="lst-m3-c02-c03-11"><a href="#lst-m3-c02-c03-11" aria-hidden="true" tabindex="-1"></a>      restartPolicy: Never</span>
+<span id="lst-m3-c02-c03-12"><a href="#lst-m3-c02-c03-12" aria-hidden="true" tabindex="-1"></a>      tolerations:</span>
+<span id="lst-m3-c02-c03-13"><a href="#lst-m3-c02-c03-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span> key: nvidia.com<span class="op">/</span>gpu</span>
+<span id="lst-m3-c02-c03-14"><a href="#lst-m3-c02-c03-14" aria-hidden="true" tabindex="-1"></a>          operator: Exists</span>
+<span id="lst-m3-c02-c03-15"><a href="#lst-m3-c02-c03-15" aria-hidden="true" tabindex="-1"></a>          effect: NoSchedule</span>
+<span id="lst-m3-c02-c03-16"><a href="#lst-m3-c02-c03-16" aria-hidden="true" tabindex="-1"></a>      affinity:</span>
+<span id="lst-m3-c02-c03-17"><a href="#lst-m3-c02-c03-17" aria-hidden="true" tabindex="-1"></a>        nodeAffinity:</span>
+<span id="lst-m3-c02-c03-18"><a href="#lst-m3-c02-c03-18" aria-hidden="true" tabindex="-1"></a>          requiredDuringSchedulingIgnoredDuringExecution:</span>
+<span id="lst-m3-c02-c03-19"><a href="#lst-m3-c02-c03-19" aria-hidden="true" tabindex="-1"></a>            nodeSelectorTerms:</span>
+<span id="lst-m3-c02-c03-20"><a href="#lst-m3-c02-c03-20" aria-hidden="true" tabindex="-1"></a>              <span class="op">-</span> matchExpressions:</span>
+<span id="lst-m3-c02-c03-21"><a href="#lst-m3-c02-c03-21" aria-hidden="true" tabindex="-1"></a>                  <span class="op">-</span> key: accelerator.fabric</span>
+<span id="lst-m3-c02-c03-22"><a href="#lst-m3-c02-c03-22" aria-hidden="true" tabindex="-1"></a>                    operator: In</span>
+<span id="lst-m3-c02-c03-23"><a href="#lst-m3-c02-c03-23" aria-hidden="true" tabindex="-1"></a>                    values: [nvlink]</span>
+<span id="lst-m3-c02-c03-24"><a href="#lst-m3-c02-c03-24" aria-hidden="true" tabindex="-1"></a>      containers:</span>
+<span id="lst-m3-c02-c03-25"><a href="#lst-m3-c02-c03-25" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span> name: trainer</span>
+<span id="lst-m3-c02-c03-26"><a href="#lst-m3-c02-c03-26" aria-hidden="true" tabindex="-1"></a>          image: registry.example<span class="op">/</span>trainer<span class="op">@</span>sha256:...</span>
+<span id="lst-m3-c02-c03-27"><a href="#lst-m3-c02-c03-27" aria-hidden="true" tabindex="-1"></a>          resources:</span>
+<span id="lst-m3-c02-c03-28"><a href="#lst-m3-c02-c03-28" aria-hidden="true" tabindex="-1"></a>            requests:</span>
+<span id="lst-m3-c02-c03-29"><a href="#lst-m3-c02-c03-29" aria-hidden="true" tabindex="-1"></a>              nvidia.com<span class="op">/</span>gpu: <span class="dv">8</span></span>
+<span id="lst-m3-c02-c03-30"><a href="#lst-m3-c02-c03-30" aria-hidden="true" tabindex="-1"></a>            limits:</span>
+<span id="lst-m3-c02-c03-31"><a href="#lst-m3-c02-c03-31" aria-hidden="true" tabindex="-1"></a>              nvidia.com<span class="op">/</span>gpu: <span class="dv">8</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Code walkthrough</strong></p>
+<p>Replica state: <code>completions</code> and <code>parallelism</code> request two worker pods, but the base Job object does not give them distributed rank identities.</p>
+<p>GPU admission: Matching request and limit values reserve eight whole GPUs for each worker.</p>
+<p>Placement permission: The toleration allows the worker onto nodes protected by the GPU taint; node labels or affinity would further constrain GPU type.</p>
+<p>Artifact identity: The image digest makes both workers execute the same immutable training environment.</p>
+<p>Result: The manifest declares resources for sixteen GPUs, while a gang scheduler and launcher coordinate all-or-nothing admission and rendezvous.</p>
+<p>Limits: A complete deployment also needs worker indexing, service discovery, volumes, security context, retry policy, and a distributed-job controller or scheduler integration.</p>
+</div>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Gang scheduling.</strong></span> an all-or-nothing allocation policy that starts a distributed job only when its complete resource set is available.</p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> A gang-admission object declares that both workers and all sixteen GPUs form one scheduling unit.</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c04"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c02-c04-1"><a href="#lst-m3-c02-c04-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c04-2"><a href="#lst-m3-c02-c04-2" aria-hidden="true" tabindex="-1"></a>apiVersion: scheduling.volcano.sh<span class="op">/</span>v1beta1</span>
+<span id="lst-m3-c02-c04-3"><a href="#lst-m3-c02-c04-3" aria-hidden="true" tabindex="-1"></a>kind: PodGroup</span>
+<span id="lst-m3-c02-c04-4"><a href="#lst-m3-c02-c04-4" aria-hidden="true" tabindex="-1"></a>metadata:</span>
+<span id="lst-m3-c02-c04-5"><a href="#lst-m3-c02-c04-5" aria-hidden="true" tabindex="-1"></a>  name: ddp<span class="op">-</span>two<span class="op">-</span>node</span>
+<span id="lst-m3-c02-c04-6"><a href="#lst-m3-c02-c04-6" aria-hidden="true" tabindex="-1"></a>spec:</span>
+<span id="lst-m3-c02-c04-7"><a href="#lst-m3-c02-c04-7" aria-hidden="true" tabindex="-1"></a>  minMember: <span class="dv">2</span></span>
+<span id="lst-m3-c02-c04-8"><a href="#lst-m3-c02-c04-8" aria-hidden="true" tabindex="-1"></a>  minResources:</span>
+<span id="lst-m3-c02-c04-9"><a href="#lst-m3-c02-c04-9" aria-hidden="true" tabindex="-1"></a>    nvidia.com<span class="op">/</span>gpu: <span class="st">"16"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="fig-m3-c02-f07" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Gang scheduling prevents a distributed job from holding only part of its requested GPU set.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c02-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c02-f07.png" class="img-fluid figure-img" alt="Gang scheduling prevents a distributed job from holding only part of its requested GPU set.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.7: Gang scheduling prevents a distributed job from holding only part of its requested GPU set.
+</figcaption>
+</figure>
+</div>
+<p>Volcano provides HPC-style gang scheduling, while Kueue adds queue and quota management around the default Kubernetes scheduler. SkyPilot abstracts resource provisioning across clouds and clusters. Slurm provides mature queueing and accounting; Soperator runs the Slurm control plane on Kubernetes so Slurm manages jobs while Kubernetes manages pods and nodes.</p>
+</section>
+<section id="sec-m3-c02-s07" class="level2" data-number="2.7">
+<h2 data-number="2.7" class="anchored" data-anchor-id="sec-m3-c02-s07"><span class="header-section-number">2.7</span> Recovering distributed jobs from checkpoints</h2>
+<p>Gang scheduling gets all ranks started together. At cluster scale, hardware, network, process, and preemptible-capacity failures make a long uninterrupted run unlikely. The acceptable progress loss and recovery time determine checkpoint frequency, layout, and persistence.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Recovery Point Objective (RPO).</strong></span> the maximum amount of completed training progress the system may lose after a failure.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Recovery Time Objective (RTO).</strong></span> the maximum acceptable time between failure and resumed useful training.</p>
+<p>A resumable checkpoint includes model parameters, optimizer state, scheduler state, step or epoch, random-number-generator state, and data-loader position when exact sample order matters. DDP may let rank 0 save the unwrapped model, while sharded strategies require a compatible distributed-checkpoint format.</p>
+<div id="fig-m3-c02-f08" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Recovery objectives determine checkpoint frequency, layout, and asynchronous persistence.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c02-f08-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c02-f08.png" class="img-fluid figure-img" alt="Recovery objectives determine checkpoint frequency, layout, and asynchronous persistence.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f08-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.8: Recovery objectives determine checkpoint frequency, layout, and asynchronous persistence.
+</figcaption>
+</figure>
+</div>
+<p>A fast path writes shards to host memory or local NVMe, returns GPU control quickly, and copies asynchronously to shared or object storage. Local media minimizes the pause but is not durable; the node-loss case is covered only after the background copy completes.</p>
+<p>A checkpoint becomes restorable through an ordered publication path:</p>
+<ol type="1">
+<li><strong>Write a temporary generation.</strong> Every rank writes its shard under a generation-specific temporary prefix; the live restore pointer remains unchanged.</li>
+<li><strong>Verify the generation.</strong> The coordinator checks the expected shard count, file hashes, training step, model configuration, and writer completion from every rank.</li>
+<li><strong>Publish the commit record.</strong> A small manifest names the verified shards and compatibility metadata, then an atomic pointer or object-store marker makes that generation discoverable.</li>
+<li><strong>Validate restore.</strong> A test reader reconstructs model, optimizer, scheduler, random state, and data position before the generation enters the recovery set.</li>
+<li><strong>Ignore incomplete state.</strong> A missing shard or absent commit record leaves the previous committed generation as the restore target.</li>
+</ol>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: checkpoint interval from expected lost work</strong></p>
+<p><strong>Run cost:</strong> A 64-GPU job costs $180 per GPU-hour, or $11,520 per wall-clock hour.</p>
+<p><strong>Allowed average lost work:</strong> The team accepts at most 15 minutes on average.</p>
+<p><strong>Periodic-failure assumption:</strong> A failure is equally likely within one checkpoint interval, so average lost work is approximately half the interval.</p>
+<p><strong>Interval:</strong> To keep the average at 15 minutes, checkpoint every 30 minutes.</p>
+<p><strong>I/O check:</strong> If a synchronous checkpoint pauses GPUs for 4 minutes, 13.3% of time is lost to checkpointing; asynchronous persistence is required.</p>
+<p><strong>Conclusion:</strong> Checkpoint frequency is an economic and recovery decision constrained by storage throughput.</p>
+</div>
+</section>
+<section id="sec-m3-c02-s08" class="level2" data-number="2.8">
+<h2 data-number="2.8" class="anchored" data-anchor-id="sec-m3-c02-s08"><span class="header-section-number">2.8</span> Measuring scaling efficiency and diagnosing stragglers</h2>
+<p>A recoverable job can survive expected failure. It may still waste accelerators through data starvation, synchronization, pipeline bubbles, or unstable numerics. Useful-work measurements and training, GPU, and communication evidence localize the delay.</p>
+<p><span id="eq-m3-c02-e04"><span class="math display">\[
+\mathrm{MFU} = \frac{F_{\mathrm{observed}}}{F_{\mathrm{peak}}}
+\tag{2.4}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: MFU for an eight-GPU training run</strong></p>
+<p><strong>Observed work per token:</strong> For an illustrative model and training objective, the arithmetic estimate is 120 GFLOPs per processed token.</p>
+<p><strong>Measured throughput:</strong> The eight-GPU run processes 20,000 tokens each second.</p>
+<p><strong>Observed rate:</strong> 20,000 tokens/s × 120 GFLOPs/token = 2.4 PFLOPs/s of model arithmetic.</p>
+<p><strong>Relevant peak:</strong> Eight devices provide a combined 8.0 PFLOPs/s peak at the precision used by the run.</p>
+<p><strong>Utilization:</strong> Dividing 2.4 by 8.0 gives 0.30, or 30% MFU.</p>
+<p><strong>Diagnosis:</strong> The remaining 70% may come from input wait, memory traffic, kernels, collectives, imbalance, or bubbles; it is not automatically communication loss.</p>
+<p><strong>Conclusion:</strong> MFU quantifies the gap, while correlated timelines and counters identify where the lost time originates.</p>
+</div>
+<p>GPU utilization alone can be misleading because a device may report activity while waiting on memory or communication. Throughput, MFU, power draw, memory-bandwidth utilization, NVLink or InfiniBand traffic, step-time variance, and collective traces provide the comparison. A straggler slows every synchronized rank.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Eight-rank timing trace</strong></p>
+<p>Ranks 0–6 finish input loading in 45 ms, while rank 7 takes 130 ms; all ranks then enter the same 70 ms all-reduce.</p>
+<p>The collective appears long on every timeline because seven ranks wait for rank 7 before useful transfer can complete. The unequal pre-collective gap identifies input or host work on rank 7 as the first cause to investigate.</p>
+</div>
+<div id="fig-m3-c02-f09" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Training efficiency combines throughput, utilization, recovery, and cost rather than one GPU-utilization number.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m3-c02-f09-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m3-c02-f09.png" class="img-fluid figure-img" alt="Training efficiency combines throughput, utilization, recovery, and cost rather than one GPU-utilization number.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f09-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.9: Training efficiency combines throughput, utilization, recovery, and cost rather than one GPU-utilization number.
+</figcaption>
+</figure>
+</div>
+<p>The symptom table connects each visible training failure to the evidence and owner that can explain it.</p>
+<div id="tbl-m3-c02-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c02-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;2.3: Distributed-training symptoms become useful when tied to specific evidence and owners.
+</figcaption>
+<div aria-describedby="tbl-m3-c02-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symptom</th>
+<th>Evidence to inspect</th>
+<th>Likely component</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>All ranks hang before first step</td>
+<td>Rank/world-size logs, rendezvous port, scheduler state</td>
+<td>Launcher or scheduler</td>
+</tr>
+<tr class="even">
+<td>Throughput stops scaling</td>
+<td>NCCL traces, fabric counters, compute/communication overlap</td>
+<td>Communication topology or parallelism</td>
+</tr>
+<tr class="odd">
+<td>GPU utilization high; power low</td>
+<td>Memory bandwidth, data-loader time, collective wait</td>
+<td>Input path or synchronization</td>
+</tr>
+<tr class="even">
+<td>Periodic idle stages</td>
+<td>Per-stage timeline and micro-batch count</td>
+<td>Pipeline-parallel schedule</td>
+</tr>
+<tr class="odd">
+<td>Loss spikes or NaNs</td>
+<td>Gradient norms, precision state, XID/ECC errors</td>
+<td>Numerics or hardware</td>
+</tr>
+<tr class="even">
+<td>Resume fails</td>
+<td>Checkpoint manifest, shard count, code/config identity</td>
+<td>Checkpoint writer and artifact lineage</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chapter 2 summary</strong></p>
+<p>Core mechanisms: PyTorch DDP ring all-reduce gradient synchronization; ZeRO-1/2/3 and FSDP model-state sharding; c10d rendezvous process groups; Kubernetes gang scheduling.</p>
+<p>Governing tradeoffs: All-reduce communication overhead vs.&nbsp;memory savings; sharding granularities vs.&nbsp;all-gather bandwidth saturation; MFU vs.&nbsp;cluster scale.</p>
+<p>Failure modes &amp; defenses: Atomic two-phase checkpoint validation; gang-scheduled pod coscheduling preventing partial-cluster deadlocks.</p>
+</div>
+<p>The healthy path is now complete: versioned inputs start as one allocation, each rank receives unique data, collectives produce consistent updates, checkpoints cross failure domains, and measurements show useful work. The next chapter changes the workload from synchronized training steps to independent user requests with persistent KV-cache state.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../chapters/ch-m3-c01.html" class="pagination-link" aria-label="Making ML runs reproducible">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Making ML runs reproducible</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../parts/part-ii.html" class="pagination-link" aria-label="Part II: Reliable model services with measurement and retrieval">
+        <span class="nav-page-text">Part II: Reliable model services with measurement and retrieval</span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
