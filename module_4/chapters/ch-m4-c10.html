@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>10&nbsp; Serving Engines – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m4-c11.html" rel="next">
+<link href="../chapters/ch-m4-c09.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: Training and Inference Workloads</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c10.html"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Serving Engines</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Advanced LLM Performance Engineering</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Advanced LLM Performance Engineering</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m4-index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction and Learning Path</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-i.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: Fundamentals</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">LLM Workloads and Performance Limits</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">GPU Hardware and Memory</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Software to CUDA</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Triton and Custom Kernels</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Performance Models and Profiling</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Compilation and Runtime</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-ii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: Training and Inference Workloads</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Training and Precision</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Inference Workloads</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Decode and KV Cache</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c10.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Serving Engines</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Performance Experiments</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-iii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: Communication and Distributed Systems</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">GPU Communication</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Distributed Training and Serving</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-a.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Reference Material</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-b.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Lists of Figures and Tables</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m4-c10-s01" id="toc-sec-m4-c10-s01" class="nav-link active" data-scroll-target="#sec-m4-c10-s01"><span class="header-section-number">10.1</span> From model libraries to serving engines</a></li>
+  <li><a href="#sec-m4-c10-s02" id="toc-sec-m4-c10-s02" class="nav-link" data-scroll-target="#sec-m4-c10-s02"><span class="header-section-number">10.2</span> Static batching and continuous batching</a>
+  <ul class="collapse">
+  <li><a href="#sec-m4-c10-s03" id="toc-sec-m4-c10-s03" class="nav-link" data-scroll-target="#sec-m4-c10-s03"><span class="header-section-number">10.2.1</span> Batching policies</a></li>
+  <li><a href="#sec-m4-c10-s04" id="toc-sec-m4-c10-s04" class="nav-link" data-scroll-target="#sec-m4-c10-s04"><span class="header-section-number">10.2.2</span> CPU-side scheduler architecture and vLLM-style optimizations</a></li>
+  </ul></li>
+  <li><a href="#sec-m4-c10-s05" id="toc-sec-m4-c10-s05" class="nav-link" data-scroll-target="#sec-m4-c10-s05"><span class="header-section-number">10.3</span> Chunked prefill</a></li>
+  <li><a href="#sec-m4-c10-s06" id="toc-sec-m4-c10-s06" class="nav-link" data-scroll-target="#sec-m4-c10-s06"><span class="header-section-number">10.4</span> Separate prefill and decode workers</a></li>
+  <li><a href="#sec-m4-c10-s07" id="toc-sec-m4-c10-s07" class="nav-link" data-scroll-target="#sec-m4-c10-s07"><span class="header-section-number">10.5</span> Prefix caching and radix-style reuse</a>
+  <ul class="collapse">
+  <li><a href="#sec-m4-c10-s08" id="toc-sec-m4-c10-s08" class="nav-link" data-scroll-target="#sec-m4-c10-s08"><span class="header-section-number">10.5.1</span> Prefix cache internals and operating policy</a></li>
+  <li><a href="#sec-m4-c10-s09" id="toc-sec-m4-c10-s09" class="nav-link" data-scroll-target="#sec-m4-c10-s09"><span class="header-section-number">10.5.2</span> RadixAttention and SGLang-style reuse</a></li>
+  <li><a href="#sec-m4-c10-s10" id="toc-sec-m4-c10-s10" class="nav-link" data-scroll-target="#sec-m4-c10-s10"><span class="header-section-number">10.5.3</span> LMCache and external KV layers</a></li>
+  </ul></li>
+  <li><a href="#sec-m4-c10-s11" id="toc-sec-m4-c10-s11" class="nav-link" data-scroll-target="#sec-m4-c10-s11"><span class="header-section-number">10.6</span> Speculative decoding</a>
+  <ul class="collapse">
+  <li><a href="#sec-m4-c10-s12" id="toc-sec-m4-c10-s12" class="nav-link" data-scroll-target="#sec-m4-c10-s12"><span class="header-section-number">10.6.1</span> Draft and verify mechanism</a></li>
+  <li><a href="#sec-m4-c10-s13" id="toc-sec-m4-c10-s13" class="nav-link" data-scroll-target="#sec-m4-c10-s13"><span class="header-section-number">10.6.2</span> Implementation choices and measurement</a></li>
+  </ul></li>
+  <li><a href="#sec-m4-c10-s14" id="toc-sec-m4-c10-s14" class="nav-link" data-scroll-target="#sec-m4-c10-s14"><span class="header-section-number">10.7</span> Constrained decoding</a></li>
+  <li><a href="#sec-m4-c10-s15" id="toc-sec-m4-c10-s15" class="nav-link" data-scroll-target="#sec-m4-c10-s15"><span class="header-section-number">10.8</span> Serving metrics and production traces</a></li>
+  <li><a href="#sec-m4-c10-s16" id="toc-sec-m4-c10-s16" class="nav-link" data-scroll-target="#sec-m4-c10-s16"><span class="header-section-number">10.9</span> Serving stack selection</a>
+  <ul class="collapse">
+  <li><a href="#sec-m4-c10-s17" id="toc-sec-m4-c10-s17" class="nav-link" data-scroll-target="#sec-m4-c10-s17"><span class="header-section-number">10.9.1</span> vLLM and SGLang</a></li>
+  <li><a href="#sec-m4-c10-s18" id="toc-sec-m4-c10-s18" class="nav-link" data-scroll-target="#sec-m4-c10-s18"><span class="header-section-number">10.9.2</span> TensorRT-LLM and Triton Inference Server/NIM</a></li>
+  <li><a href="#sec-m4-c10-s19" id="toc-sec-m4-c10-s19" class="nav-link" data-scroll-target="#sec-m4-c10-s19"><span class="header-section-number">10.9.3</span> Local and CPU-oriented serving</a></li>
+  </ul></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: Training and Inference Workloads</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c10.html"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Serving Engines</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m4-c10" class="quarto-section-identifier"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Serving Engines</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Teach continuous batching, chunked prefill, prefix caching, speculative decoding, and serving observability.</p>
+<p>Chapter 9 described one worker’s decode loop and the KV-cache state it reads and extends. Production service adds many concurrent requests, so a serving engine must decide which requests enter memory, which ones advance together, and where their cache blocks remain. <code>Inference engine</code> is a broader deployment term that can include model runtimes, compilers, and hardware-specific executors; here, <code>serving engine</code> means the request scheduler and memory manager around model execution.</p>
+<p>Engine optimizations operate above individual kernels. They decide which requests run together, which cached prefixes can be reused, how long prompts are interleaved with decode work, and whether a smaller draft model can reduce the number of expensive target-model steps.</p>
+<p>The serving-engine layer is where throughput and latency trade-offs become explicit. More aggressive batching can improve utilization but increase waiting. Prefix caching can reduce work but needs exact token-prefix matching and cache validity. Speculative decoding can reduce serial target steps but depends on draft quality and acceptance rate.</p>
+<p>A production serving engine coordinates many active decode loops. Continuous batching decides which requests advance together, the KV-cache manager decides where their blocks live, and speculative decoding may allow a request to advance by more than one verified token. These controls share the same capacity, so they must be evaluated together rather than as independent switches.</p>
+<p>Production serving adds admission control, token-level scheduling, cache management, prefix reuse, and optional speculative verification around the model kernels.</p>
+<div id="fig-m4-c10-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A serving timeline interleaves chunked prefill and decode across requests, with separate panels for admission, prefix reuse, speculative verification, and service-level feedback.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c10-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c10-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="A serving timeline interleaves chunked prefill and decode across requests, with separate panels for admission, prefix reuse, speculative verification, and service-level feedback.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c10-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10.1: A serving engine shares GPU time across requests while enforcing memory and latency limits.
+</figcaption>
+</figure>
+</div>
+<p>The timeline distinguishes wider prompt-prefill chunks from repeated decode steps. Prefix caching removes repeated prompt work only for execution-compatible prefixes. Speculative decoding advances by the verified accepted prefix, while rejected proposals still consume draft and verification work. Scheduler settings must be evaluated against latency objectives, throughput, and fairness together.</p>
+<section id="sec-m4-c10-s01" class="level2" data-number="10.1">
+<h2 data-number="10.1" class="anchored" data-anchor-id="sec-m4-c10-s01"><span class="header-section-number">10.1</span> From model libraries to serving engines</h2>
+<p>A model library constructs the tokenizer and model objects, interprets checkpoint configuration, loads weights, and exposes callable forward or generation interfaces. A serving engine uses those components inside a request-processing system that adds admission, shared scheduling, KV-cache block management, worker coordination, streaming, and service metrics.</p>
+<p>The same checkpoint can therefore participate in different execution arrangements. Direct model-library calls are useful for controlled baselines and correctness checks. A serving engine adds the control plane needed when many requests compete for memory and GPU time, while still relying on model-library or compiled-runtime components for the model computation itself.</p>
+<p>Read the diagram from model semantics to request control. Tokenizer, configuration, checkpoint, and model objects define what computation is executed. Admission, batching, KV-cache policy, worker backends, and streaming define how requests share the execution capacity.</p>
+<p>The serving engine has a CPU-side control plane as well as a GPU execution path. The control plane receives API requests, formats inputs, tokenizes text, checks admission constraints, selects batches, allocates or looks up KV blocks, schedules prefill and decode work, and returns streamed tokens. If this scheduler is slow, the GPU can sit idle even when the model kernels are efficient. The following list names CPU-side control-plane responsibilities and the scheduler symptom they can create.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>API formatting:</strong></span> Parse request metadata, sampling settings, adapter selection, schema constraints, and streaming preferences.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Tokenization:</strong></span> Convert text to token IDs. This is often CPU-side work and contributes to TTFT for short requests.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Admission control:</strong></span> Decide whether the request can fit under memory, context-length, batch, and SLA constraints.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>KV block lookup/allocation:</strong></span> Find reusable prefix blocks, allocate new blocks, and maintain block tables for active sequences.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode-step scheduling:</strong></span> Choose which active requests advance on the next GPU step and which prefill chunks can be interleaved.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Scheduler contention:</strong></span> A state where CPU scheduling, tokenization, or block bookkeeping becomes slow enough that GPU kernels are separated by idle gaps.</li>
+</ul>
+<p>vLLM is an open-source serving engine built around continuous batching and paged KV-cache management. Here, <code>vLLM-style</code> means serving engines with similar request-scheduler and KV-cache-manager responsibilities. Each serving engine exposes its own flags and internals. Modern vLLM-style engines attack scheduler contention with designs such as split scheduling and multi-step scheduling. The exact implementation changes over time, but the principle is stable: move enough decisions out of the per-token critical path so the GPU sees fewer idle gaps.</p>
+<p>The following settings are vLLM-style configuration examples. Hyphenated names are usually command-line flags; underscore names may appear as Python/config fields depending on the implementation.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--gpu-memory-utilization</code>:</strong></span> vLLM-style memory-budget flag controlling how much GPU memory the engine may reserve for weights, workspaces, and KV cache.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--max-model-len</code>:</strong></span> vLLM-style context-length flag that bounds worst-case KV-cache growth.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--kv-cache-dtype</code>:</strong></span> vLLM-style cache-precision flag, effective only when the engine and attention kernels support the chosen format.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--quantization</code>:</strong></span> vLLM-style model-loading flag selecting a supported weight-quantization backend.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Batching limits:</strong></span> vLLM-style controls such as <code>max_num_batched_tokens</code> and <code>max_num_seqs</code> that limit how much work enters the scheduler at once.</li>
+</ul>
+<p>A serving configuration is accepted only when admission, cache use, and kernel execution follow the intended path and request-level latency or goodput improves without violating quality or memory limits. Higher GPU utilization alone is not a substitute for the service metric.</p>
+<p>These settings control admission and memory budgets; they do not repair a slow attention kernel or an inefficient compiled graph. The next section isolates the batching policy so its effect on request waiting and GPU occupancy can be measured separately.</p>
+</section>
+<section id="sec-m4-c10-s02" class="level2" data-number="10.2">
+<h2 data-number="10.2" class="anchored" data-anchor-id="sec-m4-c10-s02"><span class="header-section-number">10.2</span> Static batching and continuous batching</h2>
+<p>Batching is the scheduler decision to run multiple requests together so the GPU sees enough work. In autoregressive serving, batching is harder than in ordinary inference because requests generate different numbers of tokens and finish at different times.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Static batching:</strong></span> Runs a fixed group of requests together until the batch completes.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Dynamic batching:</strong></span> Briefly waits to collect a fuller launch batch, then runs the launched work mostly as a fixed unit.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Continuous batching:</strong></span> Updates the active request set at each decode step, also called iteration-level scheduling.</li>
+</ul>
+<p>The problem is generation waste. Autoregressive requests finish at different times, and a static batch remains limited by the longest request. Requests that finish early stop doing useful work but can still occupy scheduler and cache capacity until the batch drains. Continuous batching removes finished requests and admits new ones at token-step boundaries, keeping active work packed more tightly.</p>
+<p>Request-scheduling timelines show how slots are occupied over decode steps or launch windows. They describe admission and waiting, not model accuracy or kernel throughput.</p>
+<p>The following source slide shows requests collected over a short dynamic-batching window and then launched as a fixed group. Continuous batching differs because it can change the active group at token-step boundaries.</p>
+<p>Dynamic batching is a short admission-window policy: the scheduler briefly waits to collect compatible requests before launching work.</p>
+<div id="fig-m4-c10-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Dynamic batching is a short admission-window policy: the scheduler briefly waits to collect compatible requests before launching work. This improves admission and utilization, but the launched batch is still mostly fixed. It cannot reclaim finished decode slots every token the way continuous batching can.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c10-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c10-f02.jpg" class="img-fluid figure-img" style="width:6.1in" alt="Dynamic batching is a short admission-window policy: the scheduler briefly waits to collect compatible requests before launching work. This improves admission and utilization, but the launched batch is still mostly fixed. It cannot reclaim finished decode slots every token the way continuous batching can.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c10-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10.2: Dynamic batching as short-window scheduling
+</figcaption>
+</figure>
+</div>
+<p>This improves admission and utilization, but the launched batch is still mostly fixed. It cannot reclaim finished decode slots every token the way continuous batching can.</p>
+<p>The cost is scheduler and cache-management complexity. The engine must track which sequences are active, which KV blocks they own, which requests have completed, and which prefill or decode work can be inserted without violating latency targets.</p>
+<div id="tbl-m4-c10-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c10-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;10.1: Static batching versus continuous batching.
+</figcaption>
+<div aria-describedby="tbl-m4-c10-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Dimension</th>
+<th>Static batching</th>
+<th>Continuous batching</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Admission</td>
+<td>Fixed group</td>
+<td>Dynamic per step</td>
+</tr>
+<tr class="even">
+<td>Utilization</td>
+<td>Wastes slots after requests finish</td>
+<td>Keeps active work packed</td>
+</tr>
+<tr class="odd">
+<td>Latency</td>
+<td>Can wait for batch formation</td>
+<td>Can reduce waiting but adds scheduler work</td>
+</tr>
+<tr class="even">
+<td>Cache management</td>
+<td>Simpler</td>
+<td>Requires dynamic block assignment</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<section id="sec-m4-c10-s03" class="level3" data-number="10.2.1">
+<h3 data-number="10.2.1" class="anchored" data-anchor-id="sec-m4-c10-s03"><span class="header-section-number">10.2.1</span> Batching policies</h3>
+<p>This subsection separates three scheduling policies that are often conflated. The difference is when the scheduler is allowed to form, update, or refill a batch.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Static batching:</strong></span> Forms a group and keeps that group together until the launched work completes.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Dynamic batching:</strong></span> Waits briefly to collect compatible requests before launch, then runs the launched unit mostly as a fixed group.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Continuous batching:</strong></span> Updates the active request set at decode-step boundaries, removing completed sequences and admitting new ones during generation.</li>
+</ul>
+<p>Static batching forms a group and keeps that group together until completion. It is simple, but in autoregressive generation the longest request determines how long the batch occupies capacity. Finished requests leave holes that cannot be reused until the batch completes.</p>
+<p>Dynamic batching adds a short queueing window before launch. The scheduler waits briefly so more compatible requests can be grouped, improving GPU utilization. Once the batch is launched, however, it is still effectively fixed for that launched unit, so dynamic batching cannot reclaim finished decode slots mid-generation.</p>
+<p>Continuous batching is the iteration-level version. After each decode step, the scheduler can remove completed sequences, admit new sequences, and interleave prefill or decode work according to policy. This is why continuous batching requires more sophisticated KV-cache bookkeeping than static or ordinary dynamic batching.</p>
+</section>
+<section id="sec-m4-c10-s04" class="level3" data-number="10.2.2">
+<h3 data-number="10.2.2" class="anchored" data-anchor-id="sec-m4-c10-s04"><span class="header-section-number">10.2.2</span> CPU-side scheduler architecture and vLLM-style optimizations</h3>
+<p>A fast GPU worker can still underperform if the CPU control plane cannot feed it. vLLM-style systems are serving engines that emphasize continuous batching, KV-cache block management, and scheduler hot-path reduction. They reduce gaps between decode steps by moving avoidable CPU work off the per-token hot path and by scheduling several GPU steps with less round-trip overhead.</p>
+<p>The next list mixes two kinds of items: scheduler-design responsibilities and vLLM-style configuration examples. The flags and field names are examples from this implementation family, not guaranteed names across every serving stack.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Separated API server:</strong></span> Keeps HTTP/gRPC parsing, authentication, request validation, and streaming protocol work away from the engine’s critical scheduling loop.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Tokenization off the hot path:</strong></span> Moves CPU tokenization and deterministic request serialization before admission whenever possible, reducing TTFT variance for short prompts.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Multi-step scheduling:</strong></span> Schedules several decode iterations ahead so the GPU worker can replay or advance work with fewer CPU scheduler round trips.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Async output processing:</strong></span> Lets detokenization, sampling post-processing, and streaming callbacks proceed without blocking the next GPU decode step.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Request formatting discipline:</strong></span> Normalizes sampling settings, adapters, constraints, and prompt fields once, rather than rebuilding them on every iteration.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>max_num_batched_tokens</code>:</strong></span> vLLM-style scheduler-budget field that caps how many total prompt and decode tokens can enter one scheduling step.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>max_num_seqs</code>:</strong></span> vLLM-style scheduler-budget field that limits the number of active sequences kept in flight.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--gpu-memory-utilization</code>:</strong></span> vLLM-style memory-budget flag controlling how aggressively the engine budgets GPU memory for weights, workspaces, and KV cache.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--max-model-len</code>:</strong></span> vLLM-style context-length flag that constrains worst-case KV-cache growth.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--kv-cache-dtype</code>:</strong></span> vLLM-style cache-precision flag, effective only when supported by the engine and kernels.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--enable-prefix-caching</code>:</strong></span> vLLM-style prefix-cache flag enabling exact-prefix KV reuse when the engine can safely match cached prefixes.</li>
+</ul>
+<p>These mechanisms do not make the model kernels faster. They reduce idle gaps between useful GPU work. The evidence should therefore appear in a timeline as shorter host-side scheduling regions, fewer CUDA launch gaps, and more regular decode-step cadence.</p>
+<p>Continuous batching is beneficial only when the extra scheduler and cache bookkeeping costs less than the capacity recovered from completed or stalled requests. Confirm that trade-off with request-level TTFT, TPOT, throughput, and queue-time distributions rather than GPU utilization alone.</p>
+</section>
+</section>
+<section id="sec-m4-c10-s05" class="level2" data-number="10.3">
+<h2 data-number="10.3" class="anchored" data-anchor-id="sec-m4-c10-s05"><span class="header-section-number">10.3</span> Chunked prefill</h2>
+<p>Chunked prefill splits long prompt processing into smaller chunks so one long prompt does not monopolize the GPU. It improves fairness in mixed workloads and can reduce TTFT for short requests behind long prompts. The chunk size is a control knob: too large increases blocking, too small increases overhead.</p>
+<p>The mechanism is scheduling, not a new attention algorithm. A long prompt is broken into several prefill units that can be interleaved with decode work or shorter prompts. This gives the scheduler more opportunities to protect interactive latency.</p>
+<p>Chunking changes when prompt work is scheduled, not how much attention work the prompt requires. Its success is therefore measured as a better latency and fairness trade-off under a mixed workload, with any change in total throughput reported separately.</p>
+</section>
+<section id="sec-m4-c10-s06" class="level2" data-number="10.4">
+<h2 data-number="10.4" class="anchored" data-anchor-id="sec-m4-c10-s06"><span class="header-section-number">10.4</span> Separate prefill and decode workers</h2>
+<p>Disaggregated prefill/decode is a serving architecture that separates prompt processing from token-by-token generation. The point is latency isolation: long prefill work should not repeatedly interrupt active decode streams.</p>
+<p>Continuous batching and chunked prefill attempt to schedule mixed workloads on a single GPU, but prefill and decode still compete for the same execution units. Prefill is highly parallel and compute-heavy, while decode is more sequential and memory-bandwidth-sensitive. When a long prefill task monopolizes the GPU, active decode sequences can stall and produce latency spikes.</p>
+<p>A disaggregated architecture splits these stages across worker roles:</p>
+<ul>
+<li>Prefill nodes are dedicated to prompt ingestion and initial KV-cache construction. They run compute-heavy kernels optimized for prompt batches.</li>
+<li>KV-cache transfer moves the completed prompt state from prefill workers to decode workers over the available local or network fabric.</li>
+<li>Decode nodes are dedicated to one-token generation. They avoid repeated prefill interruptions and can maintain steadier inter-token latency.</li>
+</ul>
+<p>The request flow has two specialized worker roles, a state-transfer boundary, and control/output paths that keep the request attached to the serving system:</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill worker:</strong></span> Processes the prompt and builds the initial KV cache.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Request and control state:</strong></span> Carries request identity, token position, model and adapter identity, sampling and stopping settings, and routing information needed by both worker roles.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>KV-transfer boundary:</strong></span> Moves the produced cache state to the worker that will continue generation, while the model weights are commonly already resident in both pools.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode worker:</strong></span> Runs the latency-sensitive one-token loop after the initial cache exists.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Output path:</strong></span> Returns generated token IDs or text fragments from the decode worker to the streaming or response layer.</li>
+</ul>
+<p>Read the source figure as a simplified left-to-right control path: router, prefill, KV handoff, and decode. The visible KV edge is only the largest model-state transfer; request metadata crosses the control boundary and decoded outputs return to the serving path.</p>
+<p>Disaggregated prefill/decode separates prompt processing from token generation. A router sends the prompt to a prefill worker, transfers the resulting KV state, and then a decode worker generates tokens.</p>
+<div id="fig-m4-c10-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Disaggregated prefill/decode separates prompt processing from token generation. A router sends the prompt to a prefill worker, transfers the resulting KV state, and then a decode worker generates tokens. The point is latency isolation, not free throughput. Request and control metadata reach both roles, KV state crosses the handoff boundary, decoded outputs return to the serving path, and model weights are commonly resident in both pools. The design helps only when isolation outweighs transfer and coordination cost.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c10-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c10-f03.jpg" class="img-fluid figure-img" style="width:6.1in" alt="Disaggregated prefill/decode separates prompt processing from token generation. A router sends the prompt to a prefill worker, transfers the resulting KV state, and then a decode worker generates tokens. The point is latency isolation, not free throughput. Request and control metadata reach both roles, KV state crosses the handoff boundary, decoded outputs return to the serving path, and model weights are commonly resident in both pools. The design helps only when isolation outweighs transfer and coordination cost.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c10-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10.3: Disaggregated prefill/decode request flow
+</figcaption>
+</figure>
+</div>
+<p>The point is latency isolation, not free throughput. Request and control metadata reach both roles, KV state crosses the handoff boundary, decoded outputs return to the serving path, and model weights are commonly resident in both pools. The design helps only when isolation outweighs transfer and coordination cost.</p>
+<p>Disaggregated prefill/decode should be read as a latency-isolation architecture. A router receives a request, chooses a prefill worker, and the prefill worker processes the prompt to build the initial KV cache. The cache and compatible request state are handed to a decode worker, which starts the repeated one-token generation loop and returns generated outputs through the serving path.</p>
+<p>Disaggregated prefill/decode is a latency-isolation design. It often duplicates model weights across prefill and decode pools and adds KV-transfer cost. Its benefit is that long compute-heavy prefill stops interrupting latency-sensitive decode workers. Use chunked prefill first when it solves the interference problem inside one pool. Use disaggregation when decode isolation is the actual bottleneck and the fabric can move KV state cheaply enough.</p>
+</section>
+<section id="sec-m4-c10-s07" class="level2" data-number="10.5">
+<h2 data-number="10.5" class="anchored" data-anchor-id="sec-m4-c10-s07"><span class="header-section-number">10.5</span> Prefix caching and radix-style reuse</h2>
+<p>Prefix caching stores key-value blocks for token prefixes that recur across requests. Radix-style reuse organizes prefixes in a tree so shared prefixes can be found efficiently. The match must be at the token level, not merely string similarity, because the cache represents model-internal attention state.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefix:</strong></span> The initial token sequence shared by one or more requests, such as a system prompt, tool instruction block, retrieval wrapper, or few-shot example.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cache hit:</strong></span> A new request starts with a token prefix whose KV blocks are already stored and valid for the same model, tokenizer, adapter, and relevant execution assumptions.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Radix tree:</strong></span> A tree-like index where common token-prefix paths are shared, allowing the engine to find the longest reusable prefix efficiently.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Invalidation:</strong></span> The cache entry must not be reused if model weights, adapter state, tokenizer output, positional assumptions, cache format, or prefix tokens differ in a way that changes the stored internal state. Sampling settings matter only when they change the prefix tokens or another state-producing input.</li>
+</ul>
+<p>The bottleneck is repeated prefill work. Many workloads reuse the same system prompt, tool instructions, retrieval wrapper, or few-shot examples. If the engine can prove that a new request starts with the same token prefix under the same model and adapter assumptions, it can reuse the stored KV state and skip part of prefill.</p>
+<p>Prefix caching mainly improves TTFT and prefill throughput for repeated-prefix workloads. It does not accelerate unrelated prompts, and it does not reduce the cost of generating new tokens after the shared prefix unless those later tokens also become reusable cached state.</p>
+<p>The visual separates the logical token prefix from the physical KV blocks that store the reusable attention state.</p>
+<div id="fig-m4-c10-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The visual separates the logical token prefix from the physical KV blocks that store the reusable attention state. The cache key must match tokenized prefixes and model/cache assumptions. Reuse is powerful for repeated system prompts but fragile if tokenization, adapters, or decoding context differs.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c10-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c10-f04.jpg" class="img-fluid figure-img" style="width:6.1in" alt="The visual separates the logical token prefix from the physical KV blocks that store the reusable attention state. The cache key must match tokenized prefixes and model/cache assumptions. Reuse is powerful for repeated system prompts but fragile if tokenization, adapters, or decoding context differs.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c10-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10.4: Prefix-addressed key-value blocks
+</figcaption>
+</figure>
+</div>
+<p>The cache key must match tokenized prefixes and model/cache assumptions. Reuse is powerful for repeated system prompts but fragile if tokenization, adapters, or decoding context differs.</p>
+<section id="sec-m4-c10-s08" class="level3" data-number="10.5.1">
+<h3 data-number="10.5.1" class="anchored" data-anchor-id="sec-m4-c10-s08"><span class="header-section-number">10.5.1</span> Prefix cache internals and operating policy</h3>
+<p>Prefix caching is exact reuse of previously computed KV state. The engine can skip prefill work when the model, tokenizer, adapter state, decoding assumptions, and token prefix match the cached state. The cache key therefore combines token identity with compatible model execution state.</p>
+<p>Read the prefix-cache figure top to bottom: exact block hashing, tree reuse, then external KV storage. The diagram separates exact reuse from broader cache reach.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefix-addressed KV blocks:</strong></span> The cache stores complete KV blocks for token prefixes and maps future requests to those blocks when the prefix matches exactly.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Block hashing:</strong></span> A block key is computed from the tokens in a complete block plus identity information such as model, adapter, and relevant cache metadata.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Parent-prefix hash:</strong></span> The hash of previous complete blocks is included so identical token blocks in different prefix positions are not confused.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Complete-block reuse:</strong></span> Most block-based systems reuse only complete blocks; a partial last block may not be reusable until it is filled.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-block LRU:</strong></span> Least-recently-used eviction can free blocks under memory pressure, but it may evict shared trunks that many future requests would have reused.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cache-blind scheduling:</strong></span> Routes requests without considering existing prefix state; simpler but can miss expensive reuse opportunities.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cache-aware routing:</strong></span> Routes requests toward replicas or workers that already hold useful prefix blocks; improves reuse but adds routing state and load-balancing complexity.</li>
+</ul>
+<p>Operationally, place stable content first: system prompts, tool descriptions, policy text, and reusable retrieval context should precede dynamic user-specific fields when the product permits it. Put timestamps, random IDs, request-specific metadata, and volatile instructions later. Serialize prompts deterministically and monitor prefix-cache hit rate, because one invisible formatting change can turn a high-reuse workload into a cache-miss workload.</p>
+<p>Cached-input economics are a direct consequence of avoided prefill. If a provider or internal accounting model discounts cached input tokens, the discount is only justified when the serving path actually reuses KV work rather than recomputing the prefix.</p>
+</section>
+<section id="sec-m4-c10-s09" class="level3" data-number="10.5.2">
+<h3 data-number="10.5.2" class="anchored" data-anchor-id="sec-m4-c10-s09"><span class="header-section-number">10.5.2</span> RadixAttention and SGLang-style reuse</h3>
+<p>RadixAttention is a prefix-cache organization strategy. It represents shared token prefixes as tree trunks and different continuations as branches, so branchy language-model programs can reuse common KV state instead of storing or recomputing it repeatedly.</p>
+<p>RadixAttention organizes cached token sequences as a radix tree. Shared trunks are stored once, and branch points represent different continuations. This is a natural fit for language-model programs that fork prompts, explore tool calls, reuse long system prefixes, or run multiple retrieval-conditioned branches.</p>
+<p>RadixAttention represents reusable prefixes as a tree rather than only as independent cached blocks.</p>
+<div id="fig-m4-c10-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="RadixAttention represents reusable prefixes as a tree rather than only as independent cached blocks. Read from root to leaf: edges represent cached token spans, while requests follow matching paths. Reuse requires an exact execution-compatible prefix. Eviction marks in the source visual are examples rather than a universal RadixAttention eviction policy.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c10-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c10-f05.jpg" class="img-fluid figure-img" style="width:6.1in" alt="RadixAttention represents reusable prefixes as a tree rather than only as independent cached blocks. Read from root to leaf: edges represent cached token spans, while requests follow matching paths. Reuse requires an exact execution-compatible prefix. Eviction marks in the source visual are examples rather than a universal RadixAttention eviction policy.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c10-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10.5: RadixAttention prefix cache as a tree
+</figcaption>
+</figure>
+</div>
+<p>Read from root to leaf: edges represent cached token spans, while requests follow matching paths. Reuse requires an exact execution-compatible prefix. Eviction marks in the source visual are examples rather than a universal RadixAttention eviction policy.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Radix tree:</strong></span> A compact prefix tree where each edge can represent a multi-token span.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Shared trunk:</strong></span> The common prefix path reused by many requests or branches.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Branch insertion:</strong></span> New continuations attach below the longest matching prefix, avoiding duplicate storage of the trunk.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Eviction:</strong></span> Can reason about subtrees and shared prefixes rather than isolated blocks only, but it must avoid retaining cold branches indefinitely.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Scheduling implication:</strong></span> The scheduler can prefer requests whose prefixes are already hot or whose branches share a trunk.</li>
+</ul>
+<p>Block-hashing systems such as vLLM-style prefix caching are simple and effective for exact complete-block reuse. RadixAttention-style systems expose more sequence structure, which helps branchy agents, chat sessions with common trunks, retrieval-augmented generation (RAG), and structured LM programs. The cost is more complex cache metadata and scheduler logic.</p>
+</section>
+<section id="sec-m4-c10-s10" class="level3" data-number="10.5.3">
+<h3 data-number="10.5.3" class="anchored" data-anchor-id="sec-m4-c10-s10"><span class="header-section-number">10.5.3</span> LMCache and external KV layers</h3>
+<p>An external KV layer is a cache tier outside one GPU worker’s HBM. It reuses or preserves expensive prefill results across requests, replicas, or time windows when that worker’s GPU memory is too small or the cached state would otherwise be short-lived.</p>
+<p>An external KV cache moves prefix reuse beyond one engine instance. Instead of storing all reusable KV state only in one GPU worker’s HBM, the system can spill or share KV blocks through CPU memory, disk, or a remote storage service.</p>
+<p>LMCache is a concrete example of this external-KV-cache layer. The general concept is the storage tier and lookup policy; LMCache is one implementation example used to make that layer visible.</p>
+<p>External KV-cache layers extend prefix reuse beyond one engine process, turning cache reuse into a distributed serving problem.</p>
+<div id="fig-m4-c10-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="External KV-cache layers extend prefix reuse beyond one engine process, turning cache reuse into a distributed serving problem. CPU memory, disk, and remote stores are alternative capacity tiers outside a worker's HBM. Reads and writes cross the worker/cache boundary, and reuse is valid only for matching model, tokenizer, adapter, cache format, and other state-producing assumptions.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c10-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c10-f06.jpg" class="img-fluid figure-img" style="width:6.1in" alt="External KV-cache layers extend prefix reuse beyond one engine process, turning cache reuse into a distributed serving problem. CPU memory, disk, and remote stores are alternative capacity tiers outside a worker's HBM. Reads and writes cross the worker/cache boundary, and reuse is valid only for matching model, tokenizer, adapter, cache format, and other state-producing assumptions.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c10-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10.6: LMCache shared KV-cache layer
+</figcaption>
+</figure>
+</div>
+<p>CPU memory, disk, and remote stores are alternative capacity tiers outside a worker’s HBM. Reads and writes cross the worker/cache boundary, and reuse is valid only for matching model, tokenizer, adapter, cache format, and other state-producing assumptions.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>CPU backend:</strong></span> Higher capacity than HBM and lower latency than disk, but transfer through PCIe or NVLink-C2C-like paths must be amortized.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Disk or SSD backend:</strong></span> Useful for persistence or very large reuse windows, but too slow for a tight per-token path unless transfers are large and preplanned.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Remote backend:</strong></span> Can share reuse across replicas, but network transfer and routing decisions can erase the saved prefill cost.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Invalidation:</strong></span> Cache entries must be tied to model version, tokenizer, adapter, precision, and relevant runtime assumptions.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Best fit:</strong></span> Long stable prefixes, repeated prompts, multi-replica serving, or workloads where prefill cost dominates transfer cost.</li>
+</ul>
+<p>The decision rule is simple: external KV reuse helps only if avoided prefill time exceeds lookup, transfer, placement, and complexity costs. If the network path is slower than recomputing the prefix locally, the external cache becomes a liability.</p>
+<p>The exact-match requirement is stricter than natural-language similarity. The cache stores internal layer state for a token sequence, so the reusable boundary is the longest prefix whose token IDs and state-producing assumptions match exactly.</p>
+<p>Check cache validity in this order before reusing a prefix. The first mismatch ends the reusable prefix and invalidates its later suffix:</p>
+<ol type="1">
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Token IDs:</strong></span> The KV state comes from the token sequence after tokenization. Compare token IDs; any mismatch invalidates that position and every later suffix.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Tokenizer and chat template:</strong></span> Formatting changes can produce different token IDs even when the text looks similar. Retokenize and compare IDs rather than raw strings.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Model weights and adapter state:</strong></span> LoRA adapters, fine-tuned weights, and model revisions change hidden states. Cache entries belong to one model and adapter identity.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Position and attention assumptions:</strong></span> RoPE scaling, sliding windows, block layout, and cache dtype affect how stored state is interpreted. Reuse only compatible execution states.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Mutable system or retrieval context:</strong></span> A retrieval snippet or tool instruction can change across requests. Reuse only the stable prefix up to the first changed token.</li>
+</ol>
+<p>Prefix reuse is profitable only when avoided prefill work exceeds lookup, transfer, invalidation, and placement costs across the full cache hierarchy. The next question is whether reducing serial target-model work can improve decode when useful prefixes are unavailable.</p>
+</section>
+</section>
+<section id="sec-m4-c10-s11" class="level2" data-number="10.6">
+<h2 data-number="10.6" class="anchored" data-anchor-id="sec-m4-c10-s11"><span class="header-section-number">10.6</span> Speculative decoding</h2>
+<p>Speculative decoding uses a smaller draft model to propose several tokens and the target model to verify them. Correctness comes from the verification step: the draft model accelerates proposal, but the target model preserves the target distribution.</p>
+<p>The problem is serial target-model decoding. A normal autoregressive loop asks the large target model for one token at a time. Speculative decoding tries to advance several tokens per target-model verification pass by first generating a candidate suffix with a cheaper draft model.</p>
+<section id="sec-m4-c10-s12" class="level3" data-number="10.6.1">
+<h3 data-number="10.6.1" class="anchored" data-anchor-id="sec-m4-c10-s12"><span class="header-section-number">10.6.1</span> Draft and verify mechanism</h3>
+<p>The mechanism has four ordered stages: draft a candidate suffix, verify its probabilities with the target model, accept the longest valid prefix, and repair the state after the first rejection. The equations and diagram below define those stages before implementation choices are considered.</p>
+<p>The algorithm view separates proposal from verification so the target model remains responsible for correctness.</p>
+<div id="fig-m4-c10-f07" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The algorithm view separates proposal from verification so the target model remains responsible for correctness. The serving dataflow is: draft several candidate tokens, verify them with the target model, accept the longest valid prefix, and continue generation from the accepted state.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c10-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c10-f07.png" class="img-fluid figure-img" style="width:6.1in" alt="The algorithm view separates proposal from verification so the target model remains responsible for correctness. The serving dataflow is: draft several candidate tokens, verify them with the target model, accept the longest valid prefix, and continue generation from the accepted state.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c10-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10.7: Speculative decoding algorithm slide
+</figcaption>
+</figure>
+</div>
+<p>The serving dataflow is: draft several candidate tokens, verify them with the target model, accept the longest valid prefix, and continue generation from the accepted state.</p>
+<p>Let p(x) be the target-model probability for a proposed token and q(x) be the draft-model probability. The draft model samples a short candidate suffix cheaply. The target model evaluates that suffix in a larger verification pass. Each proposed token is accepted with a rule based on how much the draft distribution overstated or understated that token relative to the target distribution. If a token is rejected, the algorithm samples a replacement from a fallback distribution derived from the target and draft distributions, then discards the unaccepted suffix.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Definition - Speculative decoding</strong></p>
+<p><strong>Draft model:</strong> A cheaper model proposes multiple candidate tokens using distribution q(x).</p>
+<p><strong>Target model:</strong> The larger model verifies the draft suffix using distribution p(x) and preserves target-model correctness.</p>
+<p><strong>Acceptance rule:</strong> Accept a proposed token with probability min(1, p(x) / q(x)) under the standard speculative-sampling formulation.</p>
+<p><strong>Fallback sampling:</strong> When a token is rejected, sample from the corrected residual distribution instead of committing the rejected draft suffix.</p>
+<p><strong>Last-token sampling:</strong> After all proposed tokens are accepted, sample one additional token from the target model’s distribution so the method can advance beyond the draft suffix.</p>
+<p><strong>Speedup condition:</strong> Draft cost, verification cost, acceptance rate, and KV-cache handling must combine favorably.</p>
+<p><strong>Failure mode:</strong> A low-acceptance or expensive draft model can erase the speedup.</p>
+</div>
+<p>The most useful metrics are acceptance rate and wall time. Acceptance rate says how many draft tokens survive target verification. Wall time says whether the extra draft work, target verification batch, and cache bookkeeping reduced latency. Use an evaluation sample from the expected text domain, such as a FineWeb-like public-web sample, because acceptance depends on domain and prompt distribution.</p>
+<p>Speculative decoding helps when the target model is much slower than the draft model, acceptance is high, and verification can run efficiently as a batch. It is weak when the draft is inaccurate, the target model is already well utilized, the batch is too small, or rollback/cache overhead dominates. Tuned Lens and other advanced draft-generation ideas can be studied later; the basic draft-verify-accept mechanism is the core engineering concept.</p>
+<p>The formal mathematical formulation of speculative decoding rejection sampling (from the Leviathan paper) guarantees that the output distribution is identical to the target model’s output distribution:</p>
+<p><span id="eq-m4-c10-e01"><span class="math display">\[
+\text{Acceptance Probability} = \min\left(1, \frac{p(x)}{q(x)}\right)
+\tag{10.1}\]</span></span></p>
+<p>When a draft token x is rejected, a corrected token is sampled from the residual distribution:</p>
+<p><span id="eq-m4-c10-e02"><span class="math display">\[
+p'(x) = \frac{\max(0, p(x) - q(x))}{\sum_{y} \max(0, p(y) - q(y))}
+\tag{10.2}\]</span></span></p>
+<p>A simple sequential cost model relates expected progress to the draft acceptance rate alpha, candidate length gamma, and draft-to-target cost ratio c.&nbsp;It assumes a constant independent acceptance probability, gamma sequential draft steps, and one target verification whose cost is approximated by one ordinary target step. Under those assumptions, the expected number of committed tokens per target verification is:</p>
+<p><span id="eq-m4-c10-e03"><span class="math display">\[
+\text{Expected Tokens} = \frac{1 - \alpha^{\gamma + 1}}{1 - \alpha}
+\tag{10.3}\]</span></span></p>
+<p>The walltime speedup factor (relative to vanilla target model decoding) is calculated as:</p>
+<p><span id="eq-m4-c10-e04"><span class="math display">\[
+\text{Speedup} = \frac{1 - \alpha^{\gamma + 1}}{(1 - \alpha)(\gamma c + 1)}
+\tag{10.4}\]</span></span></p>
+<p>Here c = time(M_q) / time(M_p) is the execution-time ratio of one draft step to one target step. As alpha approaches 1, the expected advance approaches gamma + 1 tokens. Real systems can deviate from this estimate because target verification cost changes with batch shape, cache repair is not free, and requests do not share one constant acceptance probability.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Worked calculation - speculative decoding</strong></p>
+<p><strong>Measured inputs:</strong> Evaluate a fixed prompt sample with gamma = 4 draft tokens, alpha = 0.8 acceptance rate, and c = 0.2 draft-to-target cost ratio. The draft model proposes tokens; the target model verifies them and supplies retained probabilities.</p>
+<p><strong>Expected advance:</strong> (1 - 0.8^5) / (1 - 0.8) = 3.36 tokens per target verification. This includes the final target or residual-sampled token, not only accepted draft tokens.</p>
+<p><strong>Estimated speedup:</strong> 3.36 / (4 x 0.2 + 1) = 1.87x before rollback, scheduler overhead, cache maintenance, and batch-shape effects.</p>
+<p><strong>Acceptance examples:</strong> For p(x) = 0.10 and q(x) = 0.25, acceptance probability is 0.4. For p(x) = 0.30 and q(x) = 0.20, it is 1.</p>
+<p><strong>Validation:</strong> Compare the estimate with wall-clock target verification, draft work, rollback, and serving-scheduler time on the same prompt distribution.</p>
+</div>
+<p>A lenience parameter can relax strict acceptance in some research settings and trade exactness for a quality/speed experiment. Tuned Lens is an interpretability method that trains affine probes to decode intermediate transformer states. It is an optional one-model exploration rather than a standard speculative-decoding implementation, so it carries no general exactness or speedup claim.</p>
+<p>The exact acceptance rule preserves the target distribution, but speed depends on accepted progress relative to draft, verification, rollback, and cache-maintenance cost. The next question is which draft design and candidate length minimize measured end-to-end latency for the actual prompt classes.</p>
+</section>
+<section id="sec-m4-c10-s13" class="level3" data-number="10.6.2">
+<h3 data-number="10.6.2" class="anchored" data-anchor-id="sec-m4-c10-s13"><span class="header-section-number">10.6.2</span> Implementation choices and measurement</h3>
+<p>The speculative-decoding workshop pattern uses two roles: a target model that defines the desired distribution and a draft or approximation model that proposes tokens. The speculative prefix length gamma is the number of proposed tokens verified in one target pass. The acceptance rate alpha is the fraction of proposed tokens accepted. The cost coefficient c is the draft-step cost divided by the target-step cost.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Parallel verification:</strong></span> The target model evaluates the drafted suffix in one larger forward pass instead of one target pass per drafted token.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Acceptance/rejection rule:</strong></span> A proposed token is accepted with probability min(1, p(x) / q(x)), where p is the target distribution and q is the draft distribution for that token.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Adjusted distribution:</strong></span> After rejection, the replacement token is sampled from the residual positive part of p minus q, which preserves the exact target distribution in the standard algorithm.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Exactness guarantee:</strong></span> With the standard acceptance and residual-sampling rule, the output distribution matches target-model sampling even though a draft model proposed candidates.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Lenience:</strong></span> A relaxation that can improve speed by accepting more tokens, but it no longer has the same exact-distribution guarantee and must be evaluated as a quality/speed trade-off.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>N-gram or context-copy draft:</strong></span> A near-zero-cost approximator that proposes tokens from repeated recent context rather than a separate neural draft model. It is attractive when text has strong repetition and model loading a second draft is too expensive.</li>
+</ul>
+<p>An example workshop experiment pairs a larger target model with a smaller draft model, tokenizes a FineWeb-like public-web evaluation sample, colors proposed tokens by accepted or rejected status, and reports both acceptance rate and wall time. The text sample defines the workload. Token coloring shows whether speedup comes from long accepted runs or occasional accepted proposals.</p>
+<p>Speculative decoding helps when the draft is cheap, aligned with the target, and verification batches efficiently. It is weak when the target model is already saturated by a large batch, when the draft is inaccurate for the domain, when gamma is too large for the acceptance rate, or when KV-cache rollback and CPU sampling overhead dominate.</p>
+<p>Acceptance rate shows whether the draft model agrees often enough with the target model for one verification pass to advance several tokens. Read it together with draft cost, target batch efficiency, rollback cost, and serving-scheduler pressure.</p>
+<div id="tbl-m4-c10-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c10-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;10.2: How speculative-decoding acceptance rate affects expected speed.
+</figcaption>
+<div aria-describedby="tbl-m4-c10-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Acceptance-rate range</th>
+<th>What it means</th>
+<th>Likely speed result</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>High</td>
+<td>Most drafted tokens survive target verification</td>
+<td>Speculation can reduce target-model passes if the draft is cheap and verification is batched well</td>
+<td>Increase candidate length carefully until rollback or verification cost grows</td>
+</tr>
+<tr class="even">
+<td>Medium</td>
+<td>Some runs are accepted but rejections are frequent</td>
+<td>Speedup is workload-dependent and may vary by prompt domain</td>
+<td>Measure by prompt class; tune candidate length, draft model, and batching policy</td>
+</tr>
+<tr class="odd">
+<td>Low</td>
+<td>Draft proposals rarely match the target distribution</td>
+<td>Extra draft work and rollback can make decoding slower</td>
+<td>Use a better draft, reduce candidate length, or disable speculation for that traffic class</td>
+</tr>
+<tr class="even">
+<td>High acceptance but no speedup</td>
+<td>The target path is already saturated or overhead moved elsewhere</td>
+<td>Wall time stays flat despite good token acceptance</td>
+<td>Inspect GPU timeline, scheduler gaps, KV rollback, and CPU sampling work</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The acceptance rate is therefore diagnostic rather than sufficient. A deployment should keep speculation only when the combined draft, verification, correction, cache, and scheduler path improves the end-to-end metric for the relevant prompt classes.</p>
+</section>
+</section>
+<section id="sec-m4-c10-s14" class="level2" data-number="10.7">
+<h2 data-number="10.7" class="anchored" data-anchor-id="sec-m4-c10-s14"><span class="header-section-number">10.7</span> Constrained decoding</h2>
+<p>Constrained decoding restricts output to a structured language, such as a JSON schema, grammar, regular expression, or finite set of choices. It belongs to the serving-engine or decoder layer between model logits and token selection. The reliability benefit is valid structured output; the performance cost is maintaining one constraint state and valid-token mask per active request.</p>
+<p>The illustrated path from JSON schema to regular expression, finite-state machine, and logit mask represents one compiled-constraint design. A regular expression or finite choice set can use finite-state machinery directly. Nested JSON or general grammar constraints may instead need parser or grammar-stack state. In each case, a constraint compiler produces runtime state that identifies which next-token byte sequences remain valid.</p>
+<p>At every decode step, the constraint runtime keeps the current parser state, derives legal next terminals or byte prefixes, maps those possibilities to tokenizer IDs, masks invalid logits, samples or selects one remaining token, and advances the parser state with that token. Tokenization matters because one vocabulary token can contain several characters or a partial structural sequence; validity cannot be implemented as a simple one-character lookup.</p>
+<p>The pipeline view places the constraint state between logits and token selection.</p>
+<div id="fig-m4-c10-f08" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The pipeline view places the constraint state between logits and token selection. The constraint system masks invalid tokens before sampling or selection. It improves validity but can add CPU-side work, scheduler work, or smaller effective token sets.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c10-f08-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c10-f08.jpg" class="img-fluid figure-img" style="width:6.1in" alt="The pipeline view places the constraint state between logits and token selection. The constraint system masks invalid tokens before sampling or selection. It improves validity but can add CPU-side work, scheduler work, or smaller effective token sets.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c10-f08-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10.8: Constrained decoding pipeline
+</figcaption>
+</figure>
+</div>
+<p>The constraint system masks invalid tokens before sampling or selection. It improves validity but can add CPU-side work, scheduler work, or smaller effective token sets.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Definition - Constrained decoding</strong></p>
+<p><strong>Constraint source:</strong> Schema, grammar, regular expression, finite-state machine, enum, or another validity rule.</p>
+<p><strong>Constraint state:</strong> The current parser, automaton, or grammar-stack state after consuming the generated token prefix.</p>
+<p><strong>Valid-token mask:</strong> A vocabulary-sized allow or deny mask derived from that state before sampling or greedy selection.</p>
+<p><strong>Benefit:</strong> Higher structured-output reliability.</p>
+<p><strong>Cost:</strong> Constraint compilation, parser-state updates, token-to-grammar matching, mask construction, and possible batch fragmentation.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Constrained-decoding state trace</strong></p>
+<p><strong>Compile once where possible:</strong> Normalize a reusable schema or grammar into the runtime representation before requests arrive. Dynamic per-request schemas add control-plane work.</p>
+<p><strong>Keep per-request state:</strong> Each active request carries its own parser or automaton state because its generated prefix differs from every other request.</p>
+<p><strong>Build or reuse the mask:</strong> The runtime maps legal continuations to tokenizer IDs. Engines may cache masks for repeated states, but arbitrary schemas can make this CPU-heavy.</p>
+<p><strong>Mask logits and select:</strong> The model still computes logits. The constraint layer removes illegal choices before sampling or greedy selection.</p>
+<p><strong>Advance and observe:</strong> Consume the selected token, update state, and measure mask-build time, constrained TPOT, schema failures, and request grouping effects.</p>
+</div>
+<p>The practical question is whether validity is worth its decode overhead for the traffic class. Group requests with the same constraint when the engine supports it, precompile stable schemas, and measure constrained Time Per Output Token (TPOT) separately from unconstrained decode. Schema enforcement checks JSON structure; application validation checks the business rules.</p>
+</section>
+<section id="sec-m4-c10-s15" class="level2" data-number="10.8">
+<h2 data-number="10.8" class="anchored" data-anchor-id="sec-m4-c10-s15"><span class="header-section-number">10.8</span> Serving metrics and production traces</h2>
+<p>An observability stack is the production measurement layer around the serving engine. The engine exposes metrics from its scheduler, request queue, token loop, cache manager, and GPU worker processes. A metrics collector stores those time series, and a dashboard turns them into views an operator can inspect during incidents or capacity planning.</p>
+<p>Prometheus is commonly used as the metrics collector: it scrapes HTTP endpoints exported by services and stores numeric time series. Grafana is commonly used as the dashboard layer: it queries Prometheus and displays latency, throughput, queueing, cache, and utilization trends. These tools do not optimize inference by themselves; they make the effects of scheduling and cache policy visible.</p>
+<p>Production metrics show where a service symptom appears and narrow the next investigation. They do not prove one cause by themselves, because queueing, kernels, memory, scheduling, and communication can affect the same latency measurement.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Time To First Token (TTFT):</strong></span> Measures elapsed time until the first generated token. High TTFT can come from queueing, tokenization, prefix-cache misses, prefill work, communication, or cold setup; use traces to separate them.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Time Per Output Token (TPOT):</strong></span> Measures average decode time per generated token under the stated convention. Spikes can come from memory traffic, launch gaps, scheduler work, preemption, communication, or competing prefill.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Queue Time:</strong></span> Measures the time requests spend waiting in the scheduler before admission. Useful for tracking utilization vs.&nbsp;SLA compliance.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>KV Cache Utilization:</strong></span> Tracks occupied cache blocks or bytes under the engine’s definition. High use may reflect useful admission or inefficient retention; approaching the configured limit can cause waiting, eviction, recomputation, or preemption depending on policy.</li>
+</ul>
+<p>A practical serving dashboard should group metrics by the subsystem that owns the symptom. The panel below is illustrative: it names the signals an operator would want when deciding whether the bottleneck is prefill, decode, KV memory, speculative execution, or the CPU control plane.</p>
+<div id="tbl-m4-c10-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c10-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;10.3: Illustrative observability panel for serving-engine diagnosis.
+</figcaption>
+<div aria-describedby="tbl-m4-c10-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Panel group</th>
+<th>Example signals</th>
+<th>Question it answers</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Latency</td>
+<td>TTFT p50/p95/p99, TPOT p50/p95/p99, inter-token latency, end-to-end latency</td>
+<td>Which user-facing latency path is failing?</td>
+</tr>
+<tr class="even">
+<td>Scheduler</td>
+<td>Queue time, admitted sequences, running sequences, prefill/decode batch sizes, max batched tokens</td>
+<td>Is the CPU control plane or admission policy starving the GPU or over-batching requests?</td>
+</tr>
+<tr class="odd">
+<td>KV cache</td>
+<td>Cache used/free blocks, evictions, preemptions, prefix-cache hit rate, cache migration count</td>
+<td>Is serving capacity limited by cache memory or by reuse/locality mistakes?</td>
+</tr>
+<tr class="even">
+<td>Speculation</td>
+<td>Draft tokens proposed, accepted tokens, acceptance rate, rollback count, draft/target time</td>
+<td>Is speculative decoding actually reducing target-model work?</td>
+</tr>
+<tr class="odd">
+<td>GPU and communication</td>
+<td>GPU utilization, HBM bandwidth, kernel gaps, NCCL time for sharded groups</td>
+<td>Is the hot path local compute, memory bandwidth, launch overhead, or distributed communication?</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>A dashboard identifies when and where a service-level symptom occurs, but it does not prove the lower-level cause. Use the relevant request trace, GPU timeline, memory measurement, or distributed trace to test the hypothesis before changing a kernel, scheduler, cache policy, or network layout.</p>
+</section>
+<section id="sec-m4-c10-s16" class="level2" data-number="10.9">
+<h2 data-number="10.9" class="anchored" data-anchor-id="sec-m4-c10-s16"><span class="header-section-number">10.9</span> Serving stack selection</h2>
+<p>Serving stacks differ in what they optimize and how much control they expose. Choose a serving stack by model support, hardware target, batching policy, cache strategy, build workflow, observability, and deployment needs.</p>
+<section id="sec-m4-c10-s17" class="level3" data-number="10.9.1">
+<h3 data-number="10.9.1" class="anchored" data-anchor-id="sec-m4-c10-s17"><span class="header-section-number">10.9.1</span> vLLM and SGLang</h3>
+<p>vLLM and SGLang are serving engines: they control request admission, batching, KV-cache policy, and the generation loop. Their strongest fit depends on workload structure and reuse.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>vLLM:</strong></span> Flexible high-throughput serving engine built around PagedAttention-style KV-cache management, continuous batching, broad model support, and practical operator controls.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>SGLang:</strong></span> Serving and programming stack for structured language-model programs, agentic workloads, branching, and RadixAttention-style prefix reuse.</li>
+</ul>
+<p>vLLM and SGLang are strongest when scheduler and cache policy are the main controls, but their fit still depends on model support and observed traffic structure. The next question is whether a more compiled or packaged stack can trade flexibility for better execution on a fixed hardware and shape range.</p>
+</section>
+<section id="sec-m4-c10-s18" class="level3" data-number="10.9.2">
+<h3 data-number="10.9.2" class="anchored" data-anchor-id="sec-m4-c10-s18"><span class="header-section-number">10.9.2</span> TensorRT-LLM and Triton Inference Server/NIM</h3>
+<p>Compiled and packaged NVIDIA stacks support a narrower set of models and hardware in exchange for optimized engine files, deployment integration, or less setup work. Evaluate the execution engine separately from the endpoint layer.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>TensorRT-LLM:</strong></span> NVIDIA-optimized inference stack that can produce high raw performance on supported hardware and model families, with compiled-engine files and shape-support constraints that must be managed.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Triton Inference Server:</strong></span> Production serving layer for HTTP/gRPC endpoints, model repositories, versioning, metrics, and ensemble deployment. Transformer execution is supplied by the configured model backend, while Triton owns the endpoint and deployment layer.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>NVIDIA NIM:</strong></span> Packaged NVIDIA inference microservice approach that trades lower integration work for stronger packaging, version, and hardware assumptions.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Custom inference silicon:</strong></span> Systems such as Groq, Cerebras, SambaNova, Etched, or Taalas change the hardware and compiler base. Model support, memory capacity, interconnect, compiler maturity, and production lock-in become the selection constraints.</li>
+</ul>
+<p>Compiled and packaged stacks can reduce execution or integration cost only within their supported model, shape, version, and hardware range. The next question is whether the deployment values local operation, compact formats, and portability more than fleet-scale GPU throughput.</p>
+</section>
+<section id="sec-m4-c10-s19" class="level3" data-number="10.9.3">
+<h3 data-number="10.9.3" class="anchored" data-anchor-id="sec-m4-c10-s19"><span class="header-section-number">10.9.3</span> Local and CPU-oriented serving</h3>
+<p>Local and hardware-constrained stacks emphasize compact model formats, portability, and simple model management. Their objectives differ from a multi-GPU serving engine optimized for high fleet throughput.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>llama.cpp and GGUF:</strong></span> Local-first CPU/GPU/edge inference ecosystem with compact quantized formats. It serves local and hardware-constrained deployment, while high-throughput GPU fleets require a separately tuned serving engine and scheduler.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Ollama:</strong></span> Local model-management layer that commonly sits on top of llama.cpp-style execution. It optimizes local usability more than cluster-scale scheduling.</li>
+</ul>
+<p>A <code>serving engine</code> is the request-scheduling and KV-cache-management layer represented by systems such as vLLM and SGLang. TensorRT-LLM, Triton Inference Server, NVIDIA NIM, llama.cpp/GGUF, and Ollama are related inference or deployment stacks with different scheduler controls and command-line flags.</p>
+<p>The table connects a workload and an operating constraint to the stack that is most useful to evaluate first. Measure the actual prompt lengths, output lengths, prefix reuse, adapters, and hardware on the intended deployment path before choosing the stack.</p>
+<div id="tbl-m4-c10-t04" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c10-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;10.4: Serving-stack selection by workload and operating constraint.
+</figcaption>
+<div aria-describedby="tbl-m4-c10-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Workload or constraint</th>
+<th>Most relevant stack to evaluate</th>
+<th>Why it fits or what to test</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Dense GPU serving with mixed request lengths, broad model support, and many adapters</td>
+<td>vLLM</td>
+<td>Continuous batching and KV-cache block management target high token throughput; test scheduler overhead and cache capacity under the actual traffic mix</td>
+</tr>
+<tr class="even">
+<td>Branchy agents, retrieval flows, structured programs, or heavily shared prompt trees</td>
+<td>SGLang</td>
+<td>Its programming model and RadixAttention-style reuse target structured control flow and prefix sharing; test reuse rate and constraint overhead</td>
+</tr>
+<tr class="odd">
+<td>Supported NVIDIA model and hardware with stable shapes and an accepted engine-build workflow</td>
+<td>TensorRT-LLM</td>
+<td>Compiled engines can target a narrow set of models and hardware; test build time, dimension coverage, and deployment update cost</td>
+</tr>
+<tr class="even">
+<td>Production endpoints with model repositories, versioning, or multi-model operations</td>
+<td>Triton Inference Server or NVIDIA NIM</td>
+<td>Deployment controls, metrics, and lifecycle management can determine the fit; test the execution backend as well as the endpoint layer</td>
+</tr>
+<tr class="odd">
+<td>Local, offline, privacy-sensitive, or hardware-constrained deployment</td>
+<td>llama.cpp/GGUF or Ollama</td>
+<td>Compact quantized models and local model management reduce deployment footprint; test quality, memory capacity, and interactive latency on the target device</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The main trade-offs are flexibility, model coverage, hardware lock-in, build or compilation cost, production readiness, and whether latency or throughput is the primary target. Test the actual mix of prompt lengths, model changes, adapters, and branchy agent programs instead of relying on one fixed-dimension benchmark.</p>
+<p>A serving-engine setting is still only a proposed explanation until it is tested under a fixed workload. Chapter 11 turns scheduler, cache, compiler, kernel, and communication changes into controlled experiments with warmup, synchronized timing, correctness checks, and repeatable reports.</p>
+
+
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../chapters/ch-m4-c09.html" class="pagination-link" aria-label="Decode and KV Cache">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Decode and KV Cache</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m4-c11.html" class="pagination-link" aria-label="Performance Experiments">
+        <span class="nav-page-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Performance Experiments</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

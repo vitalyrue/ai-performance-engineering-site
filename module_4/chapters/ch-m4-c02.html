@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>2&nbsp; GPU Hardware and Memory – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m4-c03.html" rel="next">
+<link href="../chapters/ch-m4-c01.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-i.html">Part I: Fundamentals</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c02.html"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">GPU Hardware and Memory</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Advanced LLM Performance Engineering</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Advanced LLM Performance Engineering</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m4-index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction and Learning Path</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-i.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: Fundamentals</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">LLM Workloads and Performance Limits</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c02.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">GPU Hardware and Memory</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Software to CUDA</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Triton and Custom Kernels</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Performance Models and Profiling</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Compilation and Runtime</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-ii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: Training and Inference Workloads</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Training and Precision</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Inference Workloads</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Decode and KV Cache</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Serving Engines</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Performance Experiments</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-iii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: Communication and Distributed Systems</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">GPU Communication</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Distributed Training and Serving</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-a.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Reference Material</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-b.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Lists of Figures and Tables</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m4-c02-s01" id="toc-sec-m4-c02-s01" class="nav-link active" data-scroll-target="#sec-m4-c02-s01"><span class="header-section-number">2.1</span> CPU and GPU strengths</a></li>
+  <li><a href="#sec-m4-c02-s02" id="toc-sec-m4-c02-s02" class="nav-link" data-scroll-target="#sec-m4-c02-s02"><span class="header-section-number">2.2</span> GPU chip structure</a></li>
+  <li><a href="#sec-m4-c02-s03" id="toc-sec-m4-c02-s03" class="nav-link" data-scroll-target="#sec-m4-c02-s03"><span class="header-section-number">2.3</span> Memory hierarchy</a></li>
+  <li><a href="#sec-m4-c02-s04" id="toc-sec-m4-c02-s04" class="nav-link" data-scroll-target="#sec-m4-c02-s04"><span class="header-section-number">2.4</span> Tensor cores and shape alignment</a></li>
+  <li><a href="#sec-m4-c02-s05" id="toc-sec-m4-c02-s05" class="nav-link" data-scroll-target="#sec-m4-c02-s05"><span class="header-section-number">2.5</span> Intra-node interconnects</a></li>
+  <li><a href="#sec-m4-c02-s06" id="toc-sec-m4-c02-s06" class="nav-link" data-scroll-target="#sec-m4-c02-s06"><span class="header-section-number">2.6</span> Interconnect hierarchy beyond HBM</a></li>
+  <li><a href="#sec-m4-c02-s07" id="toc-sec-m4-c02-s07" class="nav-link" data-scroll-target="#sec-m4-c02-s07"><span class="header-section-number">2.7</span> Hardware limits on software design</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-i.html">Part I: Fundamentals</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c02.html"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">GPU Hardware and Memory</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m4-c02" class="quarto-section-identifier"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">GPU Hardware and Memory</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Teach GPU chip structure, SM execution, memory hierarchy, Tensor Cores, and interconnect fabrics.</p>
+<p>A Graphics Processing Unit (GPU) is built for throughput. It spends less chip area on complex control logic than a Central Processing Unit (CPU) and more area on many arithmetic lanes, memory bandwidth, and hardware scheduling of many threads. Transformer workloads fit this design when operations are regular and sufficiently large.</p>
+<p>The hardware hierarchy includes compute units, registers, shared memory, L2 cache, High Bandwidth Memory (HBM), host memory, and GPU interconnects. Each level differs in latency, bandwidth, capacity, and programmer control. Efficient software uses this hierarchy intentionally.</p>
+<p>This hierarchy controls many later optimizations. Coalesced memory access improves HBM transactions. Tensor cores accelerate aligned matrix operations. Kernel fusion reduces trips through HBM. Tensor parallelism and all-reduce depend on the difference between NVLink inside a node and InfiniBand across nodes.</p>
+<p>A training step keeps weights, activations, gradients, and optimizer state live. A decode step repeatedly reads weights and the KV cache for every generated token. The hardware hierarchy determines where these objects can reside and whether moving them costs more time than computing on them.</p>
+<p>A GPU combines device-wide memory and cache with many Streaming Multiprocessors (SMs), each containing local execution and storage resources.</p>
+<div id="fig-m4-c02-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Two GPU devices each contain HBM, shared L2 cache, and Streaming Multiprocessors. One SM is expanded into registers, shared memory, warp scheduling, and Tensor Cores. NVLink joins device boundaries.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c02-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c02-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="Two GPU devices each contain HBM, shared L2 cache, and Streaming Multiprocessors. One SM is expanded into registers, shared memory, warp scheduling, and Tensor Cores. NVLink joins device boundaries.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c02-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.1: GPU resources are nested within a device, while NVLink connects device boundaries.
+</figcaption>
+</figure>
+</div>
+<p>High Bandwidth Memory (HBM) and L2 cache serve the whole device. Registers, shared memory, warp scheduling, and Tensor Cores belong inside an SM. The second device makes the boundary explicit: NVLink carries peer traffic between GPUs rather than connecting an SM directly to another device’s cache.</p>
+<section id="sec-m4-c02-s01" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="sec-m4-c02-s01"><span class="header-section-number">2.1</span> CPU and GPU strengths</h2>
+<p>CPUs and GPUs divide a workload by control complexity and parallel regularity. CPUs provide flexible, latency-sensitive execution for operating-system work, scheduling, tokenization, and branch-heavy control flow. GPUs apply large numbers of arithmetic lanes to regular data-parallel operations such as matrix multiplication and elementwise tensor transforms.</p>
+<p>CPU and GPU designs emphasize different kinds of work. As a broad design tendency, CPUs devote more resources to low-latency control, caches, and irregular execution, while GPUs devote more resources to throughput across many similar operations.</p>
+<div id="fig-m4-c02-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="CPU and GPU designs emphasize different kinds of work. As a broad design tendency, CPUs devote more resources to low-latency control, caches, and irregular execution, while GPUs devote more resources to throughput across many similar operations. Treat the visual as a conceptual comparison rather than a literal chip floorplan. Modern CPUs and GPUs overlap in capability, but the throughput emphasis of GPUs explains why regular tensor shapes, batching, and memory coalescing matter.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c02-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c02-f02.jpg" class="img-fluid figure-img" style="width:6.1in" alt="CPU and GPU designs emphasize different kinds of work. As a broad design tendency, CPUs devote more resources to low-latency control, caches, and irregular execution, while GPUs devote more resources to throughput across many similar operations. Treat the visual as a conceptual comparison rather than a literal chip floorplan. Modern CPUs and GPUs overlap in capability, but the throughput emphasis of GPUs explains why regular tensor shapes, batching, and memory coalescing matter.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c02-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.2: CPU and GPU design trade-off
+</figcaption>
+</figure>
+</div>
+<p>Treat the visual as a conceptual comparison rather than a literal chip floorplan. Modern CPUs and GPUs overlap in capability, but the throughput emphasis of GPUs explains why regular tensor shapes, batching, and memory coalescing matter.</p>
+<p>A CPU runs fewer cores designed for branches, caches, and low-latency control work. A GPU runs many lightweight threads across similar data. Dense transformer projections therefore map naturally to GPU throughput, while request scheduling and irregular scalar logic remain CPU-side work. GPU performance depends on exposing enough parallel work, preserving locality, and avoiding divergence or tiny launches.</p>
+</section>
+<section id="sec-m4-c02-s02" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="sec-m4-c02-s02"><span class="header-section-number">2.2</span> GPU chip structure</h2>
+<p>GPU chip structure is the organization of execution units, on-chip storage, caches, and off-chip memory that a kernel uses while it runs. Computation happens in execution units, while data is staged and reused through several storage levels with different scopes and costs.</p>
+<p>GPU performance depends on registers, per-block shared memory, hardware-managed caches, High Bandwidth Memory (HBM), and external interconnects. Each level differs in scope, capacity, lifetime, and how software influences placement or reuse.</p>
+<div id="fig-m4-c02-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="GPU performance depends on registers, per-block shared memory, hardware-managed caches, High Bandwidth Memory (HBM), and external interconnects. Each level differs in scope, capacity, lifetime, and how software influences placement or reuse. The capacities printed in this source slide describe a particular accelerator rather than every GPU. Do not read the tiers as one compulsory path for every access: instructions, caches, shared-memory staging, and interconnect traffic depend on the operation and kernel.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c02-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c02-f03.jpg" class="img-fluid figure-img" style="width:6.1in" alt="GPU performance depends on registers, per-block shared memory, hardware-managed caches, High Bandwidth Memory (HBM), and external interconnects. Each level differs in scope, capacity, lifetime, and how software influences placement or reuse. The capacities printed in this source slide describe a particular accelerator rather than every GPU. Do not read the tiers as one compulsory path for every access: instructions, caches, shared-memory staging, and interconnect traffic depend on the operation and kernel.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c02-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.3: GPU memory hierarchy
+</figcaption>
+</figure>
+</div>
+<p>The capacities printed in this source slide describe a particular accelerator rather than every GPU. Do not read the tiers as one compulsory path for every access: instructions, caches, shared-memory staging, and interconnect traffic depend on the operation and kernel.</p>
+<p>A Streaming Multiprocessor (SM) is the main execution unit. It schedules warps, uses registers for thread-local values, uses shared memory for block-local cooperation, and issues work to arithmetic units. The L2 cache and HBM are shared across the device.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Definition - SM, warp, and occupancy</strong></p>
+<p><strong>Streaming Multiprocessor (SM):</strong> GPU execution unit that schedules warps and has a finite pool of registers, shared memory, scheduler slots, and arithmetic resources.</p>
+<p><strong>Warp:</strong> Hardware scheduling group of threads, usually 32 lanes on NVIDIA GPUs. Warp behavior shapes divergence and memory coalescing.</p>
+<p><strong>Occupancy:</strong> Amount of resident work available on an SM. High occupancy can hide latency, but it does not guarantee high throughput when memory access, instruction mix, or dependencies are poor.</p>
+</div>
+<p>The chip structure matters because every kernel consumes scarce per-SM resources: registers, shared memory, scheduler slots, and memory bandwidth. A kernel with too many registers per thread may reduce the number of active warps. A kernel with too much shared memory per block may reduce how many blocks can reside on an SM. A kernel with poor memory locality can keep arithmetic units idle even when many threads are present.</p>
+</section>
+<section id="sec-m4-c02-s03" class="level2" data-number="2.3">
+<h2 data-number="2.3" class="anchored" data-anchor-id="sec-m4-c02-s03"><span class="header-section-number">2.3</span> Memory hierarchy</h2>
+<p>GPU memory is not one uniform pool. Performance depends on which level serves the data, who can see it, and how directly the programmer can control it.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Registers:</strong></span> Fastest storage, private to one thread, and used for scalar temporaries and small per-thread fragments. Register pressure can reduce occupancy because each Streaming Multiprocessor (SM) has a finite register file.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Shared memory:</strong></span> On-chip memory shared by threads in one block, also called a Cooperative Thread Array (CTA). It is explicitly managed and useful for tiled reuse, but capacity is small and bank conflicts can waste bandwidth.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>L2 cache:</strong></span> Device-wide cache shared across SMs. It can capture cross-SM or cross-kernel locality, but programmers usually control it indirectly through access patterns and kernel choices rather than direct allocation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>High Bandwidth Memory (HBM):</strong></span> Large off-chip GPU memory that stores model weights, activations, gradients, optimizer state, and KV cache. Its bandwidth is high in absolute terms, but it is still much slower than on-chip storage.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Host memory and interconnect:</strong></span> CPU memory reached over PCIe or another system path. Transfers are much slower than on-device reuse, so repeated host/device movement is usually a design smell in hot paths.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Memory-tier caveat</strong></p>
+<p>The phrase ‘GPU memory’ hides large cost differences among registers, shared memory, L2, HBM, and host transfers. A kernel can fit in HBM and still be slow because it fails to reuse data closer to the SM.</p>
+</div>
+<div id="tbl-m4-c02-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c02-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;2.1: Memory hierarchy comparison.
+</figcaption>
+<div aria-describedby="tbl-m4-c02-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Level</th>
+<th>Scope</th>
+<th>Engineering role</th>
+<th>Main risk</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Registers</td>
+<td>Thread</td>
+<td>Fast scalar and vector temporaries</td>
+<td>Too many registers reduce occupancy</td>
+</tr>
+<tr class="even">
+<td>Shared memory</td>
+<td>Block / CTA</td>
+<td>Tile reuse and cooperative staging</td>
+<td>Bank conflicts or capacity pressure</td>
+</tr>
+<tr class="odd">
+<td>L2 cache</td>
+<td>Device</td>
+<td>Cross-SM reuse and caching</td>
+<td>Limited control and eviction</td>
+</tr>
+<tr class="even">
+<td>HBM</td>
+<td>Device</td>
+<td>Large tensor storage</td>
+<td>Bandwidth and latency dominate if reuse is poor</td>
+</tr>
+<tr class="odd">
+<td>Host / interconnect</td>
+<td>System or cluster</td>
+<td>Data loading and multi-GPU movement</td>
+<td>Transfer latency and bandwidth</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>GPU caches are hardware-managed storage between Streaming Multiprocessors and HBM. CUDA memory spaces such as registers, shared memory, global memory, and constant memory expose explicit placement choices; ordinary L1 and L2 cache residency mostly follows access pattern, instruction choice, and hardware replacement policy.</p>
+<p>The per-SM L1 or unified data cache is closest to executing warps. It can reduce latency for repeated or nearby accesses inside work scheduled on the same SM. Cross-SM reuse belongs mainly to the device-wide L2 cache, which sits between kernel load/store traffic and HBM. L2 can capture reuse across SMs or across nearby kernel launches, while remaining much smaller than model weights, activations, or long KV-cache state.</p>
+<p>Associativity is the cache rule that limits how many cache lines can occupy the same cache set. A cache can have enough total capacity and still miss if too many live lines map to the same set; that failure mode is a conflict miss. On current NVIDIA GPUs, exact set mapping, replacement details, and associativity are architecture-specific implementation details rather than a stable CUDA programming contract.</p>
+<p>The practical optimization question is therefore not ‘which cache set owns this tensor?’ The useful questions are whether adjacent lanes access adjacent addresses, whether the working set fits within the level that should reuse it, whether a stride pattern repeatedly fights for the same limited cache resources, how many cache sectors are requested, how many requests miss to L2 or HBM, and whether reused data should be staged explicitly in shared memory or registers.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>L1 or unified data cache:</strong></span> Per-SM cache path for local load/store traffic. It helps locality inside work scheduled on the same SM, but it is not a general cross-SM state store.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>L2 cache:</strong></span> Device-wide cache shared by SMs. It is the main hardware cache level to discuss for cross-SM global-memory locality and L2 persistence controls.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cache sector:</strong></span> Profiler-visible access granularity. Nsight Compute reports sectors as 32-byte chunks, with four sectors in a 128-byte L1 or L2 cache line on documented NVIDIA profiling views.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Associativity:</strong></span> Number of cache lines that can occupy one cache set. It matters when address layout or stride creates conflict misses even though total cache capacity seems sufficient.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cache control:</strong></span> A set of hints, resource preferences, and explicit staging choices. The programmer can influence replacement priority and allocation behavior, but cannot assign arbitrary tensors to cache sets or pin ordinary cache lines.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Where associativity shows up</strong></p>
+<p><strong>Stride and layout conflicts:</strong> Power-of-two strides, column-wise traversal, or poorly padded leading dimensions can make warps revisit a small subset of cache sets. Symptoms are low hit rate or high miss traffic even when the nominal working set is not huge.</p>
+<p><strong>Warp memory shape:</strong> Coalesced contiguous lane accesses use cache sectors efficiently. Scattered lane accesses consume more sectors and make replacement pressure harder to interpret.</p>
+<p><strong>Streaming versus reused data:</strong> A one-pass stream should not evict data that the next tile or next kernel will reuse. Marking or structuring streaming accesses differently is useful when the trace proves reuse is being lost.</p>
+<p><strong>Concurrent kernels and streams:</strong> L2 is shared. Multiple kernels with persisting windows, peer traffic, or large streaming reads can evict each other’s useful lines when their combined footprint exceeds the set-aside or effective cache capacity.</p>
+<p><strong>Explicit staging:</strong> When reuse must be predictable inside a tile, shared memory and registers are stronger tools than hoping hardware cache replacement keeps the right lines.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Cache control boundaries</strong></p>
+<p><strong>Direct control:</strong> Use registers and shared memory when the kernel needs predictable local reuse.</p>
+<p><strong>Runtime preferences:</strong> Use <code>cudaFuncSetCacheConfig</code> or <code>cudaFuncAttributePreferredSharedMemoryCarveout</code> to prefer an L1/shared-memory balance on supported devices. These are preferences or hints, not mandatory placement.</p>
+<p><strong>L2 persistence:</strong> Use a CUDA stream or graph access-policy window when a global-memory range is repeatedly reused and small enough for preferential L2 retention. The window uses properties such as persisting, streaming, and normal access plus a <code>hitRatio</code> hint.</p>
+<p><strong>Low-level cache operators:</strong> Generated PTX or hand-written low-level kernels can use cache operators and eviction hints, such as cache-all, L2-only, streaming, evict-first, or evict-last forms. These express intent; they do not change program correctness or guarantee a replacement outcome.</p>
+<p><strong>Unsupported control model:</strong> Exact associativity, undocumented replacement policy, and manual cache-set placement are architecture details, not normal CUDA programming controls.</p>
+<p><strong>Proof:</strong> Use profiler counters for sectors per request, L1/TEX hit behavior, L2 hit rate, sector misses to device, system, or peer memory, and HBM traffic before assuming a cache hint helped.</p>
+</div>
+<p>Cache controls help only when the access pattern creates reuse and profiler counters show that the hardware retains it; they cannot repair scattered accesses or force exact residency. Once operands reach an SM, the next question is whether their shapes and data types let Tensor Cores perform the arithmetic efficiently.</p>
+</section>
+<section id="sec-m4-c02-s04" class="level2" data-number="2.4">
+<h2 data-number="2.4" class="anchored" data-anchor-id="sec-m4-c02-s04"><span class="header-section-number">2.4</span> Tensor cores and shape alignment</h2>
+<p>Tensor Cores are specialized Matrix Multiply-Accumulate (MMA) units inside Streaming Multiprocessor partitions. They consume supported matrix tiles at very high throughput. One H100 SXM configuration has 132 SMs and four fourth-generation Tensor Cores per SM, but exact counts and available throughput depend on the GPU variant and enabled chip resources.</p>
+<p>Tensor Cores operate on tiles rather than arbitrary scalar operations. A 16 x 16 x 16 MMA tile is a useful first approximation, though exact supported shapes depend on architecture, dtype, and kernel path. This is why hidden sizes, head dimensions, batch shapes, and padding can affect performance. Padding may increase nominal arithmetic while improving utilization by moving the operation onto a fast tensor-core path.</p>
+<p>In modern transformer GEMM, ‘compute-bound’ often means ‘tensor-core-bound’: the useful question is whether the operation reaches the specialized matrix units efficiently. Verify this in traces rather than assuming it. Nsight Systems kernel names, Nsight Compute instruction metrics, and achieved tensor-core utilization can show whether the intended path was actually used.</p>
+<p>Shape alignment depends on the library path and GPU architecture as well as the mathematical matrix dimensions. NVIDIA’s matrix-multiplication guidance reports that modern cuBLAS and cuDNN can often use Tensor Cores even when dimensions are imperfectly aligned, while efficiency improves when the fastest-varying matrix dimensions align to hardware-friendly byte multiples. For FP16, a common practical rule is to prefer multiples of 8 elements, with larger multiples often helping on A100-class paths. Exact requirements vary by CUDA library version, dtype, layout, and GPU generation.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Tensor Core caveat</strong></p>
+<p>A poorly aligned matrix shape can trigger internal padding, a less efficient tile path, a different kernel, or Tensor Core execution with lower utilization. The performance diagnosis should therefore check the actual kernel path, achieved utilization, and tensor dimensions together.</p>
+</div>
+<p>The tensor-core figure compares two tile-utilization cases. It is a schematic utilization comparison, not a timing benchmark.</p>
+<p>Tensor Cores execute supported matrix multiply-accumulate instructions on small hardware fragments. Kernels combine those fragments into warp-, block-, and software-level tiles that can be much larger than one instruction.</p>
+<div id="fig-m4-c02-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Tensor Cores execute supported matrix multiply-accumulate instructions on small hardware fragments. Kernels combine those fragments into warp-, block-, and software-level tiles that can be much larger than one instruction. The 64 by 64 regions in the visual are software or kernel tiles, not the dimensions of one Tensor Core instruction. Alignment and remainder handling can affect utilization, while exact instruction shapes and Tensor Core counts depend on GPU architecture, dtype, and SKU.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c02-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c02-f04.jpg" class="img-fluid figure-img" style="width:6.1in" alt="Tensor Cores execute supported matrix multiply-accumulate instructions on small hardware fragments. Kernels combine those fragments into warp-, block-, and software-level tiles that can be much larger than one instruction. The 64 by 64 regions in the visual are software or kernel tiles, not the dimensions of one Tensor Core instruction. Alignment and remainder handling can affect utilization, while exact instruction shapes and Tensor Core counts depend on GPU architecture, dtype, and SKU.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c02-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2.4: Tensor Core tiling and utilization
+</figcaption>
+</figure>
+</div>
+<p>The 64 by 64 regions in the visual are software or kernel tiles, not the dimensions of one Tensor Core instruction. Alignment and remainder handling can affect utilization, while exact instruction shapes and Tensor Core counts depend on GPU architecture, dtype, and SKU.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chart note</strong></p>
+<p><strong>Measured or compared:</strong> Tile utilization for a matrix problem that aligns cleanly with tensor-core tiles versus one that wastes lanes or tile capacity.</p>
+<p><strong>Axes, units, and series:</strong> The visual uses tile grids rather than numeric axes. Labels indicate tile dimensions and the amount of useful versus unused tile work in the best and not-so-great cases.</p>
+<p><strong>Read for:</strong> Read for the shape-alignment boundary: padding or choosing dimensions that match supported MMA tiles can increase useful tensor-core utilization even if nominal arithmetic grows.</p>
+<p><strong>Source status:</strong> Exact source schematic screenshot; utilization labels are preserved from the slide and no timing values are extracted.</p>
+</div>
+<p>Tensor Core speed requires a supported numerical format, aligned dimensions, and an execution path that actually selects the accelerated kernel. When an operation spans several GPUs, the next question is whether the local interconnect can move partial results quickly enough to preserve that compute gain.</p>
+</section>
+<section id="sec-m4-c02-s05" class="level2" data-number="2.5">
+<h2 data-number="2.5" class="anchored" data-anchor-id="sec-m4-c02-s05"><span class="header-section-number">2.5</span> Intra-node interconnects</h2>
+<p>The earlier sections described one GPU’s execution and memory hierarchy. Scaling starts when tensors must cross a physical boundary: between GPUs in one server or between servers in a cluster. A GPU is one execution device. A board or accelerator card packages one or more GPUs and their local HBM. A node, also called a server, contains CPUs, host memory, PCIe root complexes, network interface cards, and one or more GPU boards. Intra-node traffic stays inside one server; inter-node traffic crosses the cluster network between servers.</p>
+<p>Intra-node topology starts before GPU-to-GPU links. Multi-socket servers often have Non-Uniform Memory Access (NUMA): CPU cores, host memory channels, PCIe root complexes, GPUs, and Network Interface Cards (NICs) are closer to some sockets than others. A process placed on the wrong CPU socket can feed a nearby-looking GPU through a slower path.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Definition - NUMA and placement</strong></p>
+<p><strong>NUMA:</strong> Non-Uniform Memory Access. Memory and I/O access time depends on which CPU socket is attached to the memory controller or PCIe path.</p>
+<p><strong>Closest CPU/socket:</strong> The CPU socket with the shortest host path to a given GPU or NIC. Data loading, tokenization, and host-to-device copies can be slower when the process is scheduled far from that path.</p>
+<p><strong>Process/GPU pinning:</strong> Bind ranks, CPU worker threads, and visible GPUs so the host work for a GPU runs near that GPU’s PCIe and memory locality when the system topology makes this relevant.</p>
+<p><strong>Why it matters:</strong> Bad locality can reduce throughput or add latency before InfiniBand, NCCL, or distributed algorithms enter the picture.</p>
+</div>
+<p>PCIe connects GPUs to the host and sometimes to each other, but it is much slower than on-package or board-level GPU interconnects. NVLink provides higher bandwidth GPU-to-GPU communication inside a node. NVSwitch extends this idea to many GPUs. These fabrics matter for tensor parallelism and frequent collectives.</p>
+<div id="tbl-m4-c02-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c02-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;2.2: Typical movement paths and bandwidth ranges for planning. Actual values depend on the hardware generation and topology.
+</figcaption>
+<div aria-describedby="tbl-m4-c02-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Path</th>
+<th>Typical scope</th>
+<th>Typical bandwidth</th>
+<th>How to use the number</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>HBM</td>
+<td>On one GPU</td>
+<td>Several TB/s on data-center GPUs</td>
+<td>Use as the roofline memory ceiling for local kernel reads and writes.</td>
+</tr>
+<tr class="even">
+<td>NVLink / NVSwitch</td>
+<td>GPU-to-GPU inside supported systems</td>
+<td>Hundreds of GB/s to around TB/s-class aggregate paths depending on generation and topology</td>
+<td>Useful for frequent tensor-parallel or collective traffic inside the fast local domain.</td>
+</tr>
+<tr class="odd">
+<td>PCIe</td>
+<td>CPU/GPU or device path through PCIe</td>
+<td>Tens of GB/s per direction for current high-end links</td>
+<td>Good for setup and staged copies, but too slow for repeated hot-loop movement.</td>
+</tr>
+<tr class="even">
+<td>InfiniBand / RoCE</td>
+<td>Across nodes</td>
+<td>Tens to hundreds of GB/s effective per node only on engineered fabrics</td>
+<td>Use for scale-out communication after confirming the runtime selected the intended NIC and transport.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="sec-m4-c02-s06" class="level2" data-number="2.6">
+<h2 data-number="2.6" class="anchored" data-anchor-id="sec-m4-c02-s06"><span class="header-section-number">2.6</span> Interconnect hierarchy beyond HBM</h2>
+<p>An interconnect is the path used to move data between processors, accelerators, host memory, network cards, or nodes. After data leaves HBM or one GPU, the cost model changes: bandwidth usually drops, latency rises, and synchronization becomes more visible.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Definition - Interconnect terms</strong></p>
+<p><strong>PCIe:</strong> General host/device expansion bus for CPUs, GPUs, NICs, and other devices.</p>
+<p><strong>NVLink:</strong> High-bandwidth GPU-to-GPU link available only on supported systems and topologies.</p>
+<p><strong>NVSwitch:</strong> Switch fabric that connects multiple NVLink-capable GPUs inside a server or platform.</p>
+<p><strong>NIC:</strong> Network Interface Card, the device that connects a node to the cluster network.</p>
+<p><strong>InfiniBand:</strong> High-performance cluster fabric commonly used for multi-node GPU training and serving.</p>
+<p><strong>RoCE:</strong> RDMA over Converged Ethernet; performance depends strongly on Ethernet fabric configuration.</p>
+<p><strong>Ethernet:</strong> General-purpose network fabric. It is ubiquitous, but unoptimized paths are often weak for frequent GPU collectives.</p>
+</div>
+<p>After HBM, the next distance is usually another GPU or another node. Moving tensors across PCIe, NVLink, NVSwitch, InfiniBand, RoCE, or Ethernet is far more expensive than reading registers or shared memory. Distributed training and distributed inference therefore add explicit communication costs and synchronization points to the single-GPU execution model.</p>
+<p>A useful mental model is distance. Intra-SM movement is cheapest, HBM movement is expensive but local, GPU-to-GPU movement inside a node is more expensive, and node-to-node movement is usually more expensive again. NCCL and <code>torch.distributed</code> appear later as software layers that use these physical paths.</p>
+<p>A memory-transfer path is the hardware route used to move bytes from one memory domain to another. For GPU workloads, the important domains are CPU system memory, pinned host memory, one GPU’s HBM, another GPU’s HBM, and memory reachable through a Network Interface Card (NIC). These domains differ in latency, bandwidth, address-translation rules, and synchronization behavior.</p>
+<p>The performance mistake is to treat every transfer as the same kind of HBM traffic. A kernel reading its own tensor, a host batch copied into GPU memory, a peer GPU copy, and a cross-node collective all move bytes, but they use different software owners and hardware paths.</p>
+<p>Copy engines and caches solve different movement problems. A copy engine is used for explicit transfer work, such as host-device copies or some device-device copies. The cache hierarchy serves ordinary kernel load/store instructions as warps read and write tensors. A slow trace can involve both: a batch might first move through a DMA copy path into HBM, then a kernel might waste HBM bandwidth because its warp loads miss cache or access scattered sectors.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>SM load/store path:</strong></span> Used by kernels reading and writing tensors already in the same GPU’s HBM. Requests flow through the GPU execution pipeline, L2 cache, memory controllers, and HBM stacks.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Copy engine and DMA path:</strong></span> Used by many explicit host-device or device-device copy operations. The host submits a command, while Direct Memory Access (DMA)-capable hardware moves bytes without the CPU copying each byte in a software loop.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Peer-to-peer path:</strong></span> Used when one GPU can directly copy to or access another GPU’s memory through NVLink, NVSwitch, or PCIe peer paths supported by the platform.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>NIC and RDMA path:</strong></span> Used when bytes cross nodes through a network card. On supported systems, GPUDirect RDMA lets the NIC access GPU memory directly; otherwise the payload may stage through host memory.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Host bounce path:</strong></span> A fallback where GPU data is copied through CPU memory before reaching its destination. It is often correct but can add PCIe traffic, CPU-memory pressure, and latency.</li>
+</ul>
+<p>The diagram separates the movement paths. The following principles and table answer a practical design question: which software layer initiates each path, which physical route carries the bytes, and which condition should be checked before optimizing it.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Transfer design principles</strong></p>
+<p><strong>Pinned-memory staging:</strong> Use page-locked host buffers when repeated host-to-device copies need efficient DMA and possible overlap.</p>
+<p><strong>Compute near data:</strong> Run the operation where the tensor already lives instead of moving the tensor to a more convenient but distant processor.</p>
+<p><strong>Direct path validation:</strong> Confirm that a peer, NVLink/NVSwitch, or RDMA path is actually available before assuming the fast route exists.</p>
+<p><strong>Distance by frequency:</strong> The more often data moves, the closer the communicating devices must be. Per-token communication should stay closer than per-step or background movement.</p>
+</div>
+<div id="tbl-m4-c02-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c02-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;2.3: Transfer paths: initiating software, physical route, and diagnostic check.
+</figcaption>
+<div aria-describedby="tbl-m4-c02-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Path</th>
+<th>Typical owner</th>
+<th>Hardware route</th>
+<th>What to verify</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Kernel HBM access</td>
+<td>Kernel code, vendor library, Triton, TorchInductor</td>
+<td>SM load/store through L2 and HBM controllers</td>
+<td>Uncoalesced access or poor reuse wastes HBM bandwidth</td>
+</tr>
+<tr class="even">
+<td>Host to GPU</td>
+<td>PyTorch tensor placement, CUDA runtime</td>
+<td>Pinned/pageable host memory through PCIe or similar host path</td>
+<td>Pageable staging, NUMA mismatch, hidden synchronization</td>
+</tr>
+<tr class="odd">
+<td>GPU to GPU</td>
+<td>CUDA peer copy, NCCL, distributed framework</td>
+<td>NVLink, NVSwitch, or PCIe peer path</td>
+<td>Peer access unavailable, topology asymmetry, host bounce</td>
+</tr>
+<tr class="even">
+<td>GPU to network</td>
+<td>NCCL, UCX/MPI, NIC driver</td>
+<td>NIC/RDMA path through InfiniBand, RoCE, or Ethernet</td>
+<td>Wrong NIC, no GPUDirect RDMA, congestion, rank skew</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Name the data path before choosing a fix. A profiler copy span might be a host-device DMA transfer, a peer GPU copy, a network transfer, unified-memory migration, or explicit kernel load/store traffic. Each path requires a different change.</p>
+</section>
+<section id="sec-m4-c02-s07" class="level2" data-number="2.7">
+<h2 data-number="2.7" class="anchored" data-anchor-id="sec-m4-c02-s07"><span class="header-section-number">2.7</span> Hardware limits on software design</h2>
+<p>Software design is constrained by the cheapest place where data can be reused. If values are reused within a thread, registers are ideal. If values are reused by a block, shared memory can help. If values are reused across kernels or requests, L2, HBM layout, and serving-engine cache policies matter. Distributed systems add another hierarchy: GPU-to-GPU, node-to-node, and storage-to-host movement.</p>
+<p>VRAM means the GPU device-memory capacity available for tensors, model weights, activations, workspaces, and caches. On the datacenter GPUs discussed in this module, that device memory is High Bandwidth Memory (HBM).</p>
+<p>The mismatch between GPU VRAM capacity growth and LLM parameter size growth explains why model sharding, quantization, and offloading are central concerns. GPU compute and bandwidth have scaled faster than per-device VRAM capacity, so memory capacity remains a hard physical wall for large models.</p>
+<p>This capacity comparison estimates what raw weights alone consume on example GPUs. Start with parameter count times bytes per stored weight, then reserve capacity for scales, temporary workspaces, allocator headroom, and the KV cache required by the target batch and context length.</p>
+<div id="tbl-m4-c02-t04" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c02-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;2.4: Example GPU capacity and raw-weight sizing limits.
+</figcaption>
+<div aria-describedby="tbl-m4-c02-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Example GPU</th>
+<th>VRAM capacity</th>
+<th>Peak bandwidth</th>
+<th>Example model scale</th>
+<th>What else uses memory</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Pascal (GP100 / P100)</td>
+<td>16 GB (HBM2)</td>
+<td>720 GB/s</td>
+<td>BERT-Large (~340M parameters)</td>
+<td>FP16 weights are about 0.68 GB; BERT-Large is a small model by current LLM-serving scale</td>
+</tr>
+<tr class="even">
+<td>Volta (GV100 / V100)</td>
+<td>32 GB (HBM2)</td>
+<td>900 GB/s</td>
+<td>GPT-2 (~1.5B parameters)</td>
+<td>Fits in a single GPU; requires ~3 GB in FP16, leaving room for activations</td>
+</tr>
+<tr class="odd">
+<td>Ampere (GA100 / A100)</td>
+<td>80 GB (HBM2e)</td>
+<td>2.0 TB/s</td>
+<td>GPT-3 (~175B parameters)</td>
+<td>Cannot fit in one GPU (~350 GB weights); requires multi-node sharding (tensor/pipeline parallel)</td>
+</tr>
+<tr class="even">
+<td>Hopper (GH100 / H100)</td>
+<td>80 GB (HBM3)</td>
+<td>3.35 TB/s</td>
+<td>Llama 3-70B (~70B parameters)</td>
+<td>FP16 weights need two or more GPUs. Raw FP8 weights can fit one 80 GB GPU only with an explicit KV-cache and workspace budget; INT4 leaves more headroom</td>
+</tr>
+<tr class="odd">
+<td>Blackwell (B200)</td>
+<td>192 GB (HBM3e)</td>
+<td>8.0 TB/s</td>
+<td>Llama 3-405B (~405B parameters)</td>
+<td>Requires multi-GPU sharding. An 8-GPU node is a common deployment unit; final GPU count depends on weight dtype plus KV-cache and workspace budget</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>CUDA makes this hierarchy programmable. The next chapter names the host, device, kernel, grid, block, thread, warp, stream, and memory-allocation objects that software uses to express work on this hardware.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../chapters/ch-m4-c01.html" class="pagination-link" aria-label="LLM Workloads and Performance Limits">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">LLM Workloads and Performance Limits</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m4-c03.html" class="pagination-link" aria-label="Software to CUDA">
+        <span class="nav-page-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Software to CUDA</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

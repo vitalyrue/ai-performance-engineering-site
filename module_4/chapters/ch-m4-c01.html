@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>1&nbsp; LLM Workloads and Performance Limits – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m4-c02.html" rel="next">
+<link href="../parts/part-i.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-i.html">Part I: Fundamentals</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c01.html"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">LLM Workloads and Performance Limits</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Advanced LLM Performance Engineering</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Advanced LLM Performance Engineering</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m4-index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction and Learning Path</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-i.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: Fundamentals</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c01.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">LLM Workloads and Performance Limits</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">GPU Hardware and Memory</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Software to CUDA</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Triton and Custom Kernels</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Performance Models and Profiling</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Compilation and Runtime</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-ii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: Training and Inference Workloads</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Training and Precision</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Inference Workloads</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Decode and KV Cache</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Serving Engines</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Performance Experiments</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-iii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: Communication and Distributed Systems</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">GPU Communication</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Distributed Training and Serving</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-a.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Reference Material</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-b.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Lists of Figures and Tables</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m4-c01-s01" id="toc-sec-m4-c01-s01" class="nav-link active" data-scroll-target="#sec-m4-c01-s01"><span class="header-section-number">1.1</span> Tensors and workload state</a></li>
+  <li><a href="#sec-m4-c01-s02" id="toc-sec-m4-c01-s02" class="nav-link" data-scroll-target="#sec-m4-c01-s02"><span class="header-section-number">1.2</span> Live state and memory</a></li>
+  <li><a href="#sec-m4-c01-s03" id="toc-sec-m4-c01-s03" class="nav-link" data-scroll-target="#sec-m4-c01-s03"><span class="header-section-number">1.3</span> Workload phases and limits</a></li>
+  <li><a href="#sec-m4-c01-s04" id="toc-sec-m4-c01-s04" class="nav-link" data-scroll-target="#sec-m4-c01-s04"><span class="header-section-number">1.4</span> Training step</a></li>
+  <li><a href="#sec-m4-c01-s05" id="toc-sec-m4-c01-s05" class="nav-link" data-scroll-target="#sec-m4-c01-s05"><span class="header-section-number">1.5</span> Finding bottlenecks</a>
+  <ul class="collapse">
+  <li><a href="#sec-m4-c01-s06" id="toc-sec-m4-c01-s06" class="nav-link" data-scroll-target="#sec-m4-c01-s06"><span class="header-section-number">1.5.1</span> Measurement workflow</a></li>
+  <li><a href="#sec-m4-c01-s07" id="toc-sec-m4-c01-s07" class="nav-link" data-scroll-target="#sec-m4-c01-s07"><span class="header-section-number">1.5.2</span> PyTorch performance interfaces</a></li>
+  <li><a href="#sec-m4-c01-s08" id="toc-sec-m4-c01-s08" class="nav-link" data-scroll-target="#sec-m4-c01-s08"><span class="header-section-number">1.5.3</span> The component that controls each symptom</a></li>
+  </ul></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-i.html">Part I: Fundamentals</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c01.html"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">LLM Workloads and Performance Limits</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m4-c01" class="quarto-section-identifier"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">LLM Workloads and Performance Limits</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Define LLM workloads as state-movement systems, establish runtime memory objects, and introduce the measurement-driven bottleneck attribution workflow.</p>
+<p>Large Language Model (LLM) performance engineering begins with the work the system is performing, not with an optimization feature. Training and inference serving execute related model operations, but they keep different objects live, repeat different phases, and report success with different measurements.</p>
+<p>A useful performance model connects mathematical tensors to physical storage, accounts for the state that remains live in each execution mode, and separates the major workload phases. Those observations lead to a repeatable method for finding the resource and software layer that limit a measured result.</p>
+<p>A bottleneck is the resource or dependency that currently limits one measured execution region. It is not a permanent label for the whole model: a training forward pass, an optimizer update, prompt prefill, one-token decode, and distributed synchronization can each be limited by a different resource.</p>
+<p>Training and inference serving repeatedly use the same model parameters, but their phases retain different tensors and expose different limits.</p>
+<div id="fig-m4-c01-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Shared model parameters feed separate training and inference-serving paths. Training retains activations, gradients, and optimizer state; serving retains and updates a KV cache across decode steps; both are measured by phase.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c01-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c01-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="Shared model parameters feed separate training and inference-serving paths. Training retains activations, gradients, and optimizer state; serving retains and updates a KV cache across decode steps; both are measured by phase.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c01-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1.1: Training and inference serving use shared parameters but keep different state live.
+</figcaption>
+</figure>
+</div>
+<p>The upper path follows activations, loss, gradients, optimizer state, and parameter update during training. The lower path separates prompt prefill from repeated decode and shows the KV cache as persistent state that decode reads and appends. Capacity, traffic, and bandwidth must be measured for the active phase rather than assigned to the whole model.</p>
+<section id="sec-m4-c01-s01" class="level2" data-number="1.1">
+<h2 data-number="1.1" class="anchored" data-anchor-id="sec-m4-c01-s01"><span class="header-section-number">1.1</span> Tensors and workload state</h2>
+<p>An LLM workload is a repeated sequence of mathematical operations applied to model state and intermediate tensors. Whether training updates parameters from data or inference evaluates fixed parameters across prompts, the execution mode determines which objects remain live and which measurements reveal the resource that limits the measured phase.</p>
+<p>The performance objects are ordinary PyTorch and transformer objects viewed through memory and execution. Tensors, parameters, activations, gradients, logits, loss, and KV cache each carry a distinct storage and lifetime cost.</p>
+<p>A tensor has two identities at the same time. Mathematically, it is a scalar, vector, matrix, or higher-dimensional array used in the model computation. Physically, it is a descriptor over storage: shape, dtype, strides, device, layout, storage offset, and sometimes gradient metadata. Performance depends on both identities.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Mathematical tensor:</strong></span> The array used in an operation, such as a vector of token embeddings, a matrix of weights, or a batch of logits.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Tensor storage:</strong></span> The underlying bytes allocated on CPU memory, GPU HBM, pinned host memory, or another device-visible memory tier.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Shape:</strong></span> The logical dimensions of the tensor. Shape controls matrix sizes, attention dimensions, batch sizes, and whether operations can use efficient kernels.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Dtype:</strong></span> The numeric representation, such as FP32, BF16, FP16, FP8, INT8, or INT4. Dtype controls bytes per element and can change which kernels are legal or fast.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Device:</strong></span> Where the tensor lives, such as CPU memory or <code>cuda:0</code>. Device placement controls dispatch and determines whether hidden transfers are needed.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Strides and layout:</strong></span> The mapping from logical indices to storage offsets. Strides determine whether nearby logical elements are nearby in memory and whether a tensor is contiguous.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Autograd metadata:</strong></span> Training-time metadata used by PyTorch autograd to know which operations produced a tensor and how to compute gradients.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Logits:</strong></span> Unnormalized model scores. In a causal language model, each predicted token position usually has one score for every vocabulary item; a softmax can convert those scores into probabilities.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Loss:</strong></span> A scalar or reduced tensor that measures how far the model output is from the training target and supplies the starting value for backward propagation.</li>
+</ul>
+<p>This distinction explains several later performance issues. A transpose can be mathematically cheap while creating a non-contiguous view. A dtype change can halve memory traffic while selecting a different kernel path. A tensor’s device determines whether a copy is required. Autograd metadata can extend a tensor’s lifetime through backward propagation.</p>
+<p>The next section names the persistent and temporary model objects that use this storage. Their lifetimes, rather than their mathematical names alone, determine peak memory and data movement.</p>
+<p><strong>Example: Inspecting tensor identity.</strong> This example shows why a tensor is more than its values. The same mathematical array carries shape, dtype, device, stride, and contiguity information that controls dispatch, memory footprint, and layout-sensitive performance.</p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Inspecting tensor identity</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c01-1"><a href="#lst-m4-c01-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c01-c01-2"><a href="#lst-m4-c01-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - shape and stride describe logical indexing and physical layout.</span></span>
+<span id="lst-m4-c01-c01-3"><a href="#lst-m4-c01-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - dtype and element_size connect the tensor to byte traffic.</span></span>
+<span id="lst-m4-c01-c01-4"><a href="#lst-m4-c01-c01-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - device determines whether PyTorch dispatches CPU work or CUDA work.</span></span>
+<span id="lst-m4-c01-c01-5"><a href="#lst-m4-c01-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - is_contiguous is often relevant before custom kernels, views, reshapes, and memory-coalescing</span></span>
+<span id="lst-m4-c01-c01-6"><a href="#lst-m4-c01-c01-6" aria-hidden="true" tabindex="-1"></a><span class="co">#   discussions.</span></span>
+<span id="lst-m4-c01-c01-7"><a href="#lst-m4-c01-c01-7" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c01-c01-8"><a href="#lst-m4-c01-c01-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c01-c01-9"><a href="#lst-m4-c01-c01-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c01-10"><a href="#lst-m4-c01-c01-10" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> torch.randn(<span class="dv">2</span>, <span class="dv">3</span>, device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float16)</span>
+<span id="lst-m4-c01-c01-11"><a href="#lst-m4-c01-c01-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c01-12"><a href="#lst-m4-c01-c01-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.shape)</span>
+<span id="lst-m4-c01-c01-13"><a href="#lst-m4-c01-c01-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.dtype)</span>
+<span id="lst-m4-c01-c01-14"><a href="#lst-m4-c01-c01-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.device)</span>
+<span id="lst-m4-c01-c01-15"><a href="#lst-m4-c01-c01-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.stride())</span>
+<span id="lst-m4-c01-c01-16"><a href="#lst-m4-c01-c01-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.is_contiguous())</span>
+<span id="lst-m4-c01-c01-17"><a href="#lst-m4-c01-c01-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.numel() <span class="op">*</span> x.element_size(), <span class="st">"bytes"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Example: Counting parameter and gradient bytes.</strong> This abbreviated calculation assumes that <code>model</code> already exists. Parameter bytes can be counted immediately; gradient bytes appear only after backward propagation has populated <code>p.grad</code>. The result covers tensor payloads, not allocator reservation, fragmentation, metadata, workspaces, or distributed buffers.</p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Counting parameter and gradient bytes</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c02-1"><a href="#lst-m4-c01-c02-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c01-c02-2"><a href="#lst-m4-c01-c02-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - Parameter bytes estimate persistent model state.</span></span>
+<span id="lst-m4-c01-c02-3"><a href="#lst-m4-c01-c02-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - Gradient bytes appear after backward propagation and usually mirror parameter shapes.</span></span>
+<span id="lst-m4-c01-c02-4"><a href="#lst-m4-c01-c02-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - Optimizer state is not counted here; Adam-style optimizers can add much more memory.</span></span>
+<span id="lst-m4-c01-c02-5"><a href="#lst-m4-c01-c02-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - Use this calculation as a first budget check, not as a substitute for profiler or allocator</span></span>
+<span id="lst-m4-c01-c02-6"><a href="#lst-m4-c01-c02-6" aria-hidden="true" tabindex="-1"></a><span class="co">#   statistics.</span></span>
+<span id="lst-m4-c01-c02-7"><a href="#lst-m4-c01-c02-7" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c01-c02-8"><a href="#lst-m4-c01-c02-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c01-c02-9"><a href="#lst-m4-c01-c02-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c02-10"><a href="#lst-m4-c01-c02-10" aria-hidden="true" tabindex="-1"></a>param_bytes <span class="op">=</span> <span class="bu">sum</span>(</span>
+<span id="lst-m4-c01-c02-11"><a href="#lst-m4-c01-c02-11" aria-hidden="true" tabindex="-1"></a>    p.numel() <span class="op">*</span> p.element_size()</span>
+<span id="lst-m4-c01-c02-12"><a href="#lst-m4-c01-c02-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> model.parameters()</span>
+<span id="lst-m4-c01-c02-13"><a href="#lst-m4-c01-c02-13" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="lst-m4-c01-c02-14"><a href="#lst-m4-c01-c02-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c02-15"><a href="#lst-m4-c01-c02-15" aria-hidden="true" tabindex="-1"></a>grad_bytes <span class="op">=</span> <span class="bu">sum</span>(</span>
+<span id="lst-m4-c01-c02-16"><a href="#lst-m4-c01-c02-16" aria-hidden="true" tabindex="-1"></a>    p.grad.numel() <span class="op">*</span> p.grad.element_size()</span>
+<span id="lst-m4-c01-c02-17"><a href="#lst-m4-c01-c02-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> model.parameters()</span>
+<span id="lst-m4-c01-c02-18"><a href="#lst-m4-c01-c02-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> p.grad <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span></span>
+<span id="lst-m4-c01-c02-19"><a href="#lst-m4-c01-c02-19" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="lst-m4-c01-c02-20"><a href="#lst-m4-c01-c02-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c02-21"><a href="#lst-m4-c01-c02-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"parameters: </span><span class="sc">{</span>param_bytes <span class="op">/</span> <span class="dv">2</span><span class="op">**</span><span class="dv">20</span><span class="sc">:.1f}</span><span class="ss"> MiB"</span>)</span>
+<span id="lst-m4-c01-c02-22"><a href="#lst-m4-c01-c02-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"gradients:  </span><span class="sc">{</span>grad_bytes <span class="op">/</span> <span class="dv">2</span><span class="op">**</span><span class="dv">20</span><span class="sc">:.1f}</span><span class="ss"> MiB"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The same tensor properties produce two distinct execution regimes. Training changes parameters and retains backward state; inference serving keeps parameters fixed while maintaining request and cache state. The comparison below names the goal, live objects, phases, and measurements for each regime.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Training:</strong></span> Repeated execution that updates model parameters from data.
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Goal:</strong></span> Improve the objective while maximizing useful tokens per second, numerical stability, and hardware utilization.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Live objects:</strong></span> Parameters, activations, gradients, optimizer state, temporary workspaces, and often communication buffers.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Phases:</strong></span> Forward propagation, loss computation, backward propagation, optimizer step, and distributed synchronization when multiple ranks are used.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measurements:</strong></span> Training tokens per second, step time, time to target quality, memory headroom, scaling efficiency, and numerical stability.</li>
+</ul></li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Inference serving:</strong></span> Request-driven execution that generates outputs with fixed model parameters.
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Goal:</strong></span> Meet latency, throughput, quality, and cost targets under a service workload.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Live objects:</strong></span> Parameters, temporary activations, KV cache, scheduler metadata, request queues, sampling state, and sometimes communication buffers.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Phases:</strong></span> Tokenization, request admission, prefill, decode, post-processing, and streaming.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measurements:</strong></span> Time To First Token (TTFT), Time Per Output Token (TPOT), Inter-Token Latency (ITL), end-to-end latency, goodput, cost per token, and Service Level Agreement (SLA) compliance.</li>
+</ul></li>
+</ul>
+<p>Training and inference now have concrete meanings: each mode is a sequence of phases operating on named state objects. The next section follows the objects that remain live as those phases execute.</p>
+</section>
+<section id="sec-m4-c01-s02" class="level2" data-number="1.2">
+<h2 data-number="1.2" class="anchored" data-anchor-id="sec-m4-c01-s02"><span class="header-section-number">1.2</span> Live state and memory</h2>
+<p>Section 1.1 described how a tensor’s shape, dtype, layout, and device connect a mathematical value to physical storage. Live state is the subset of tensors, buffers, and scheduler records that coexist while a workload phase runs. Its composition and lifetime determine memory capacity, transfer traffic, reuse opportunities, and synchronization requirements.</p>
+<p>Three related memory questions must be kept separate. Live footprint is the number of bytes occupied by objects that coexist. Capacity pressure occurs when that footprint approaches the available memory. Memory traffic is the number and rate of bytes read, written, or transferred while the phase runs. A workload can fit in memory yet remain slow because it repeatedly moves too many bytes.</p>
+<p>The following definitions name the state objects whose size and lifetime must be tracked in a memory report.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Parameters:</strong></span> Learned weights. They are used in both training and inference. Footprint scales with parameter count and dtype; for example, a 7B-parameter model in FP16 or BF16 is roughly 14 GB before metadata, fragmentation, and engine overhead.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Logits:</strong></span> Unnormalized output scores produced by the model, usually one score per vocabulary item for each predicted token position. Training passes them to a loss function; inference passes them to a sampling or selection rule.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Loss:</strong></span> The training objective computed from model outputs and targets. Backward propagation starts from this value and follows the recorded computation to produce gradients.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Activations:</strong></span> Intermediate tensors produced by forward propagation. Training often saves them for backward propagation; inference usually releases most of them quickly. Footprint scales with batch size, sequence length, hidden dimension, layer count, precision, and checkpointing policy.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradients:</strong></span> Derivatives of the loss with respect to parameters. They are training state. Their footprint is often parameter-sized before sharding, accumulation strategy, or reduced-precision storage changes it.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Optimizer state:</strong></span> Extra buffers used by optimizers such as Adam or AdamW. Adam-style first and second moments can exceed the parameter footprint when stored in FP32, which is why optimizer state becomes a training memory wall.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Temporary workspaces:</strong></span> Short-lived buffers allocated by kernels, vendor libraries, compilers, or serving engines. They affect peak memory and can cause out-of-memory failures.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Key-value (KV) cache:</strong></span> Inference-serving attention state that stores previous keys and values so decode does not recompute the full prefix. It scales with active sequences, context length, layer count, key-value heads, head dimension, and dtype.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Communication buffers:</strong></span> Intermediate tensors used for all-reduce, all-gather, reduce-scatter, all-to-all, or point-to-point transfers. They appear in distributed training and distributed inference and can create memory spikes as well as network traffic.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Request and scheduler metadata:</strong></span> Serving-engine state that tracks request IDs, token positions, sampling constraints, KV block tables, prefix-cache entries, queue state, and admission decisions. It is smaller than tensor state but can affect launch gaps, queueing, and cache correctness.</li>
+</ul>
+<p>A model that fits in one mode may fail in another. A checkpoint that fits for inference may not fit for training once gradients and optimizer state are added. A model that fits short prompts may fail under long-context serving because KV cache grows with admitted requests and sequence length.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Peak-memory lifecycle</strong></p>
+<p><strong>Before forward:</strong> Parameters, input tensors, optimizer state, and any persistent buffers are already live. The model may appear to fit at this point while the upcoming step still cannot run.</p>
+<p><strong>During forward:</strong> Each layer produces activations. Training keeps many of them alive because backward propagation will need the original values; inference usually releases most temporary activations quickly.</p>
+<p><strong>At loss and backward start:</strong> The loss is the starting point for backward traversal of the autograd graph. Backward reads saved activations, writes gradients, and may allocate temporary workspaces for backward kernels.</p>
+<p><strong>During optimizer step:</strong> Adam-style optimizers read parameters, gradients, first moments, and second moments, then write updated state. This phase can be memory-bandwidth-bound even if the forward pass was tensor-core-heavy.</p>
+<p><strong>After step:</strong> Gradients may be set to <code>None</code> and activations are released, but allocator-reserved memory can remain high because the caching allocator keeps blocks for reuse.</p>
+</div>
+<p>The KV cache is persistent inference-time attention state. Each decode step stores new keys and values, then later decode steps read that prefix instead of recomputing it.</p>
+</section>
+<section id="sec-m4-c01-s03" class="level2" data-number="1.3">
+<h2 data-number="1.3" class="anchored" data-anchor-id="sec-m4-c01-s03"><span class="header-section-number">1.3</span> Workload phases and limits</h2>
+<p>Performance describes how quickly and efficiently a specific workload phase processes its live state. The useful measurements depend on the phase: training uses step time, tokens per second, memory headroom, and scaling efficiency; serving uses latency, token rate, goodput, cache capacity, and cost.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Live footprint:</strong></span> The bytes occupied by parameters, activations, gradients, optimizer state, workspaces, KV cache, communication buffers, and metadata that coexist during the measured phase.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Capacity pressure:</strong></span> The risk that the live footprint and allocator headroom approach the capacity of GPU High Bandwidth Memory (HBM), CPU memory, or another storage tier.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Memory traffic:</strong></span> The bytes read, written, or transferred while the phase runs. Traffic can limit performance even when the live footprint fits comfortably.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Bandwidth and locality:</strong></span> The rate and distance at which bytes must reach the computation. Reuse in registers, shared memory, or cache reduces traffic to slower memory tiers.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Compute throughput:</strong></span> The rate of useful arithmetic work for the phase, interpreted together with tensor shapes, precision, and hardware utilization.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Launch and control overhead:</strong></span> Time spent in Python dispatch, framework dispatch, kernel launches, compiler transitions, or scheduler decisions.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Communication and synchronization:</strong></span> Time spent moving tensors across GPUs or ranks and waiting for participants to reach compatible execution points.</li>
+</ul>
+<p>Diagnose one phase at a time by naming the work, the live objects, the target measurement, and the resource whose capacity, throughput, or dependency is exhausted.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Training forward:</strong></span> Reads parameters and input batches, writes activations, and often uses tensor-core-heavy matrix operations. Likely bottlenecks are compute throughput, activation memory, and HBM traffic. Developed in Chapters 2 through 5 and revisited in Chapters 7 and 13.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Training backward:</strong></span> Reads saved activations and parameters, writes gradients, and may recompute activations when checkpointing is used. Likely bottlenecks are activation memory, HBM bandwidth, and gradient computation. Developed in Chapters 5, 11, and 13.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Optimizer step:</strong></span> Reads parameters, gradients, and optimizer state, then writes updated parameters and state. Likely bottlenecks are memory bandwidth and optimizer-state footprint. Developed in Chapters 1, 7, and 13.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill:</strong></span> Processes prompt tokens and builds initial KV cache. It often forms large matrix operations over many tokens and can be compute-heavy. Developed in the inference, serving, and implementation chapters (8, 10, and 11).</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode:</strong></span> Generates one token at a time while reading parameters and the existing KV cache, then appending new KV entries. Likely bottlenecks are HBM bandwidth, launch overhead, batching, and cache layout. Developed in Chapters 6, 8, 9, and 10.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Distributed synchronization:</strong></span> Moves gradients, parameters, activations, expert routes, or partial layer results between ranks. Likely bottlenecks are interconnect bandwidth, latency, topology, rank skew, and collective scheduling. Developed in Chapters 12 and 13.</li>
+</ul>
+<p>Moving bottlenecks are normal. Removing recomputation can expose memory bandwidth. Increasing batch size can expose KV-cache capacity. Sharding model state can expose network synchronization. The engineering task is to follow the bottleneck as each change exposes a new constraint.</p>
+</section>
+<section id="sec-m4-c01-s04" class="level2" data-number="1.4">
+<h2 data-number="1.4" class="anchored" data-anchor-id="sec-m4-c01-s04"><span class="header-section-number">1.4</span> Training step</h2>
+<p>Section 1.3 identified the measurements and resource limits that can change across workload phases. A supervised training loop makes those phases concrete: each repeated step moves input data, runs forward computation, computes loss, propagates gradients backward, updates optimizer state, and may synchronize distributed workers.</p>
+<p>The model receives input tensors, computes predictions, compares predictions with labels through a loss function, computes gradients through backward propagation, and updates parameters through an optimizer. Each line therefore identifies live state and a specific measurement target. Later chapters improve these same moments through placement, kernels, precision, graph capture, sharding, and communication scheduling.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Forward propagation:</strong></span> Reads inputs and parameters, writes outputs, and may save activations for backward propagation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Loss computation:</strong></span> Turns predictions and labels into the scalar or batched objective being optimized.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Backward propagation:</strong></span> Traverses the recorded computation in reverse to produce gradients.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Optimizer step:</strong></span> Updates parameters using gradients and optimizer state.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Device placement:</strong></span> Determines whether tensors live on CPU memory, GPU HBM, or another device, and therefore which transfers and execution paths the step uses.</li>
+</ul>
+<p>Read the code as a workload trace. Each line identifies a live object, a resource it can stress, and a software layer that can own the likely fix.</p>
+<p><strong>Example: Minimal training loop.</strong> This abbreviated workload trace assumes that <code>model</code>, <code>loader</code>, and <code>optimizer</code> have already been constructed. It shows the logical order of a supervised training step and identifies where inputs, parameters, activations, logits, loss, gradients, and optimizer state enter the step.</p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Minimal training loop</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c03-1"><a href="#lst-m4-c01-c03-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c01-c03-2"><a href="#lst-m4-c01-c03-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - The comments connect each code line to the state it moves, retains, creates, or updates.</span></span>
+<span id="lst-m4-c01-c03-3"><a href="#lst-m4-c01-c03-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - Peak memory includes model weights, saved forward state, gradients, optimizer buffers, and</span></span>
+<span id="lst-m4-c01-c03-4"><a href="#lst-m4-c01-c03-4" aria-hidden="true" tabindex="-1"></a><span class="co">#   temporary workspaces that overlap in time.</span></span>
+<span id="lst-m4-c01-c03-5"><a href="#lst-m4-c01-c03-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - A distributed wrapper adds gradient or sharded-state communication around the same local step.</span></span>
+<span id="lst-m4-c01-c03-6"><a href="#lst-m4-c01-c03-6" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c01-c03-7"><a href="#lst-m4-c01-c03-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c01-c03-8"><a href="#lst-m4-c01-c03-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="lst-m4-c01-c03-9"><a href="#lst-m4-c01-c03-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-10"><a href="#lst-m4-c01-c03-10" aria-hidden="true" tabindex="-1"></a>device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, <span class="dv">0</span>)</span>
+<span id="lst-m4-c01-c03-11"><a href="#lst-m4-c01-c03-11" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> model.to(device)</span>
+<span id="lst-m4-c01-c03-12"><a href="#lst-m4-c01-c03-12" aria-hidden="true" tabindex="-1"></a>loss_fn <span class="op">=</span> nn.CrossEntropyLoss()</span>
+<span id="lst-m4-c01-c03-13"><a href="#lst-m4-c01-c03-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-14"><a href="#lst-m4-c01-c03-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> batch <span class="kw">in</span> loader:</span>
+<span id="lst-m4-c01-c03-15"><a href="#lst-m4-c01-c03-15" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Pinned source buffers plus non_blocking copies can overlap input transfer with GPU work.</span></span>
+<span id="lst-m4-c01-c03-16"><a href="#lst-m4-c01-c03-16" aria-hidden="true" tabindex="-1"></a>    input_ids <span class="op">=</span> batch[<span class="st">"input_ids"</span>].to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c01-c03-17"><a href="#lst-m4-c01-c03-17" aria-hidden="true" tabindex="-1"></a>    labels <span class="op">=</span> batch[<span class="st">"labels"</span>].to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c01-c03-18"><a href="#lst-m4-c01-c03-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-19"><a href="#lst-m4-c01-c03-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Releasing old gradient storage avoids writing a full tensor of zeros each step.</span></span>
+<span id="lst-m4-c01-c03-20"><a href="#lst-m4-c01-c03-20" aria-hidden="true" tabindex="-1"></a>    optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c01-c03-21"><a href="#lst-m4-c01-c03-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-22"><a href="#lst-m4-c01-c03-22" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Forward execution reads parameters, creates activations, and may retain them for backward.</span></span>
+<span id="lst-m4-c01-c03-23"><a href="#lst-m4-c01-c03-23" aria-hidden="true" tabindex="-1"></a>    logits <span class="op">=</span> model(input_ids)</span>
+<span id="lst-m4-c01-c03-24"><a href="#lst-m4-c01-c03-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-25"><a href="#lst-m4-c01-c03-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Loss often reduces over batch, sequence, and vocabulary dimensions.</span></span>
+<span id="lst-m4-c01-c03-26"><a href="#lst-m4-c01-c03-26" aria-hidden="true" tabindex="-1"></a>    loss <span class="op">=</span> loss_fn(logits, labels)</span>
+<span id="lst-m4-c01-c03-27"><a href="#lst-m4-c01-c03-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-28"><a href="#lst-m4-c01-c03-28" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Backward reads saved activations, writes gradients, and may trigger distributed collectives.</span></span>
+<span id="lst-m4-c01-c03-29"><a href="#lst-m4-c01-c03-29" aria-hidden="true" tabindex="-1"></a>    loss.backward()</span>
+<span id="lst-m4-c01-c03-30"><a href="#lst-m4-c01-c03-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-31"><a href="#lst-m4-c01-c03-31" aria-hidden="true" tabindex="-1"></a>    <span class="co"># The optimizer reads and writes parameters, gradients, and optimizer-state buffers.</span></span>
+<span id="lst-m4-c01-c03-32"><a href="#lst-m4-c01-c03-32" aria-hidden="true" tabindex="-1"></a>    optimizer.step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>What the training step makes measurable</strong></p>
+<p><strong>Input transfer:</strong> The <code>.to(device, non_blocking=True)</code> calls are only asynchronous when the source path and stream dependencies permit it; pinned host memory is commonly needed for useful overlap.</p>
+<p><strong>Forward execution:</strong> PyTorch dispatches a graph of tensor operations. Large projections may call vendor GEMM kernels, while small elementwise regions may launch separate kernels unless compilation or fusion changes the path.</p>
+<p><strong>Activation retention:</strong> Autograd records operations and saves tensors needed for backward. The overlap of parameters, saved activations, gradients, and workspaces usually places peak training memory before or during backward.</p>
+<p><strong>Backward execution:</strong> Backward kernels consume saved activations and parameters to produce gradients. In distributed data-parallel training, gradient buckets may start all-reduce while earlier layers are still computing backward.</p>
+<p><strong>Optimizer state traffic:</strong> Adam-style updates often spend most of their time reading and writing parameter, gradient, and moment buffers.</p>
+<p><strong>Memory-reduction options:</strong> Activation checkpointing trades recomputation for lower saved-activation memory. Fully Sharded Data Parallel (FSDP) and Zero Redundancy Optimizer (ZeRO) shard model state across ranks. Each changes a different object or lifetime, so the profiler must identify which state limits the run.</p>
+</div>
+<p>The loop makes data input, forward state, loss, gradients, optimizer state, and distributed state measurable. Inference serving introduces a different live-state profile, including KV cache, request scheduling, prefix reuse, and speculative decoding; Chapter 8 begins that transition.</p>
+<p>Distributed Data Parallel (DDP) adds gradient synchronization to this loop. Fully Sharded Data Parallel (FSDP) also changes where parameters, gradients, and optimizer state live and when they are gathered or scattered.</p>
+</section>
+<section id="sec-m4-c01-s05" class="level2" data-number="1.5">
+<h2 data-number="1.5" class="anchored" data-anchor-id="sec-m4-c01-s05"><span class="header-section-number">1.5</span> Finding bottlenecks</h2>
+<p>Finding a bottleneck connects a measured phase and its live state to the software or hardware layer that controls the limiting resource. The result is a targeted change with a measurable end-to-end effect.</p>
+<section id="sec-m4-c01-s06" class="level3" data-number="1.5.1">
+<h3 data-number="1.5.1" class="anchored" data-anchor-id="sec-m4-c01-s06"><span class="header-section-number">1.5.1</span> Measurement workflow</h3>
+<p>The workflow starts from evidence and moves in a fixed order from the measured phase to the smallest responsible layer and change.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Layer that can fix it:</strong></span> The software or hardware layer that controls the decision causing the bottleneck. Examples include model code, PyTorch tensor/runtime behavior, compiler capture, kernel implementation, serving-engine scheduling, distributed communication, and hardware topology.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>What the measurement shows:</strong></span> Evidence from a benchmark, profiler trace, memory report, serving metric, or distributed log.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Targeted change:</strong></span> A change aimed at the layer that controls the bottleneck: shape change, kernel rewrite, compiler repair, CUDA Graph capture, cache policy, batching policy, quantization, sharding, or topology-aware placement.</li>
+</ul>
+<p>These three labels connect evidence to a change. The following sequence applies them in order, from defining the measured region to verifying the user-facing result.</p>
+<ol type="1">
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Identify the phase:</strong></span> Name the measured region: training forward, backward, optimizer step, prefill, decode, scheduler work, or distributed synchronization.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Name the live objects:</strong></span> List the parameters, activations, gradients, optimizer state, workspaces, KV cache, communication buffers, or metadata involved.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>State the metric:</strong></span> Choose the metric that defines success: step time, tokens per second, TTFT, TPOT, ITL, goodput, cost, memory headroom, or scaling efficiency.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measure the result:</strong></span> Use the appropriate evidence source: PyTorch Profiler, Nsight Systems, Nsight Compute, memory statistics, serving metrics, or NCCL logs.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Classify the bottleneck:</strong></span> Decide whether the region is compute-bound, memory-bound, launch-bound, scheduler-bound, communication-bound, or capacity-bound.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Find the layer that can fix it:</strong></span> Map the bottleneck to model structure, framework runtime, compiler/runtime, kernel library, serving scheduler, distributed backend, or hardware fabric.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Choose the change:</strong></span> Pick the smallest change controlled by that layer, such as improving locality, changing precision, repairing graph breaks, paging KV cache, changing batch limits, or altering parallelism.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Verify correctness and end-to-end improvement:</strong></span> Check numerical correctness, model quality, cache correctness, and the user-facing metric. Accept the change when it preserves the required quality and improves the target service or training measurement.</li>
+</ol>
+<p>Later chapters specialize this same loop for matrix kernels, runtime capture, quantization, inference scheduling, and distributed communication.</p>
+</section>
+<section id="sec-m4-c01-s07" class="level3" data-number="1.5.2">
+<h3 data-number="1.5.2" class="anchored" data-anchor-id="sec-m4-c01-s07"><span class="header-section-number">1.5.2</span> PyTorch performance interfaces</h3>
+<p>PyTorch is the main framework layer in the examples. Its performance interfaces represent state, dispatch device work, select supported backends, enter compilation, collect measurements, and express distributed operations.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>State and differentiation:</strong></span> <code>torch.Tensor</code>, <code>torch.nn</code>, <code>torch.autograd</code>, and <code>torch.optim</code> define tensor metadata, parameters, saved activations, gradients, and optimizer state.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Device execution:</strong></span> <code>torch.cuda</code> exposes device placement, streams, events, synchronization, allocator statistics, and CUDA Graph entry points. Chapter 3 develops the CUDA execution and memory model.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Backend policy:</strong></span> <code>torch.backends</code> and precision APIs permit framework-owned implementation choices for matrix multiplication, cuDNN operations, and attention. Chapter 7 places those settings with precision and training behavior.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Compilation:</strong></span> <code>torch.compile</code> enters the TorchDynamo, AOTAutograd, and TorchInductor path. Chapter 6 explains capture, generated kernels, CUDA Graph replay, and graph breaks.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measurement:</strong></span> <code>torch.profiler</code> and <code>torch.utils.benchmark</code> connect framework operations to timing, memory, dimensions, and controlled microbenchmarks. Chapter 5 develops the profiling workflow.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Distributed execution:</strong></span> <code>torch.distributed</code> defines process groups and collectives. Chapters 12 and 13 separate framework APIs, communication backends, physical fabrics, and distributed strategies.</li>
+</ul>
+<p>Model, tokenizer, checkpoint, quantization, serving, and distributed libraries enter at their first operational use. Appendix A collects the main software layers and controls after their teaching sections.</p>
+</section>
+<section id="sec-m4-c01-s08" class="level3" data-number="1.5.3">
+<h3 data-number="1.5.3" class="anchored" data-anchor-id="sec-m4-c01-s08"><span class="header-section-number">1.5.3</span> The component that controls each symptom</h3>
+<p>Once a symptom is measured, the next step is to find which component can change it. The list below connects common evidence to framework, runtime, kernel, serving, or communication controls.</p>
+<p>When a run is slow, the fastest path is to name the symptom and move to the layer that can actually change it. The same model can be limited by device placement, kernel shape, compiler graph breaks, request scheduling, cache pressure, or communication. Each symptom points to a different library family.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Device or dtype confusion:</strong></span> Start with PyTorch tensor metadata and <code>torch.cuda</code>: check device placement, dtype, memory footprint, and PyTorch backend flags before changing the model.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Suspicious GPU timing:</strong></span> Use CUDA events or profiler timelines. CPU timers without synchronization often measure launch queuing or unrelated host work.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Many tiny kernels or launch gaps:</strong></span> Inspect <code>torch.compile</code>, TorchDynamo graph breaks, TorchInductor output, CUDA Graph capture, and dynamic-shape behavior before writing a custom kernel.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>One kernel dominates the trace:</strong></span> Move to kernel-level tooling: Nsight Compute, Triton kernel code, cuBLAS/cuBLASLt path selection, attention-backend selection, or memory-coalescing analysis.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Poor decode throughput:</strong></span> Inspect the serving-engine layer: request admission, continuous batching, KV-cache allocation, prefix caching, scheduler limits, and Time Per Output Token (TPOT).</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>High Time To First Token (TTFT):</strong></span> Separate tokenization, queueing, prefill compute, and cache setup. A serving metric can be high even when individual kernels are healthy.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Unexpected memory exhaustion:</strong></span> Separate model weights, activations, temporary workspaces, allocator reservation, KV-cache blocks, and fragmentation before assuming the checkpoint is too large.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Multi-GPU waiting:</strong></span> Inspect <code>torch.distributed</code>, NCCL logs, rank placement, process groups, collective timelines, and the physical fabric. Chapter 12 develops this layer in detail.</li>
+</ul>
+<p>The playbook prevents the common failure mode of applying a correct tool to the wrong layer. A custom Triton kernel cannot fix scheduler queueing. NCCL cannot choose a sharding strategy. A serving engine cannot repair a graph break in local Python code unless its serving-engine execution backend avoids that code path.</p>
+<p>This workload view identifies what is slow and which component can change it, but it does not yet explain the device limits behind the symptom. Chapter 2 connects the live tensors and operations to GPU compute units, memory tiers, and interconnects.</p>
+
+
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../parts/part-i.html" class="pagination-link" aria-label="Part I: Fundamentals">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part I: Fundamentals</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m4-c02.html" class="pagination-link" aria-label="GPU Hardware and Memory">
+        <span class="nav-page-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">GPU Hardware and Memory</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

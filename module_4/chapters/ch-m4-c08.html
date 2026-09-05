@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>8&nbsp; Inference Workloads – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m4-c09.html" rel="next">
+<link href="../chapters/ch-m4-c07.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: Training and Inference Workloads</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c08.html"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Inference Workloads</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Advanced LLM Performance Engineering</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Advanced LLM Performance Engineering</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m4-index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction and Learning Path</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-i.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: Fundamentals</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">LLM Workloads and Performance Limits</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">GPU Hardware and Memory</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Software to CUDA</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Triton and Custom Kernels</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Performance Models and Profiling</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Compilation and Runtime</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-ii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: Training and Inference Workloads</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Training and Precision</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c08.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Inference Workloads</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Decode and KV Cache</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Serving Engines</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Performance Experiments</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-iii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: Communication and Distributed Systems</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">GPU Communication</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Distributed Training and Serving</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-a.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Reference Material</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-b.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Lists of Figures and Tables</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m4-c08-s01" id="toc-sec-m4-c08-s01" class="nav-link active" data-scroll-target="#sec-m4-c08-s01"><span class="header-section-number">8.1</span> Inference software objects</a>
+  <ul class="collapse">
+  <li><a href="#sec-m4-c08-s02" id="toc-sec-m4-c08-s02" class="nav-link" data-scroll-target="#sec-m4-c08-s02"><span class="header-section-number">8.1.1</span> Tokenizers and token-count effects</a></li>
+  <li><a href="#sec-m4-c08-s03" id="toc-sec-m4-c08-s03" class="nav-link" data-scroll-target="#sec-m4-c08-s03"><span class="header-section-number">8.1.2</span> Model and checkpoint interfaces</a></li>
+  <li><a href="#sec-m4-c08-s04" id="toc-sec-m4-c08-s04" class="nav-link" data-scroll-target="#sec-m4-c08-s04"><span class="header-section-number">8.1.3</span> Generation utilities and framework inference modes</a></li>
+  </ul></li>
+  <li><a href="#sec-m4-c08-s05" id="toc-sec-m4-c08-s05" class="nav-link" data-scroll-target="#sec-m4-c08-s05"><span class="header-section-number">8.2</span> Prefill versus decode</a></li>
+  <li><a href="#sec-m4-c08-s06" id="toc-sec-m4-c08-s06" class="nav-link" data-scroll-target="#sec-m4-c08-s06"><span class="header-section-number">8.3</span> Serving metrics</a></li>
+  <li><a href="#sec-m4-c08-s07" id="toc-sec-m4-c08-s07" class="nav-link" data-scroll-target="#sec-m4-c08-s07"><span class="header-section-number">8.4</span> Model weight size</a></li>
+  <li><a href="#sec-m4-c08-s08" id="toc-sec-m4-c08-s08" class="nav-link" data-scroll-target="#sec-m4-c08-s08"><span class="header-section-number">8.5</span> Dynamic inference memory</a></li>
+  <li><a href="#sec-m4-c08-s09" id="toc-sec-m4-c08-s09" class="nav-link" data-scroll-target="#sec-m4-c08-s09"><span class="header-section-number">8.6</span> Key-value cache sizing</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: Training and Inference Workloads</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c08.html"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Inference Workloads</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m4-c08" class="quarto-section-identifier"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Inference Workloads</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Establish the arithmetic, memory, and SLA metrics governing autoregressive LLM inference.</p>
+<p>The training chapter followed a workload that changes model parameters. Inference starts from fixed parameters and repeatedly applies them to a request, but it still creates live software and memory objects: token IDs, temporary activations, logits, sampler state, request metadata, and a key-value cache that grows with the context.</p>
+<p>One request has two different GPU phases. Prefill processes many prompt positions and creates the initial cache; decode adds one token per active sequence and rereads weights plus historical cache state. Their shapes, reuse, and user-visible latency metrics differ, so neither phase should be assigned a bottleneck before it is measured.</p>
+<p>The tokenizer, checkpoint, model, and inference-mode interfaces define the single-request baseline. Prefill and decode then establish the service metrics needed to size static parameters, batch-dependent state, and KV-cache capacity. That byte budget determines which cache layouts and allocation policies are practical in Chapter 9.</p>
+<p>Serving begins before the first GPU kernel: a request waits for admission, is tokenized, runs prompt prefill, and then enters a repeated one-token decode loop.</p>
+<div id="fig-m4-c08-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="An inference request moves from admission and tokenization through prefill, first token, and repeated decode. Each decode step reads prior KV state, appends new key and value entries, samples a token, and contributes to latency and capacity metrics.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c08-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c08-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="An inference request moves from admission and tokenization through prefill, first token, and repeated decode. Each decode step reads prior KV state, appends new key and value entries, samples a token, and contributes to latency and capacity metrics.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c08-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;8.1: An inference request passes through admission, prefill, and repeated decode while memory state grows.
+</figcaption>
+</figure>
+</div>
+<p>Each decode step reads the previous KV state, produces a new key and value pair plus logits, appends the new cache entry, and selects the next token. Time To First Token (TTFT), Inter-Token Latency (ITL), Time Per Output Token (TPOT), throughput, and goodput describe different parts of this path. The capacity budget must include weights, KV cache, temporary work, and allocator reserve.</p>
+<section id="sec-m4-c08-s01" class="level2" data-number="8.1">
+<h2 data-number="8.1" class="anchored" data-anchor-id="sec-m4-c08-s01"><span class="header-section-number">8.1</span> Inference software objects</h2>
+<p>An inference request crosses several software objects before GPU kernels run. Tokenizer code creates token IDs, a model interface loads and executes the checkpoint, generation utilities control the baseline token loop, and a serving engine later adds shared scheduling and cache management.</p>
+<section id="sec-m4-c08-s02" class="level3" data-number="8.1.1">
+<h3 data-number="8.1.1" class="anchored" data-anchor-id="sec-m4-c08-s02"><span class="header-section-number">8.1.1</span> Tokenizers and token-count effects</h3>
+<p>A tokenizer is the CPU-side software that maps text to token IDs and back. Its vocabulary, normalization, special-token policy, and segmentation algorithm determine the token count that drives prefill work, decode length, and KV-cache growth.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>AutoTokenizer</code>:</strong></span> A Hugging Face Transformers factory that loads the tokenizer configuration associated with a checkpoint and returns token IDs, masks, and batch encodings.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>SentencePiece:</strong></span> A tokenizer implementation family used by many model checkpoints. Its model file defines the segmentation and vocabulary used to create token IDs.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Hugging Face Tokenizers:</strong></span> A high-performance tokenizer implementation used by many Transformers workflows for batching, truncation, padding, and special-token handling.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Performance consequence:</strong></span> More tokens increase prompt processing, generated steps, and KV-cache state even when the original character count is unchanged.</li>
+</ul>
+<p>Tokenizer behavior fixes token IDs and sequence lengths, so it sets prefill work, decode steps, and cache growth before the model runs. The next question is how checkpoint configuration turns those token sequences into model dimensions, parameter storage, and execution choices.</p>
+</section>
+<section id="sec-m4-c08-s03" class="level3" data-number="8.1.2">
+<h3 data-number="8.1.2" class="anchored" data-anchor-id="sec-m4-c08-s03"><span class="header-section-number">8.1.2</span> Model and checkpoint interfaces</h3>
+<p>A model interface creates the architecture and connects it to checkpoint tensors. Checkpoint loading determines storage format and startup behavior; execution performance is later determined by placement, dtype, compiled or library kernels, and the serving runtime.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>AutoModelForCausalLM</code>:</strong></span> A Hugging Face Transformers factory for autoregressive language-model architectures and checkpoints. It is useful for experiments, correctness checks, and baseline generation loops.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>safetensors</code>:</strong></span> A tensor serialization format designed for safe, direct metadata inspection and efficient checkpoint loading. It owns storage and loading, not batching or kernel selection.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Model configuration:</strong></span> The architecture metadata that defines layer count, hidden dimensions, attention heads, vocabulary, and other dimensions needed to construct the model before weights are loaded.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Checkpoint tensors:</strong></span> Persistent parameter values loaded into CPU or GPU memory. Their format and placement affect startup and capacity, while the selected runtime path controls steady-state execution.</li>
+</ul>
+<p>Checkpoint metadata and tensors establish the architecture, stored precision, and initial placement, but they do not define the generation loop or remove training-only bookkeeping. The next question is which evaluation, autograd, caching, and sampling controls produce a correct single-process inference baseline.</p>
+</section>
+<section id="sec-m4-c08-s04" class="level3" data-number="8.1.3">
+<h3 data-number="8.1.3" class="anchored" data-anchor-id="sec-m4-c08-s04"><span class="header-section-number">8.1.3</span> Generation utilities and framework inference modes</h3>
+<p>Framework generation utilities provide a readable baseline token loop. PyTorch model mode and autograd mode must both be set correctly so inference uses evaluation behavior and avoids training-only bookkeeping. They do not by themselves make sampling or GPU execution deterministic.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Generation utilities:</strong></span> Transformers helpers for cache-aware generation, sampling, beam search, stopping conditions, and token-loop control. They are convenient for experiments and baseline measurements.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>model.eval()</code>:</strong></span> Changes module behavior such as dropout and batch-normalization statistics for evaluation or inference.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>torch.no_grad()</code>:</strong></span> Disables gradient recording for enclosed operations, reducing autograd work and activation retention.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>torch.inference_mode()</code>:</strong></span> A stricter inference context that also disables view tracking and version-counter updates for tensors created inside it.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Combined use:</strong></span> Inference normally uses <code>model.eval()</code> with an appropriate gradient-disabling context. One controls module semantics; the other controls autograd bookkeeping.</li>
+</ul>
+<p>These objects define a single-process inference baseline. Chapter 10 introduces a serving engine when many requests must share admission control, batching, KV-cache blocks, and operational metrics.</p>
+</section>
+</section>
+<section id="sec-m4-c08-s05" class="level2" data-number="8.2">
+<h2 data-number="8.2" class="anchored" data-anchor-id="sec-m4-c08-s05"><span class="header-section-number">8.2</span> Prefill versus decode</h2>
+<p>Prefill and decode are two phases inside autoregressive inference serving. They use the same model weights, but they create different tensor shapes and stress different hardware resources. Separating them makes phase-specific measurement and optimization possible.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill:</strong></span> Processes the prompt tokens, computes attention over the input prefix, and writes the initial key-value cache. It usually has many tokens available at once.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode:</strong></span> Generates one new token per active sequence and appends new keys and values to the cache. It repeats many times and often has less arithmetic reuse per request.</li>
+</ul>
+<p>The first comparison holds the model fixed and contrasts the two phases by input shape, likely limiting work, user metric, and available token parallelism.</p>
+<div id="tbl-m4-c08-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c08-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;8.1: Prefill versus decode.
+</figcaption>
+<div aria-describedby="tbl-m4-c08-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Dimension</th>
+<th>Prefill</th>
+<th>Decode</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Input shape</td>
+<td>Many prompt tokens</td>
+<td>One new token per active sequence</td>
+</tr>
+<tr class="even">
+<td>Common limiting work</td>
+<td>Projection and attention compute over the prompt; short prompts may still expose launch or scheduling cost</td>
+<td>Weight and KV reads, launches, and scheduler delay; the dominant bytes depend on batch and context</td>
+</tr>
+<tr class="odd">
+<td>User metric</td>
+<td>TTFT</td>
+<td>TPOT</td>
+</tr>
+<tr class="even">
+<td>Parallelism</td>
+<td>High token parallelism</td>
+<td>Low per-request parallelism, improved by batching</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The arithmetic-intensity difference comes from reuse. During prefill, a batch contains many token positions, so projection weights and attention tiles can be reused across a larger matrix-shaped computation. During decode, each active sequence contributes only one new query token, while the step still reads model weights and a growing KV history. The same transformer block therefore behaves more GEMM-like in prefill and more GEMV-like or cache-streaming in small-batch decode.</p>
+<div id="tbl-m4-c08-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c08-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;8.2: Prefill and decode arithmetic-intensity interpretation.
+</figcaption>
+<div aria-describedby="tbl-m4-c08-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Phase</th>
+<th>Reuse pattern</th>
+<th>Arithmetic-intensity consequence</th>
+<th>Capacity consequence</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Prefill</td>
+<td>Many prompt tokens reuse weights and attention tiles</td>
+<td>Higher arithmetic intensity; tensor-core utilization is easier to recover</td>
+<td>Long prompts mainly increase TTFT and temporary activation/workspace pressure</td>
+</tr>
+<tr class="even">
+<td>Decode</td>
+<td>One new token reads weights and all relevant cached K/V state</td>
+<td>Lower arithmetic intensity; HBM bandwidth, launch gaps, and scheduler overhead become visible</td>
+<td>Long contexts and high concurrency mainly increase TPOT pressure and KV-cache capacity pressure</td>
+</tr>
+<tr class="odd">
+<td>Continuous batching</td>
+<td>Combines many one-token decode steps into a larger launched step</td>
+<td>Improves useful work per launch but cannot remove serial dependence inside each sequence</td>
+<td>Raises throughput until KV memory, latency targets, or scheduler cost becomes limiting</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Attention-to-hardware consequence</strong></p>
+<p><strong>Prefill:</strong> Many query positions reuse projection weights and process attention tiles together. The work is GEMM-like, so arithmetic intensity and tensor-core utilization can be high.</p>
+<p><strong>Decode:</strong> Each active sequence contributes one new query while the kernel reads the historical K/V state. The work is smaller per sequence and more dependent on HBM traffic, cache layout, launch overhead, and scheduler timing.</p>
+<p><strong>Optimization test:</strong> Measure FLOPs, bytes, and phase-specific latency separately. A prefill optimization can improve TTFT while doing little for TPOT, and a decode optimization can increase throughput while consuming more KV-cache capacity.</p>
+</div>
+<p>The phase split now gives the first measurement boundary. TTFT describes the path through admission and prefill to the first generated token; TPOT and inter-token latency describe the repeated decode path. The next section defines those metrics precisely before memory capacity is estimated.</p>
+</section>
+<section id="sec-m4-c08-s06" class="level2" data-number="8.3">
+<h2 data-number="8.3" class="anchored" data-anchor-id="sec-m4-c08-s06"><span class="header-section-number">8.3</span> Serving metrics</h2>
+<p>Inference metrics describe different stakeholders. A user notices the first token, the smoothness of streaming, and total completion time. An operator notices tokens per second, requests per second, GPU utilization, and cost. A product Service Level Agreement (SLA) turns these into promises such as ‘95% of requests under a latency threshold.’</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>TTFT:</strong></span> Time To First Token. It includes queueing, API handling, tokenization, prefill, cache lookup, and sometimes cold compilation or engine setup.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>TPOT:</strong></span> Time Per Output Token. For one request, it is often the average decode time after the first generated token.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>ITL:</strong></span> Inter-Token Latency. It measures the gap between consecutive output tokens. Across a workload, ITL can be token-weighted while TPOT is often summarized per request.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>E2E latency:</strong></span> End-to-end request latency from arrival to final token. It combines queueing, TTFT, decode, and post-processing.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Throughput:</strong></span> Tokens per second or requests per second. More throughput can hurt latency when batching or queueing is pushed too far.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>QPS:</strong></span> Queries Per Second, a request-rate metric. It must be interpreted with prompt length, output length, and SLA target.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>SLA:</strong></span> Service Level Agreement, a target such as ‘p95 E2E latency below X ms’ or ‘p99 TTFT below Y ms’ for a defined workload.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Goodput:</strong></span> The portion of work completed within the SLA. A system can have high raw throughput and poor goodput if many requests miss the latency target.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cost:</strong></span> Usually dollars per million tokens, GPU-hours per million tokens, or served tokens per dollar. Cost must be tied to a latency and quality target.</li>
+</ul>
+<p><span id="eq-m4-c08-e01"><span class="math display">\[
+\text{E2E latency} \approx \text{TTFT} + (\text{number of output tokens} - 1) \times \text{TPOT}
+\tag{8.1}\]</span></span></p>
+<p>In this approximation, the first output token is already included in TTFT. A response with <code>n</code> output tokens therefore contains <code>n - 1</code> later decode intervals. TPOT is an average here; a production trace should also inspect the distribution of inter-token latency as batching, cache length, and scheduling change.</p>
+<p>For example, if TTFT is 700 ms, the response has 20 output tokens, and average TPOT is 35 ms, then E2E latency is about 700 + 19 * 35 = 1365 ms. Long prompts mainly push TTFT because prefill must process many input tokens before streaming can begin. Long generations mainly push E2E latency through repeated decode steps. This is why the same optimization can improve one metric and harm another: larger batches can increase throughput and utilization while increasing queueing, TTFT, or ITL.</p>
+</section>
+<section id="sec-m4-c08-s07" class="level2" data-number="8.4">
+<h2 data-number="8.4" class="anchored" data-anchor-id="sec-m4-c08-s07"><span class="header-section-number">8.4</span> Model weight size</h2>
+<p>Parameter sizing estimates the static model-weight footprint. It answers a different question from KV-cache sizing: weights are loaded once per replica or shard, while KV cache grows with active serving state. The estimate is useful for deciding whether a model fits on one GPU, one node, or a distributed group.</p>
+<p>A transformer block is dominated by projection matrices. The formulas below are first-order approximations; exact counts depend on vocabulary size, tied embeddings, grouped-query attention, bias terms, feed-forward expansion ratio, and architecture-specific details.</p>
+<ul>
+<li>Embeddings and language-model head: V * d parameters when the input embedding and output head share weights; an untied design contributes roughly 2 * V * d.</li>
+<li>Self-attention projection weights: about 4 * d^2 for standard full multi-head attention with d-by-d query, key, value, and output projections. Grouped-query and multi-query attention use smaller key/value projections.</li>
+<li>Multi-Layer Perceptron (MLP/FFN) Weights: 8 × d² parameters. This consists of the up-projection (d-by-4d) and down-projection (4d-by-d). For models using SwiGLU activations such as Llama, the gate and up projections use a hidden size near 8/3 × d, so three matrices contribute about 3 × (8/3 × d²) = 8 × d² parameters. Adding bias terms adds comparatively little.</li>
+</ul>
+<p><span id="eq-m4-c08-e02"><span class="math display">\[
+\text{total parameters per block} \approx 12 d^2
+\tag{8.2}\]</span></span></p>
+<p>The symbols below define the estimate and the conversion from parameter count to stored bytes. They also mark what the block approximation leaves outside its boundary.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>V:</strong></span> Vocabulary size.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>d:</strong></span> Model hidden dimension.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Block estimate:</strong></span> Approximate parameter count inside one transformer layer, excluding embedding and final output details unless stated.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Memory conversion:</strong></span> Parameter count becomes bytes after multiplying by storage precision, such as 2 bytes for FP16/BF16 or fewer for supported quantized weights.</li>
+</ul>
+<p>The local derivation is attention projections plus feed-forward projections: 4 × d² for Q, K, V, and output projection, plus about 8 × d² for the MLP, giving about 12 × d² per layer. With d = 4096, one block has about 12 × 4096² = 201,326,592 parameters. At 2 bytes per FP16/BF16 parameter, that block is about 402.7 MB before runtime workspaces, replica overhead, or quantization.</p>
+</section>
+<section id="sec-m4-c08-s08" class="level2" data-number="8.5">
+<h2 data-number="8.5" class="anchored" data-anchor-id="sec-m4-c08-s08"><span class="header-section-number">8.5</span> Dynamic inference memory</h2>
+<p>Batch shape is the actual tensor and scheduler shape admitted to the GPU. In LLM serving, a batch contains sequences with different prompt lengths, generated lengths, cache states, decode progress, and request count.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Request batch size:</strong></span> The number of active requests. It is easy to count but insufficient for memory planning because one long request can consume more cache than many short requests.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Total batched tokens:</strong></span> The sum of tokens being processed or stored across active requests. Serving engines often control this directly because it predicts prefill work and cache pressure better than request count alone.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Context length:</strong></span> The number of tokens a request can attend to. Longer contexts increase prefill work and KV-cache storage.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Active cache blocks:</strong></span> Physical KV-cache blocks currently owned by admitted requests. This is the object that often limits concurrency.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill/decode mix:</strong></span> A batch can contain large prompt-processing work and one-token decode work. Mixing them improves utilization but can harm TTFT or inter-token latency if long prefill monopolizes the GPU.</li>
+</ul>
+<p>Batch size improves hardware utilization only if memory can admit the active sequences. Sequence length and context length increase attention work and key-value cache size. A serving system therefore manages total batched tokens, cache blocks, the mix of prefill and decode work, and request count together.</p>
+</section>
+<section id="sec-m4-c08-s09" class="level2" data-number="8.6">
+<h2 data-number="8.6" class="anchored" data-anchor-id="sec-m4-c08-s09"><span class="header-section-number">8.6</span> Key-value cache sizing</h2>
+<p>Key-value cache sizing estimates the GPU memory consumed by stored attention keys and values for active requests. It is separate from model weight memory: weights are loaded once per replica, while the KV cache grows and shrinks with admitted sequences, context length, and generated tokens.</p>
+<p>The first-order estimate multiplies active sequences, stored tokens, layers, key and value tensors, head geometry, and dtype size:</p>
+<p><span id="eq-m4-c08-e03"><span class="math display">\[
+\text{KV bytes} = B \times S \times L \times 2 \times H_{\text{kv}} \times D_{\text{head}} \times \text{bytes}_{\text{per element}}
+\tag{8.3}\]</span></span></p>
+<p>The variables below identify the quantities in the estimate and connect each one to a serving decision.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>B:</strong></span> Active batch size or number of active sequences admitted by the serving scheduler.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>S:</strong></span> Sequence length stored in cache. This includes prompt tokens and generated tokens that remain in the attention context.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>L:</strong></span> Number of transformer layers that maintain KV state.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>2:</strong></span> Two cached tensors per layer: keys and values.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>H with subscript kv:</strong></span> Number of key-value heads. This can be smaller than the number of query heads in grouped-query attention (GQA) or multi-query attention (MQA), which reduces cache size.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>D with subscript head:</strong></span> Head dimension for each key or value vector.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>bytes per element:</strong></span> Storage size for each cached element, such as 2 bytes for FP16/BF16 or fewer bytes for supported KV-cache quantization.</li>
+</ul>
+<p>For example, B = 16, S = 4096, L = 32, key-value heads = 8, head dimension = 128, and 2-byte elements use 8,589,934,592 bytes: about 8.59 GB decimal or exactly 8 GiB. This is dynamic serving state, not model weight memory. Treat the formula as a lower bound; fragmentation, padding, metadata, and workspaces add overhead.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Worked real-scale example: Llama 3.3 70B</strong></p>
+<p><strong>Example configuration:</strong> Use 80 transformer layers, 8 key-value heads, head dimension 128, one active sequence, 32,000 cached tokens, and BF16 storage at 2 bytes per element.</p>
+<p><strong>Substitution:</strong> The formula gives 1 x 32,000 x 80 x 2 x 8 x 128 x 2 = 10,485,760,000 bytes.</p>
+<p><strong>Calculated size:</strong> That is about 9.77 GiB for one sequence before block-table metadata, allocator fragmentation, scales, workspaces, and other live tensors. If 32K means 32,768 tokens rather than 32,000, the same calculation is exactly 10.00 GiB.</p>
+<p><strong>Serving consequence:</strong> A single long-context request can consume a material fraction of an 80-GB GPU even when the model weights are already resident. Concurrency planning must budget KV cache separately from weights.</p>
+</div>
+<p>Multi-head attention variants change the key-value head count in that formula. Query heads decide how many independent query projections are used for the current token. Key-value heads decide how many historical key and value streams must be stored and reread. GQA and MQA reduce cache memory because several query heads share fewer key-value heads.</p>
+<div id="tbl-m4-c08-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c08-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;8.3: MHA, GQA, and MQA cache multipliers.
+</figcaption>
+<div aria-describedby="tbl-m4-c08-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Attention form</th>
+<th>Head relationship</th>
+<th>KV-cache multiplier versus full MHA</th>
+<th>Serving consequence</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MHA</td>
+<td>Each query head has its own key and value head</td>
+<td>1.0</td>
+<td>Highest KV-cache footprint; simplest mental model</td>
+</tr>
+<tr class="even">
+<td>GQA</td>
+<td>Groups of query heads share fewer key and value heads</td>
+<td>key-value head count divided by query head count</td>
+<td>Retains more independent KV head groups than MQA; quality and kernel behavior still require measurement</td>
+</tr>
+<tr class="odd">
+<td>MQA</td>
+<td>All query heads share one key and value head</td>
+<td>1 divided by query head count</td>
+<td>Smallest KV-cache footprint, but architecture quality and kernel support must be validated</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>For a concrete GQA example, a 32-query-head model with 8 key-value heads stores one quarter as many KV head streams as full MHA: 8 divided by 32 is 0.25. If the same cache is also stored in 8-bit form instead of FP16/BF16, the raw element bytes are halved again before scale metadata and padding are added.</p>
+<div id="tbl-m4-c08-t04" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c08-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;8.4: KV-cache dtype byte multipliers.
+</figcaption>
+<div aria-describedby="tbl-m4-c08-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>KV-cache element format</th>
+<th>Raw bytes per value</th>
+<th>Multiplier versus FP16/BF16</th>
+<th>Caveat</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>FP16 or BF16</td>
+<td>2</td>
+<td>1.0</td>
+<td>Common baseline for cache sizing</td>
+</tr>
+<tr class="even">
+<td>FP8 or INT8</td>
+<td>1</td>
+<td>0.5 before scale metadata</td>
+<td>Needs attention kernels and cache layout that support the format efficiently</td>
+</tr>
+<tr class="odd">
+<td>INT4</td>
+<td>0.5</td>
+<td>0.25 before scale metadata</td>
+<td>Can be attractive for capacity, but dequantization cost and attention quality are higher risk</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The byte count answers whether a planned set of requests can fit. It does not say where each request’s state should be placed or how attention kernels find it. Chapter 9 turns this capacity estimate into a layout problem: token order must remain logical even when physical blocks are allocated, reused, and read non-contiguously.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../chapters/ch-m4-c07.html" class="pagination-link" aria-label="Training and Precision">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Training and Precision</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m4-c09.html" class="pagination-link" aria-label="Decode and KV Cache">
+        <span class="nav-page-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Decode and KV Cache</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>12&nbsp; GPU Communication – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m4-c13.html" rel="next">
+<link href="../parts/part-iii.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-iii.html">Part III: Communication and Distributed Systems</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c12.html"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">GPU Communication</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Advanced LLM Performance Engineering</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Advanced LLM Performance Engineering</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m4-index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction and Learning Path</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-i.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: Fundamentals</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">LLM Workloads and Performance Limits</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">GPU Hardware and Memory</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Software to CUDA</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Triton and Custom Kernels</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Performance Models and Profiling</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Compilation and Runtime</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-ii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: Training and Inference Workloads</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Training and Precision</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Inference Workloads</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Decode and KV Cache</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Serving Engines</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Performance Experiments</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-iii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: Communication and Distributed Systems</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c12.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">GPU Communication</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Distributed Training and Serving</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-a.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Reference Material</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-b.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Lists of Figures and Tables</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m4-c12-s01" id="toc-sec-m4-c12-s01" class="nav-link active" data-scroll-target="#sec-m4-c12-s01"><span class="header-section-number">12.1</span> Communication on the critical path</a></li>
+  <li><a href="#sec-m4-c12-s02" id="toc-sec-m4-c12-s02" class="nav-link" data-scroll-target="#sec-m4-c12-s02"><span class="header-section-number">12.2</span> Topology and communication distance</a></li>
+  <li><a href="#sec-m4-c12-s03" id="toc-sec-m4-c12-s03" class="nav-link" data-scroll-target="#sec-m4-c12-s03"><span class="header-section-number">12.3</span> Communication cost model</a></li>
+  <li><a href="#sec-m4-c12-s04" id="toc-sec-m4-c12-s04" class="nav-link" data-scroll-target="#sec-m4-c12-s04"><span class="header-section-number">12.4</span> Physical communication paths</a></li>
+  <li><a href="#sec-m4-c12-s05" id="toc-sec-m4-c12-s05" class="nav-link" data-scroll-target="#sec-m4-c12-s05"><span class="header-section-number">12.5</span> Point-to-point and collective communication</a></li>
+  <li><a href="#sec-m4-c12-s06" id="toc-sec-m4-c12-s06" class="nav-link" data-scroll-target="#sec-m4-c12-s06"><span class="header-section-number">12.6</span> Collective primitives</a></li>
+  <li><a href="#sec-m4-c12-s07" id="toc-sec-m4-c12-s07" class="nav-link" data-scroll-target="#sec-m4-c12-s07"><span class="header-section-number">12.7</span> Collective algorithms</a></li>
+  <li><a href="#sec-m4-c12-s08" id="toc-sec-m4-c12-s08" class="nav-link" data-scroll-target="#sec-m4-c12-s08"><span class="header-section-number">12.8</span> Framework and communication backends</a></li>
+  <li><a href="#sec-m4-c12-s09" id="toc-sec-m4-c12-s09" class="nav-link" data-scroll-target="#sec-m4-c12-s09"><span class="header-section-number">12.9</span> Communication and computation overlap</a></li>
+  <li><a href="#sec-m4-c12-s10" id="toc-sec-m4-c12-s10" class="nav-link" data-scroll-target="#sec-m4-c12-s10"><span class="header-section-number">12.10</span> Profiling communication</a></li>
+  <li><a href="#sec-m4-c12-s11" id="toc-sec-m4-c12-s11" class="nav-link" data-scroll-target="#sec-m4-c12-s11"><span class="header-section-number">12.11</span> Topology-aware design</a></li>
+  <li><a href="#sec-m4-c12-s12" id="toc-sec-m4-c12-s12" class="nav-link" data-scroll-target="#sec-m4-c12-s12"><span class="header-section-number">12.12</span> Communication design checks</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-iii.html">Part III: Communication and Distributed Systems</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c12.html"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">GPU Communication</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m4-c12" class="quarto-section-identifier"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">GPU Communication</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Explain why GPU communication enters the critical path, how topology and collective algorithms shape its cost, and how to measure it.</p>
+<p>Communication is where a single-GPU workload becomes a distributed system. The performance question is no longer only one kernel or one memory hierarchy; it is how tensors move and synchronize across processes, devices, nodes, and network fabrics.</p>
+<p>The dependency begins with an object another worker process needs: a gradient bucket, parameter shard, activation, expert-routed token block, or serving state. Distributed runtimes assign each participating process an integer rank inside a process group. Payload size, frequency, destination, and readiness time determine whether startup latency, sustained bandwidth, topology distance, or waiting between ranks dominates the transfer.</p>
+<p>Communication analysis starts with the bytes that must move and the physical path they cross. Point-to-point operations and collectives define the data relationship; schedules, backend libraries, and transports implement it. Overlap and profiling then show how much of the communication remains on the critical path.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Process:</strong></span> An operating-system program instance. GPU jobs commonly use one process per GPU, although other mappings are possible.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Rank:</strong></span> The integer identity of one process inside a distributed group.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Process group:</strong></span> A named set of ranks that issue compatible communication operations through one selected backend.</li>
+</ul>
+<p>When ranks depend on remote tensors, communication time includes waiting, software coordination, transfer over the available fabric, and synchronization before dependent work can continue.</p>
+<div id="fig-m4-c12-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Ranks waiting for communication connect through a physical fabric and NCCL. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all use distinct data-flow drawings, followed by compute and communication overlap.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c12-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c12-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="Ranks waiting for communication connect through a physical fabric and NCCL. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all use distinct data-flow drawings, followed by compute and communication overlap.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c12-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;12.1: GPU communication combines software coordination, collective data relationships, and physical transport.
+</figcaption>
+</figure>
+</div>
+<p>The figure separates the framework process group, NVIDIA Collective Communications Library (NCCL), and physical fabric. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all are drawn as different data relationships rather than as one repeated mesh. The overlap panel shows that communication can share time with independent compute only when dependencies and resources permit it.</p>
+<section id="sec-m4-c12-s01" class="level2" data-number="12.1">
+<h2 data-number="12.1" class="anchored" data-anchor-id="sec-m4-c12-s01"><span class="header-section-number">12.1</span> Communication on the critical path</h2>
+<p>Single-GPU computation can often be overlapped, fused, compiled, or quantized. Communication is harder because it couples ranks. If one rank reaches a collective late, other ranks may wait. If a tensor-parallel layer needs partial results from peers every token, the interconnect becomes part of the critical path. Communication cost includes bandwidth, latency, topology, synchronization, and software overhead.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Rank coupling:</strong></span> A distributed operation can force multiple processes to wait at the same logical point. Fast ranks do not finish earlier if they are blocked by slow ranks.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Critical-path communication:</strong></span> Data movement that must complete before the next useful computation can start. Tensor-parallel collectives in a decode step are often critical-path work.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Payload size:</strong></span> The number of bytes moved. Large gradients, activation tensors, parameter shards, and expert-routing buffers can dominate bandwidth.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Startup latency:</strong></span> Fixed cost before useful bytes move. This is important for frequent small messages and per-layer collectives.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Topology effect:</strong></span> The same collective can be fast or slow depending on whether it stays within NVLink/NVSwitch or crosses node boundaries through NICs and switches.</li>
+</ul>
+<p><span id="eq-m4-c12-e01"><span class="math display">\[
+\text{communication time} \approx \text{latency} + \frac{\text{bytes transferred}}{\text{effective bandwidth}}
+\tag{12.1}\]</span></span></p>
+<p>Latency is the startup cost for the operation. Bytes transferred is the payload size. Effective bandwidth is lower than theoretical link bandwidth because algorithms, topology, contention, protocol overhead, and synchronization reduce usable throughput. For example, moving 1 GB over an effective 100 GB/s path with 20 microseconds of startup cost takes roughly 10.02 ms. The approximation omits overlap, algorithmic chunking, rank skew, network contention, and topology-dependent routing.</p>
+<p>Message size changes which term dominates. A small collective can be slow because every rank pays startup and synchronization cost. A very large collective can use the fabric efficiently but spend most of its time moving bytes. Middle sizes are often the hardest to reason about because protocol choice, chunking, queueing, and overlap determine whether latency or bandwidth is exposed.</p>
+<div id="tbl-m4-c12-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c12-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;12.1: How message size changes latency and bandwidth cost.
+</figcaption>
+<div aria-describedby="tbl-m4-c12-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Message-size range</th>
+<th>Dominant cost</th>
+<th>Typical examples</th>
+<th>Useful change</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Small and frequent</td>
+<td>Startup latency, synchronization, launch overhead, rank skew</td>
+<td>Per-layer tensor-parallel collectives, small control tensors, frequent expert routing metadata</td>
+<td>Reduce message count, keep traffic in the fast local domain, combine operations when possible</td>
+</tr>
+<tr class="even">
+<td>Medium</td>
+<td>Transition between latency and bandwidth; protocol and chunking choices matter</td>
+<td>FSDP layer all-gathers, moderate gradient buckets, activation transfers</td>
+<td>Tune bucket or shard sizes, improve overlap, and inspect backend algorithm choice</td>
+</tr>
+<tr class="odd">
+<td>Large</td>
+<td>Effective bandwidth and topology contention</td>
+<td>Large gradient buckets, full-parameter shards, checkpoint or bulk cache movement</td>
+<td>Use high-bandwidth paths, hierarchical collectives, compression, or overlap with independent compute</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Message size determines whether startup delay, rank skew, or sustained bandwidth is the first likely limit, but the effective rate still depends on the route between participants. The next question is how many device, switch, and node boundaries the payload crosses and where that path becomes shared.</p>
+</section>
+<section id="sec-m4-c12-s02" class="level2" data-number="12.2">
+<h2 data-number="12.2" class="anchored" data-anchor-id="sec-m4-c12-s02"><span class="header-section-number">12.2</span> Topology and communication distance</h2>
+<p>Scalable clusters use switched hierarchy: endpoints connect to local switches, and the fabric routes traffic through switch layers rather than requiring every device pair to have a dedicated cable.</p>
+<p>Large clusters often use hierarchical switch designs such as leaf-spine topologies. Leaf switches connect servers in a rack or local group; spine switches connect leaf groups. This provides scalable bisection bandwidth, while every extra hop adds latency and every shared link can become congested.</p>
+<p>A direct full mesh is the contrasting limit: every device connects to every other device. Port and cable demand grows rapidly with device count, which is why large systems use switched hierarchy instead.</p>
+<p>Scale-up communication stays inside a tightly coupled accelerator domain with fast GPU-to-GPU paths. That domain is often one server, but rack-scale NVLink systems can join GPUs across more than one compute tray or node. Scale-out communication crosses the cluster network through network interface cards (NICs) and fabrics such as InfiniBand, RDMA over Converged Ethernet (RoCE), or Ethernet. Frequent latency-sensitive traffic such as tensor-parallel collectives should remain inside the fastest available scale-up domain whenever possible.</p>
+<p><span id="eq-m4-c12-e02"><span class="math display">\[
+\text{full-mesh links} = \frac{N(N - 1)}{2}
+\tag{12.2}\]</span></span></p>
+<p>A full mesh among N endpoints needs N(N - 1)/2 undirected links, so direct wiring grows quadratically. Leaf-spine and related Clos fabrics replace those dedicated pairwise links with shared switch paths. A host-to-host path can be counted by switches or by physical links; state the convention before describing a path as a particular number of hops.</p>
+</section>
+<section id="sec-m4-c12-s03" class="level2" data-number="12.3">
+<h2 data-number="12.3" class="anchored" data-anchor-id="sec-m4-c12-s03"><span class="header-section-number">12.3</span> Communication cost model</h2>
+<p>Communication performance has four independent ingredients. A trace that says ‘all-reduce is slow’ is incomplete until it identifies which ingredient is limiting the operation.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Latency:</strong></span> Startup and coordination time before the payload is effectively transferred. It dominates frequent small messages and token-path synchronization.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Bandwidth:</strong></span> Sustained byte rate for large transfers. It dominates large gradients, parameter shards, activation transfers, and KV-cache movement.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Topology:</strong></span> The physical and logical path between devices. GPU pairs connected through NVLink or NVSwitch do not behave like pairs crossing PCIe, NICs, or spine switches.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Synchronization:</strong></span> The waiting behavior introduced when ranks must enter collective operations in a compatible order. Rank skew can make the collective look slow even when the network is healthy.</li>
+</ul>
+<p>Optimizations target different ingredients. Larger buckets can improve bandwidth efficiency but may reduce overlap. Topology-aware rank placement can keep frequent collectives on fast links. Reducing message count can help latency-bound paths. Removing rank imbalance can shorten apparent collective time without changing the network.</p>
+<p>Communication tuning must target the measured term: message count for latency, payload handling for bandwidth, placement for topology, or readiness skew for synchronization. The next question is which physical fabric and device-to-network path actually carries the bytes.</p>
+</section>
+<section id="sec-m4-c12-s04" class="level2" data-number="12.4">
+<h2 data-number="12.4" class="anchored" data-anchor-id="sec-m4-c12-s04"><span class="header-section-number">12.4</span> Physical communication paths</h2>
+<p>Communication fabrics should be described by scope. Some links move bytes inside a server. Some connect servers. Some are general-purpose and some are designed for high-performance GPU communication.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>PCIe:</strong></span> General host/device expansion bus connecting CPUs, GPUs, NICs, and other devices. It is ubiquitous but usually slower than NVLink for GPU peer traffic.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>NVLink:</strong></span> High-bandwidth GPU-to-GPU link available on supported systems and topologies. Pairwise bandwidth depends on the installed GPU model and the physical or switched connection between the selected GPUs.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>NVSwitch:</strong></span> A switch fabric that connects many NVLink-capable GPUs inside a server or platform. It improves intra-node connectivity, but the exact topology still matters.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>InfiniBand:</strong></span> High-performance cluster fabric commonly used for multi-node training and GPU collectives through RDMA-capable networking.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>RoCE:</strong></span> RDMA over Converged Ethernet. It can support high-performance cluster communication, but performance depends strongly on network configuration, congestion control, and lossless or near-lossless behavior.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Ethernet:</strong></span> General-purpose network fabric. It is flexible and common, but standard Ethernet paths are often a poor fit for frequent latency-sensitive GPU collectives unless engineered specifically for that workload.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Fabric caveat</strong></p>
+<p>A fabric name is only the starting point for a performance estimate. Effective bandwidth depends on topology, routing, contention, message size, collective algorithm, and whether the software stack actually uses the intended path.</p>
+</div>
+<p>The critical distinction is local versus remote path. Frequent per-layer traffic is most viable inside a fast GPU fabric; cross-node traffic additionally traverses a GPU-to-NIC path, a network interface, switches, and the destination path. Product names and peak bandwidth figures are generation-specific, so verify the installed topology and achieved transfer rate rather than copying a nominal number.</p>
+</section>
+<section id="sec-m4-c12-s05" class="level2" data-number="12.5">
+<h2 data-number="12.5" class="anchored" data-anchor-id="sec-m4-c12-s05"><span class="header-section-number">12.5</span> Point-to-point and collective communication</h2>
+<p>Distributed programs communicate either through explicit pairwise transfers or through group operations. The choice changes both the code structure and the synchronization behavior.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Point-to-point communication:</strong></span> One rank sends data to another rank. It is common in pipeline stages, custom protocols, explicit activation transfers, and control paths where the communication pattern is irregular.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Collective communication:</strong></span> A group of ranks participates in one operation with a defined group-level result, such as all-reduce, all-gather, or all-to-all.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Ordering requirement:</strong></span> Ranks must call compatible collectives in compatible order. Mismatched ordering can hang or corrupt the distributed program.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Engineering trade-off:</strong></span> Point-to-point communication can be flexible but harder to reason about globally. Collectives are structured and optimized, but they create synchronization points.</li>
+</ul>
+<p>The semantics define who participates and which ranks receive results; they do not prescribe a central coordinator or physical traffic path. The next section names the common group transformations before their ring, tree, or hierarchical implementations are considered.</p>
+</section>
+<section id="sec-m4-c12-s06" class="level2" data-number="12.6">
+<h2 data-number="12.6" class="anchored" data-anchor-id="sec-m4-c12-s06"><span class="header-section-number">12.6</span> Collective primitives</h2>
+<p>A collective operation is a group communication primitive used by strategies such as DDP, FSDP, tensor parallelism, and expert parallelism to move their required tensors.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Broadcast:</strong></span> One source rank sends the same tensor to every other rank. It copies a source value and is commonly used to initialize or synchronize parameters.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Reduce:</strong></span> Many ranks contribute tensors that are combined on one destination rank. The destination receives the aggregate; custom aggregation paths use this ownership pattern.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>All-reduce:</strong></span> All ranks contribute tensors, the tensors are reduced, and every rank receives the reduced result. DDP uses it for gradient synchronization and pays both reduction and redistribution traffic.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>All-gather:</strong></span> Each rank starts with a shard, and all ranks receive the full collection of shards. Materializing sharded parameters or activations creates a full temporary result on every participant.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Reduce-scatter:</strong></span> Ranks reduce tensors and each rank receives one shard of the reduced result. FSDP and sharded optimizer paths use its combined reduction and partitioning behavior.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>All-to-all:</strong></span> Every rank sends a different slice to every other rank and receives different slices back. Expert-parallel token routing uses this latency- and topology-sensitive exchange.</li>
+</ul>
+<p>Expert-parallel all-to-all cost comes from routing token representations, not from the expert MLP arithmetic alone. A rough payload estimate is the number of routed token copies times hidden dimension times bytes per element, split across destination ranks. Top-k routing multiplies token traffic because one token may be sent to more than one expert.</p>
+<p>Read the payload estimate through these five cost objects:</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Routed tokens:</strong></span> Tokens assigned from each rank to remote expert ranks. Router imbalance creates tail latency when one expert or rank receives too much work.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Top-k multiplier:</strong></span> The number of experts selected per token. Top-2 routing can roughly double routed activation traffic before outputs are combined.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Hidden dimension and dtype:</strong></span> The bytes carried by each token representation. FP16 or BF16 activations move twice the raw bytes of 8-bit activations before metadata or padding.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Topology distance:</strong></span> Whether routed tokens stay inside a node, rack, or cross-node fabric. All-to-all is sensitive to simultaneous peer paths and aggregate fabric behavior.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Combine path:</strong></span> The return path that restores original token order after expert execution. Dispatch cost is only half the story when the combine collective is also critical.</li>
+</ul>
+<p><span id="eq-m4-c12-e03"><span class="math display">\[
+\text{ring all-reduce bytes sent per rank} \approx \frac{2(N - 1)}{N} \times \text{tensor}_{\text{bytes}}
+\tag{12.3}\]</span></span></p>
+<p>Here N is the number of ranks and tensor_bytes is the size of the tensor being reduced. Under the standard ring model, each rank sends approximately this many payload bytes across reduce-scatter and all-gather and receives the same amount. With 8 ranks and a 1 GiB tensor, the per-rank sent payload is 1.75 GiB; a send-plus-receive accounting convention would report 3.5 GiB. State the convention before converting traffic to bandwidth. The approximation omits latency per chunk, topology, protocol overhead, and overlap with backward computation.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Worked calculation - ring all-reduce traffic</strong></p>
+<p><strong>Inputs:</strong> Use N = 8 ranks and tensor_bytes = 1 GiB for one all-reduce payload.</p>
+<p><strong>Substitution:</strong> 2 x (8 - 1) / 8 x 1 GiB = 1.75 GiB sent by each rank across reduce-scatter and all-gather; each rank also receives about 1.75 GiB.</p>
+<p><strong>Meaning:</strong> The estimate uses a per-rank bytes-sent convention and describes payload traffic, not elapsed time. Link latency, chunking, topology, protocol overhead, rank skew, and overlap determine the measured duration.</p>
+<p><strong>Next measurement:</strong> Compare the estimate with NCCL traces and the actual interconnect path before changing bucket size or rank placement.</p>
+</div>
+<p>A ring all-reduce commonly implements a reduce-scatter phase followed by an all-gather phase over chunked tensors. Merely drawing ranks in a circle does not demonstrate those phases; verify the actual schedule or trace before using a ring-topology picture as algorithm evidence.</p>
+<p>Collective names specify before-and-after tensor ownership. Their measured cost still depends on the backend’s chosen schedule, chunking, topology, rank readiness, and overlap.</p>
+</section>
+<section id="sec-m4-c12-s07" class="level2" data-number="12.7">
+<h2 data-number="12.7" class="anchored" data-anchor-id="sec-m4-c12-s07"><span class="header-section-number">12.7</span> Collective algorithms</h2>
+<p>A collective algorithm is the communication schedule used to implement a collective primitive. The same all-reduce request can therefore run as a ring, a tree, or a hierarchy depending on message size, topology, backend heuristics, and runtime settings.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Ring collective:</strong></span> Streams chunks around ranks and can use bandwidth well for large tensors, especially when each link can stay busy.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Tree collective:</strong></span> Aggregates through a branching structure and can reduce latency for smaller messages or topologies where a ring would expose too many sequential hops.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Hierarchical collective:</strong></span> Communicates inside a fast scale-up domain first, then across slower domains, then inside the destination scale-up domain. This matches systems where NVLink/NVSwitch and InfiniBand/RoCE have different costs.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Topology awareness:</strong></span> Chooses or tunes the schedule using the actual device, switch, and network layout rather than treating every rank pair as equally expensive.</li>
+</ul>
+<p>A hierarchical schedule performs local aggregation inside a fast GPU island, exchanges reduced data across the slower inter-node path, and then distributes the result locally. A tree schedule is a different branching reduction and distribution algorithm; a two-node hierarchy should not be labeled as a tree unless the branching parent-child structure is actually shown.</p>
+</section>
+<section id="sec-m4-c12-s08" class="level2" data-number="12.8">
+<h2 data-number="12.8" class="anchored" data-anchor-id="sec-m4-c12-s08"><span class="header-section-number">12.8</span> Framework and communication backends</h2>
+<p>After the payload, topology, collective semantics, and possible schedules are defined, the software stack can be assigned concrete responsibilities. A distributed strategy decides what must communicate, a framework API expresses the operation for a group of ranks, a backend implements it, and the selected transport carries the bytes over the installed hardware.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>torch.distributed</code>:</strong></span> The PyTorch API for initializing process groups, assigning rank identities, and issuing point-to-point or collective operations.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Backend:</strong></span> The implementation selected by a process group to execute its communication operations, such as NCCL for many CUDA tensor collectives or Gloo for common CPU/control paths.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Strategy boundary:</strong></span> DDP, FSDP, tensor parallelism, pipeline parallelism, and expert parallelism decide which objects and operations are required; the API and backend execute those requests.</li>
+</ul>
+<p>Backends do not all occupy one interchangeable role. NCCL is commonly selected for CUDA tensor collectives on NVIDIA GPUs. Gloo is commonly used for CPU tensors and control-oriented paths. Message Passing Interface (MPI) implementations provide broader HPC process and communication facilities. Unified Communication X (UCX) exposes transport abstractions used by several distributed-runtime stacks. Compatibility depends on the framework build, tensor location, operation, platform, and deployment configuration.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Definition - NCCL</strong></p>
+<p>NVIDIA Collective Communications Library is the common GPU collective library for NVIDIA distributed training and inference. It implements collective operations and chooses algorithms over available paths such as PCIe, NVLink, NVSwitch, and network interfaces.</p>
+</div>
+<p>NCCL does not decide the training strategy. It implements communication operations requested by frameworks or distributed libraries. For example, DDP may need all-reduce for gradients, FSDP may need all-gather and reduce-scatter for sharded state, and expert parallelism may need all-to-all routing. NCCL tries to execute those operations efficiently on the hardware topology.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Process group:</strong></span> A set of ranks that participate in communication. PyTorch creates process groups and calls backend collectives through them.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Collective algorithm:</strong></span> The pattern NCCL uses to move chunks, such as ring, tree, or hierarchical variants. The selected algorithm depends on message size, rank count, and topology.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Transport:</strong></span> The path used underneath the collective, such as peer-to-peer GPU links, PCIe, shared memory, sockets, InfiniBand, or RoCE depending on the system.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>NCCL logs:</strong></span> <code>NCCL_DEBUG=INFO</code> and related settings expose backend decisions. Logs are diagnostic evidence, not proof of achieved performance by themselves.</li>
+</ul>
+<p>Communication controls are read by processes at initialization. <code>CUDA_VISIBLE_DEVICES</code> changes visible devices and local numbering; <code>NCCL_SOCKET_IFNAME</code> selects socket interfaces; <code>NCCL_IB_DISABLE</code> and <code>NCCL_P2P_DISABLE</code> are diagnostic path toggles. These controls can test routing hypotheses, but they do not choose the model’s sharding strategy or prove that the enabled path reaches peak throughput.</p>
+<p>A useful debugging question is: did the framework request the intended collective, did NCCL select the intended transport, and did the measured trace show that the collective was on the critical path?</p>
+<p>This ownership chain prevents a common diagnostic error: changing a framework strategy when the wrong network interface was selected, or changing a transport variable when the strategy itself communicates too often for the topology.</p>
+</section>
+<section id="sec-m4-c12-s09" class="level2" data-number="12.9">
+<h2 data-number="12.9" class="anchored" data-anchor-id="sec-m4-c12-s09"><span class="header-section-number">12.9</span> Communication and computation overlap</h2>
+<p>Communication/computation overlap means scheduling data movement so it occurs while independent useful computation is still running. It reduces step time only when the communication is no longer on the critical path.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>DDP overlap:</strong></span> Buckets gradients and launches all-reduce as soon as a bucket is ready during backward propagation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>FSDP overlap:</strong></span> Can prefetch or all-gather parameters near the layer that needs them.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Pipeline overlap:</strong></span> Runs micro-batches across stages so some stages compute while others transfer activations or gradients.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Tensor-parallel limits:</strong></span> Layer-internal collectives often have little independent work after them, so they are harder to hide than DDP gradient buckets.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Serving limits:</strong></span> Decode has a short per-token critical path, so communication in tensor-parallel serving can be visible even when training overlap looks good.</li>
+</ul>
+<p>Overlap works only when there is independent computation available while communication runs. If the next layer or token needs the communicated result immediately, the communication remains exposed.</p>
+<p>The common mistake is assuming overlap has hidden communication because kernels and collectives appear adjacent in a trace. The test is critical path time: if shortening the collective would still shorten the step, communication is not fully hidden.</p>
+<p>Overlap is established by aligned compute and communication lanes plus a shorter critical path, not by adjacent colored blocks. If removing or shortening the communication would still shorten the step, an exposed communication tail remains.</p>
+</section>
+<section id="sec-m4-c12-s10" class="level2" data-number="12.10">
+<h2 data-number="12.10" class="anchored" data-anchor-id="sec-m4-c12-s10"><span class="header-section-number">12.10</span> Profiling communication</h2>
+<p>Communication profiling asks where time is lost when ranks exchange tensors. The evidence can come from several layers: the framework call such as <code>dist.all_reduce</code>, the NCCL backend that chooses a collective algorithm and transport, the GPU timeline that shows copy or collective kernels, the network fabric that carries bytes between nodes, and the rank synchronization behavior that makes fast ranks wait for slow ranks.</p>
+<p>When communication is suspected, a dedicated distributed harness separates the collective from model computation. The template below warms the operation, measures repeated all-reduces on every rank, reports the slowest rank’s mean time, and converts the ring traffic estimate into an effective per-rank payload rate.</p>
+<p><strong>Example: NCCL collective timing probe.</strong> This distributed probe shows the objects involved in a simple all-reduce: process group, rank-assigned GPU, tensor payload, synchronization, and elapsed time. Launch it with <code>torchrun</code> across the intended number of GPUs.</p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> NCCL collective timing probe</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c12-c01"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="lst-m4-c12-c01-1"><a href="#lst-m4-c12-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c12-c01-2"><a href="#lst-m4-c12-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - dist.init_process_group('nccl') creates the communication group.</span></span>
+<span id="lst-m4-c12-c01-3"><a href="#lst-m4-c12-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - payload supplies a CUDA device pointer to NCCL. Logs and traces must still confirm whether the</span></span>
+<span id="lst-m4-c12-c01-4"><a href="#lst-m4-c12-c01-4" aria-hidden="true" tabindex="-1"></a><span class="co">#   physical path uses peer access, GPUDirect RDMA, shared memory, sockets, or a staged fallback.</span></span>
+<span id="lst-m4-c12-c01-5"><a href="#lst-m4-c12-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - Warmup keeps initialization outside the measured samples; the barrier aligns ranks before the</span></span>
+<span id="lst-m4-c12-c01-6"><a href="#lst-m4-c12-c01-6" aria-hidden="true" tabindex="-1"></a><span class="co">#   measurement window.</span></span>
+<span id="lst-m4-c12-c01-7"><a href="#lst-m4-c12-c01-7" aria-hidden="true" tabindex="-1"></a><span class="co"># - Reducing the per-rank means with MAX reports the slowest participant, which is the relevant</span></span>
+<span id="lst-m4-c12-c01-8"><a href="#lst-m4-c12-c01-8" aria-hidden="true" tabindex="-1"></a><span class="co">#   collective completion time.</span></span>
+<span id="lst-m4-c12-c01-9"><a href="#lst-m4-c12-c01-9" aria-hidden="true" tabindex="-1"></a><span class="co"># - The reported GB/s uses the ring traffic approximation and is not raw physical-link bandwidth.</span></span>
+<span id="lst-m4-c12-c01-10"><a href="#lst-m4-c12-c01-10" aria-hidden="true" tabindex="-1"></a><span class="co"># - NCCL_DEBUG=INFO can reveal selected transport and topology decisions.</span></span>
+<span id="lst-m4-c12-c01-11"><a href="#lst-m4-c12-c01-11" aria-hidden="true" tabindex="-1"></a><span class="co"># - Compare this elapsed time with Nsight Systems traces before concluding that communication is</span></span>
+<span id="lst-m4-c12-c01-12"><a href="#lst-m4-c12-c01-12" aria-hidden="true" tabindex="-1"></a><span class="co">#   fully exposed.</span></span>
+<span id="lst-m4-c12-c01-13"><a href="#lst-m4-c12-c01-13" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c12-c01-14"><a href="#lst-m4-c12-c01-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Launch example:</span></span>
+<span id="lst-m4-c12-c01-15"><a href="#lst-m4-c12-c01-15" aria-hidden="true" tabindex="-1"></a><span class="co"># NCCL_DEBUG=INFO torchrun --nproc_per_node=4 nccl_probe.py</span></span>
+<span id="lst-m4-c12-c01-16"><a href="#lst-m4-c12-c01-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-17"><a href="#lst-m4-c12-c01-17" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> os</span>
+<span id="lst-m4-c12-c01-18"><a href="#lst-m4-c12-c01-18" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> torch</span>
+<span id="lst-m4-c12-c01-19"><a href="#lst-m4-c12-c01-19" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> torch.distributed as dist</span>
+<span id="lst-m4-c12-c01-20"><a href="#lst-m4-c12-c01-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-21"><a href="#lst-m4-c12-c01-21" aria-hidden="true" tabindex="-1"></a><span class="ex">dist.init_process_group</span><span class="er">(</span><span class="st">"nccl"</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-22"><a href="#lst-m4-c12-c01-22" aria-hidden="true" tabindex="-1"></a><span class="ex">try:</span></span>
+<span id="lst-m4-c12-c01-23"><a href="#lst-m4-c12-c01-23" aria-hidden="true" tabindex="-1"></a>    <span class="ex">local_rank</span> = int<span class="er">(</span><span class="ex">os.environ[</span><span class="st">"LOCAL_RANK"</span><span class="ex">]</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-24"><a href="#lst-m4-c12-c01-24" aria-hidden="true" tabindex="-1"></a>    <span class="ex">torch.cuda.set_device</span><span class="er">(</span><span class="ex">local_rank</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-25"><a href="#lst-m4-c12-c01-25" aria-hidden="true" tabindex="-1"></a>    <span class="ex">device</span> = torch.device<span class="er">(</span><span class="st">"cuda"</span><span class="ex">,</span> local_rank<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-26"><a href="#lst-m4-c12-c01-26" aria-hidden="true" tabindex="-1"></a>    <span class="ex">payload</span> = torch.ones<span class="er">(</span><span class="ex">256</span> <span class="pp">*</span> 1024 <span class="pp">*</span> 1024, device=device, dtype=torch.float16<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-27"><a href="#lst-m4-c12-c01-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-28"><a href="#lst-m4-c12-c01-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> range<span class="er">(</span><span class="ex">5</span><span class="kw">)</span><span class="bu">:</span></span>
+<span id="lst-m4-c12-c01-29"><a href="#lst-m4-c12-c01-29" aria-hidden="true" tabindex="-1"></a>        <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">payload,</span> op=dist.ReduceOp.SUM<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-30"><a href="#lst-m4-c12-c01-30" aria-hidden="true" tabindex="-1"></a>    <span class="fu">torch.cuda.synchronize()</span></span>
+<span id="lst-m4-c12-c01-31"><a href="#lst-m4-c12-c01-31" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dist.barrier()</span></span>
+<span id="lst-m4-c12-c01-32"><a href="#lst-m4-c12-c01-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-33"><a href="#lst-m4-c12-c01-33" aria-hidden="true" tabindex="-1"></a>    <span class="ex">samples_ms</span> = []</span>
+<span id="lst-m4-c12-c01-34"><a href="#lst-m4-c12-c01-34" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> range<span class="er">(</span><span class="ex">20</span><span class="kw">)</span><span class="bu">:</span></span>
+<span id="lst-m4-c12-c01-35"><a href="#lst-m4-c12-c01-35" aria-hidden="true" tabindex="-1"></a>        <span class="ex">start</span> = torch.cuda.Event<span class="er">(</span><span class="va">enable_timing</span><span class="op">=</span>True<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-36"><a href="#lst-m4-c12-c01-36" aria-hidden="true" tabindex="-1"></a>        <span class="ex">stop</span> = torch.cuda.Event<span class="er">(</span><span class="va">enable_timing</span><span class="op">=</span>True<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-37"><a href="#lst-m4-c12-c01-37" aria-hidden="true" tabindex="-1"></a>        <span class="fu">start.record()</span></span>
+<span id="lst-m4-c12-c01-38"><a href="#lst-m4-c12-c01-38" aria-hidden="true" tabindex="-1"></a>        <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">payload,</span> op=dist.ReduceOp.SUM<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-39"><a href="#lst-m4-c12-c01-39" aria-hidden="true" tabindex="-1"></a>        <span class="fu">stop.record()</span></span>
+<span id="lst-m4-c12-c01-40"><a href="#lst-m4-c12-c01-40" aria-hidden="true" tabindex="-1"></a>        <span class="fu">stop.synchronize()</span></span>
+<span id="lst-m4-c12-c01-41"><a href="#lst-m4-c12-c01-41" aria-hidden="true" tabindex="-1"></a>        <span class="ex">samples_ms.append</span><span class="er">(</span><span class="ex">start.elapsed_time</span><span class="er">(</span><span class="ex">stop</span><span class="kw">))</span></span>
+<span id="lst-m4-c12-c01-42"><a href="#lst-m4-c12-c01-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-43"><a href="#lst-m4-c12-c01-43" aria-hidden="true" tabindex="-1"></a>    <span class="ex">mean_ms</span> = torch.tensor<span class="er">(</span><span class="fu">sum</span><span class="er">(</span><span class="ex">samples_ms</span><span class="kw">)</span> <span class="ex">/</span> len<span class="er">(</span><span class="ex">samples_ms</span><span class="kw">)</span><span class="ex">,</span> device=device<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-44"><a href="#lst-m4-c12-c01-44" aria-hidden="true" tabindex="-1"></a>    <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">mean_ms,</span> op=dist.ReduceOp.MAX<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-45"><a href="#lst-m4-c12-c01-45" aria-hidden="true" tabindex="-1"></a>    <span class="ex">world</span> = dist.get_world_size<span class="er">(</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-46"><a href="#lst-m4-c12-c01-46" aria-hidden="true" tabindex="-1"></a>    <span class="ex">ring_bytes</span> = 2 <span class="pp">*</span> <span class="er">(</span><span class="ex">world</span> <span class="at">-</span> 1<span class="kw">)</span> <span class="ex">/</span> world <span class="pp">*</span> payload.numel<span class="er">(</span><span class="kw">)</span> <span class="ex">*</span> payload.element_size<span class="er">(</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-47"><a href="#lst-m4-c12-c01-47" aria-hidden="true" tabindex="-1"></a>    <span class="ex">effective_gb_s</span> = ring_bytes / <span class="er">(</span><span class="fu">mean_ms.item()</span> <span class="ex">/</span> 1000<span class="kw">)</span> <span class="ex">/</span> 1e9</span>
+<span id="lst-m4-c12-c01-48"><a href="#lst-m4-c12-c01-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-49"><a href="#lst-m4-c12-c01-49" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">dist.get_rank()</span> <span class="ex">==</span> 0:</span>
+<span id="lst-m4-c12-c01-50"><a href="#lst-m4-c12-c01-50" aria-hidden="true" tabindex="-1"></a>        <span class="ex">print</span><span class="er">(</span><span class="ex">f</span><span class="st">"slowest_rank_mean_ms={mean_ms.item():.3f}"</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-51"><a href="#lst-m4-c12-c01-51" aria-hidden="true" tabindex="-1"></a>        <span class="ex">print</span><span class="er">(</span><span class="ex">f</span><span class="st">"estimated_ring_payload_GBps={effective_gb_s:.1f}"</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-52"><a href="#lst-m4-c12-c01-52" aria-hidden="true" tabindex="-1"></a><span class="ex">finally:</span></span>
+<span id="lst-m4-c12-c01-53"><a href="#lst-m4-c12-c01-53" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dist.destroy_process_group()</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The probe isolates one payload and one collective, so it can compare rank placement or transport configurations without model noise. <code>NCCL_DEBUG=INFO</code> can reveal selected interfaces and topology decisions, but only the timed samples and system trace show achieved behavior. Compare the result with a topology-aware theoretical estimate and an Nsight Systems trace before assigning the gap to the fabric.</p>
+<p>PyTorch Profiler can show collective operators in the framework trace. Nsight Systems shows whether collectives overlap kernels or sit on the critical path. NCCL logs help diagnose backend selection, network interface choice, peer-to-peer paths, and failures.</p>
+</section>
+<section id="sec-m4-c12-s11" class="level2" data-number="12.11">
+<h2 data-number="12.11" class="anchored" data-anchor-id="sec-m4-c12-s11"><span class="header-section-number">12.11</span> Topology-aware design</h2>
+<p>Topology-aware distributed design means choosing a parallelism and serving architecture that matches how often tensors must move. A topology defines which transfers are cheap enough to place on the critical path.</p>
+<p>The central rule is communication frequency versus distance. The more often a tensor must move, the closer the communicating devices should be. Per-token and per-layer communication should stay inside the fastest scale-up domain whenever possible. Per-step communication can sometimes cross nodes when overlap and bandwidth are good. Background movement can use slower tiers if it does not block the hot path.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Scale-up domain:</strong></span> A tightly connected GPU group such as one server, pod, or NVLink/NVSwitch island. It is the preferred place for frequent tensor-parallel or decode-critical communication.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Scale-out domain:</strong></span> Multiple nodes connected through NICs and switches. It provides capacity and aggregate throughput, but it usually adds latency, routing, and contention.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>GPU/NIC affinity:</strong></span> The locality relationship between a GPU and the network card used for cross-node traffic. Poor affinity can add PCIe hops, CPU-socket crossings, or host staging.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Bisection bandwidth:</strong></span> The aggregate bandwidth available when traffic crosses a cut through the topology. It matters when many ranks communicate at once; a fast single link is insufficient for concurrent traffic.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Oversubscription:</strong></span> A topology condition where the upstream fabric has less bandwidth than the sum of attached endpoints. It is common in cost-controlled networks and can hurt concurrent collectives.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Placement policy:</strong></span> The scheduler or launch decision that maps ranks, serving groups, workers, or replicas onto physical GPUs and nodes.</li>
+</ul>
+<p>After those topology objects are named, communication frequency can be matched to distance:</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-token communication:</strong></span> Decode-time tensor parallelism, expert routing, logits exchange, or KV movement. It is the most latency-sensitive traffic and should usually stay inside a fast scale-up domain.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-layer communication:</strong></span> Tensor-parallel all-reduce, all-gather, or reduce-scatter inside transformer layers. It normally needs NVLink, NVSwitch, or an equivalent low-latency scale-up fabric.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-step communication:</strong></span> DDP gradient all-reduce and many Fully Sharded Data Parallel (FSDP) or Zero Redundancy Optimizer (ZeRO) communication phases. It can sometimes cross nodes because backward computation may overlap communication.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-request communication:</strong></span> Request routing, prefill/decode handoff, or pipeline activation movement. The acceptable distance depends on TTFT, TPOT, and tail-latency targets.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Background communication:</strong></span> Checkpointing, model loading, cache spill/fill, and slow-tier movement. It can use slower paths when the work is amortized and kept off the hot path.</li>
+</ul>
+<p>The table applies those communication frequencies to complete placement and scheduling patterns. Each row states the intended topology fit and the failure that appears when the mapping is wrong.</p>
+<div id="tbl-m4-c12-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c12-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;12.2: Distributed system design patterns for communication-heavy workloads.
+</figcaption>
+<div aria-describedby="tbl-m4-c12-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Design pattern</th>
+<th>Communication pattern</th>
+<th>Topology fit</th>
+<th>Failure mode</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Topology-aware placement</td>
+<td>Ranks with frequent exchange are placed near each other</td>
+<td>Use NVLink/NVSwitch or same rack for hot pairs</td>
+<td>Scheduler spreads hot ranks across slow paths</td>
+</tr>
+<tr class="even">
+<td>Hierarchical collective</td>
+<td>Communicate inside one scale-up domain, then across slower domains, then inside the destination scale-up domain</td>
+<td>Matches intra-node GPU fabric plus cross-node network</td>
+<td>Treats all rank pairs as equally cheap</td>
+</tr>
+<tr class="odd">
+<td>Bucket and overlap</td>
+<td>Group tensors and launch communication while compute continues</td>
+<td>Works when independent compute remains</td>
+<td>Small buckets add overhead; large buckets expose a tail</td>
+</tr>
+<tr class="even">
+<td>Shard-and-gather</td>
+<td>Store state sharded; materialize only near layer use</td>
+<td>Works when gather/reduce paths are fast enough</td>
+<td>Memory saved locally becomes network-bound</td>
+</tr>
+<tr class="odd">
+<td>Scale-up first, scale-out second</td>
+<td>Keep per-token or per-layer traffic inside one node/group</td>
+<td>Serving replicas or groups scale across nodes</td>
+<td>Cross-node tensor parallelism hurts TPOT</td>
+</tr>
+<tr class="even">
+<td>Sticky KV-cache placement</td>
+<td>Route active requests near the GPUs holding their KV cache</td>
+<td>Serving groups with stable cache locality</td>
+<td>Load balancing moves cache-heavy requests too freely</td>
+</tr>
+<tr class="odd">
+<td>Rail or NIC-aware grouping</td>
+<td>Ranks that leave a node use the intended NIC path</td>
+<td>Systems with multiple NICs or network rails</td>
+<td>Traffic concentrates on one weak interface</td>
+</tr>
+<tr class="even">
+<td>Topology-aware replica placement</td>
+<td>Replicas are spread to avoid shared-fabric hot spots</td>
+<td>Serving fleets and multi-tenant clusters</td>
+<td>All replicas contend on the same leaf or spine</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Design checklist</strong></p>
+<p><strong>Object:</strong> Is the moving object a gradient, parameter shard, activation, KV block, expert token, logits vector, request, or checkpoint chunk?</p>
+<p><strong>Frequency:</strong> Does it move per token, per layer, per step, per request, or in the background?</p>
+<p><strong>Critical path:</strong> Would shortening this transfer reduce TTFT, TPOT, step time, or tail latency?</p>
+<p><strong>Overlap:</strong> Is there independent compute available while the transfer runs?</p>
+<p><strong>Locality:</strong> Does the traffic stay inside the intended scale-up domain, or does it cross NICs and switches?</p>
+<p><strong>Contention:</strong> What happens when multiple jobs, collectives, or serving replicas share the same fabric?</p>
+<p><strong>Metric:</strong> Is success judged by throughput, TTFT, TPOT, tail latency, utilization, memory capacity, or cost?</p>
+</div>
+<p>This pattern view prevents a common distributed-system error: choosing a parallelism strategy because it fits memory, then discovering that its communication frequency does not fit the topology. Memory capacity and communication distance have to be designed together.</p>
+</section>
+<section id="sec-m4-c12-s12" class="level2" data-number="12.12">
+<h2 data-number="12.12" class="anchored" data-anchor-id="sec-m4-c12-s12"><span class="header-section-number">12.12</span> Communication design checks</h2>
+<p>Reliable distributed diagnosis names the framework call, backend library, physical path, and critical-path wait. Apply the following checks before changing a communication strategy.</p>
+<ul>
+<li>Distinguish NVLink, a physical GPU interconnect, from NCCL, a collective communication library.</li>
+<li>Treat <code>torch.distributed</code> as the framework API that calls a backend; inspect the backend and selected transport separately.</li>
+<li>Keep tensor-parallel groups on the fastest available links when each layer requires frequent communication.</li>
+<li>Place ranks with topology awareness so a local collective does not cross an unnecessary slow path.</li>
+<li>Synchronize collective timing and separate warmup from steady-state measurement.</li>
+</ul>
+<p>With the communication primitives and physical paths defined, Chapter 13 can compare distributed training and inference strategies by the tensors they exchange, the frequency of those exchanges, and the topology that carries them.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../parts/part-iii.html" class="pagination-link" aria-label="Part III: Communication and Distributed Systems">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part III: Communication and Distributed Systems</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m4-c13.html" class="pagination-link" aria-label="Distributed Training and Serving">
+        <span class="nav-page-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Distributed Training and Serving</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
