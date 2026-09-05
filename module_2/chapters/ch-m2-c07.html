@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -471,7 +471,6 @@ window.Quarto = {
 <p>A next-token model returns probabilities for many possible continuations. Generation needs an additional rule that selects one token and repeats the process.</p>
 <p>A next-token distribution still leaves one decision to make: which token to emit. Greedy decoding, sampling, truncation, and beam search apply different selection rules to the same probability model.</p>
 <p>In code, <code>torch.topk</code> and <code>torch.multinomial</code> expose candidate filtering and sampling; <code>transformers.GenerationConfig</code> and <code>generate</code> apply the same choices to pretrained models.</p>
-<p>Chapter 7 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c07-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 7 opener for Decoding from probability distributions, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c07-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -482,7 +481,6 @@ Figure&nbsp;7.1: Greedy choice and sampling filters convert token probabilities 
 </figcaption>
 </figure>
 </div>
-<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c07-s01" class="level2" data-number="7.1">
 <h2 data-number="7.1" class="anchored" data-anchor-id="sec-m2-c07-s01"><span class="header-section-number">7.1</span> Deterministic Next-Token Selection with Greedy Argmax</h2>
 <p>An inference decision turns a trained model’s probability distribution into a usable class prediction or next token.</p>
@@ -528,23 +526,23 @@ P(\mathrm{next}=i\mid\mathrm{context})=\operatorname{softmax}(\mathrm{logits})_i
 <p>where <span class="math inline">\(p_{i}\)</span> is probability of candidate token i.</p>
 <p>Greedy decoding solves the one-step maximization problem by selecting the token with largest probability mass.</p>
 <p>greedy decoding is deterministic and can miss better global continuations.</p>
-<p>Temperature greater than 1 flattens the distribution; temperature below 1 sharpens it.</p>
+<p>Temperature is defined for <span class="math inline">\(T&gt;0\)</span>. The original softmax is recovered at <span class="math inline">\(T=1\)</span>; <span class="math inline">\(T&gt;1\)</span> flattens the distribution, while <span class="math inline">\(0&lt;T&lt;1\)</span> sharpens it.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Temperature softmax:</strong></span></p>
 <p><span id="eq-m2-c07-e03"><span class="math display">\[
 p_i^{(T)}=\frac{e^{z_i/T}}{\sum_j e^{z_j/T}}
 \tag{7.3}\]</span></span></p>
-<p>where T is temperature; <span class="math inline">\(z_{i}\)</span> is logit for token i.</p>
+<p>where <span class="math inline">\(T&gt;0\)</span> is temperature and <span class="math inline">\(z_i\)</span> is the logit for token <span class="math inline">\(i\)</span>.</p>
 <p>Temperature rescales logits before softmax; dividing by a larger T reduces logit gaps, while dividing by a smaller T increases them.</p>
 <p>temperature changes sampling entropy without changing model weights.</p>
-<p>After sorting probabilities from largest to smallest, <span class="math inline">\(p_{k}\)</span> is the k-th largest probability. Top-k sampling retains exactly the token indices in <span class="math inline">\(S_{k}\)</span>.</p>
+<p>Let <span class="math inline">\((i_1,\ldots,i_V)\)</span> be a deterministic ordering of the vocabulary indices such that <span class="math inline">\(p_{i_1}\ge p_{i_2}\ge\ldots\ge p_{i_V}\)</span>, with token ID used to break equal-probability ties. For <span class="math inline">\(1\le k\le V\)</span>, top-k sampling retains exactly the first <span class="math inline">\(k\)</span> indices.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Top-k support:</strong></span></p>
 <p><span id="eq-m2-c07-e04"><span class="math display">\[
-S_k=\{i\mid p_i\ge p_k\}
+S_k=\{i_1,\ldots,i_k\},\quad p_{i_1}\ge p_{i_2}\ge\ldots\ge p_{i_V},\quad 1\le k\le V
 \tag{7.4}\]</span></span></p>
-<p>After sorting probabilities in nonincreasing order, m is the smallest prefix length whose cumulative probability reaches the threshold.</p>
+<p>For a top-p threshold <span class="math inline">\(0&lt;\tau\le1\)</span>, let <span class="math inline">\(m\)</span> be the smallest prefix length whose cumulative probability reaches <span class="math inline">\(\tau\)</span>. The retained set is therefore adaptive: its size depends on the shape of the current distribution.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Top-p support:</strong></span></p>
 <p><span id="eq-m2-c07-e05"><span class="math display">\[
-S_p=(i_1,\ldots,i_m),\quad\sum_{j=1}^{m}p_{i_j}\ge p
+S_\tau=\{i_1,\ldots,i_m\},\quad m=\min\left\{r:\sum_{j=1}^{r}p_{i_j}\ge\tau\right\},\quad 0&lt;\tau\le1
 \tag{7.5}\]</span></span></p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Sampling the Next Token During Generation</strong></p>
@@ -556,7 +554,9 @@ S_p=(i_1,\ldots,i_m),\quad\sum_{j=1}^{m}p_{i_j}\ge p
 <p>For probabilities <span class="math inline">\((0.5,0.3,0.2)\)</span> and <span class="math inline">\(k=2\)</span>, the support contains the two indices with the largest probabilities.</p>
 <p><strong>Top-p support:</strong></p>
 <p>For sorted probabilities (0.5, 0.3, 0.2) and threshold 0.8, the first two tokens are the smallest set whose cumulative mass reaches the threshold.</p>
+<p>After either filter chooses a support <span class="math inline">\(S\)</span>, sampling uses the renormalized probabilities <span class="math inline">\(q_i=p_i/\sum_{j\in S}p_j\)</span> for <span class="math inline">\(i\in S\)</span> and <span class="math inline">\(q_i=0\)</span> outside <span class="math inline">\(S\)</span>.</p>
 </div>
+<p>The following runnable PyTorch example takes four logits, divides them by a positive temperature, retains two candidates, writes negative infinity at the excluded positions, and normalizes the result. The printed probability vector has four entries, exactly two nonzero values, and total mass one; the final line draws one retained token ID.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Temperature and top-k filtering for one next-token decision</p>
 </div>
@@ -625,12 +625,12 @@ Figure&nbsp;7.2: Greedy selection and sampling filters operate on one probabilit
 <p>Start with logits for three candidate tokens.</p>
 <p><span class="math inline">\(z = [2.0, 1.0, 0.0]\)</span></p>
 <p><span class="math inline">\(\operatorname{softmax}(z) = [0.665, 0.245, 0.090]\)</span></p>
-<p><span class="math inline">\(greedy_{next} = 0\)</span></p>
+<p><span class="math inline">\(i_{\mathrm{next}} = 0\)</span></p>
 <p>Temperature 2 halves the logit gaps before softmax.</p>
 <p><span class="math inline">\(\frac{z}{T} = [1.0, 0.5, 0.0]\)</span></p>
 <p><span class="math inline">\(\operatorname{softmax}\frac{z}{T} = [0.506, 0.307, 0.186]\)</span></p>
 <p>Top-k with two kept candidates keeps tokens 0 and 1, then renormalizes.</p>
-<p><span class="math inline">\(topk_{probs}\)</span> = [0.731, 0.269, 0.000]</p>
+<p><span class="math inline">\(p^{(k=2)} = [0.731, 0.269, 0.000]\)</span></p>
 <p>Top-p with threshold 0.8 sorts probabilities and keeps the first two tokens.</p>
 <p><span class="math inline">\(0.665 + 0.245 = 0.910\)</span></p>
 </div>
@@ -654,9 +654,6 @@ p_i(T)=\frac{\exp(z_i/T)}{\sum_j\exp(z_j/T)}
 <li><code>transformers.generate</code> applies decoding settings such as <code>do_sample</code>, <code>temperature</code>, <code>top_k</code>, and <code>top_p</code> after the model produces logits.</li>
 <li>Filtering should happen before the random draw; it changes the candidate distribution, not the model weights.</li>
 </ul>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>It should now be clear how to start from a three-logit vector and compute greedy, temperature, top-k, and top-p decisions by hand.</strong></p>
-</div>
 <p>Decoding is the rule that turns a probability distribution into a class or next token.</p>
 <p>Loss functions turn probability predictions into trainable scalar objectives.</p>
 

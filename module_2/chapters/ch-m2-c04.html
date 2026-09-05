@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -442,8 +442,8 @@ window.Quarto = {
   <li><a href="#sec-m2-c04-s01" id="toc-sec-m2-c04-s01" class="nav-link active" data-scroll-target="#sec-m2-c04-s01"><span class="header-section-number">4.1</span> Extracting Term Frequencies with Bag-of-Words and TF-IDF</a></li>
   <li><a href="#sec-m2-c04-s02" id="toc-sec-m2-c04-s02" class="nav-link" data-scroll-target="#sec-m2-c04-s02"><span class="header-section-number">4.2</span> Constructing Document-Term Matrices for Batch Computation</a></li>
   <li><a href="#sec-m2-c04-s03" id="toc-sec-m2-c04-s03" class="nav-link" data-scroll-target="#sec-m2-c04-s03"><span class="header-section-number">4.3</span> Scoring Text Classes with Sparse Linear Classifiers</a></li>
-  <li><a href="#sec-m2-c04-s04" id="toc-sec-m2-c04-s04" class="nav-link" data-scroll-target="#sec-m2-c04-s04"><span class="header-section-number">4.4</span> Overcoming the Limits of Sparse Orthogonal Counts</a></li>
-  <li><a href="#sec-m2-c04-s05" id="toc-sec-m2-c04-s05" class="nav-link" data-scroll-target="#sec-m2-c04-s05"><span class="header-section-number">4.5</span> Visualizing Sparse Text Features and Document Matrices</a></li>
+  <li><a href="#sec-m2-c04-s04" id="toc-sec-m2-c04-s04" class="nav-link" data-scroll-target="#sec-m2-c04-s04"><span class="header-section-number">4.4</span> Why Sparse Counts Cannot Express Word Similarity</a></li>
+  <li><a href="#sec-m2-c04-s05" id="toc-sec-m2-c04-s05" class="nav-link" data-scroll-target="#sec-m2-c04-s05"><span class="header-section-number">4.5</span> Sparse Features Share One Vocabulary Axis</a></li>
   </ul>
 </nav>
     </div>
@@ -472,7 +472,6 @@ window.Quarto = {
 <p>Before learned embeddings, a document was commonly represented by the words it contained and their counts. Those features still give the clearest route from vocabulary coordinates to a classifier input.</p>
 <p>Bag-of-Words and TF-IDF make documents into sparse count vectors. The chapter follows those vectors into a document-term matrix and a linear classifier, then shows why learned dense vectors become useful.</p>
 <p>In code, <code>sklearn.feature_extraction.text.CountVectorizer</code> and <code>TfidfVectorizer</code> convert documents into sparse matrices; <code>scipy.sparse</code> keeps large vocabularies practical.</p>
-<p>Chapter 4 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c04-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 4 opener for Vectors, matrices, and text features, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c04-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -483,7 +482,6 @@ Figure&nbsp;4.1: Documents become vocabulary-feature matrices that can be multip
 </figcaption>
 </figure>
 </div>
-<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c04-s01" class="level2" data-number="4.1">
 <h2 data-number="4.1" class="anchored" data-anchor-id="sec-m2-c04-s01"><span class="header-section-number">4.1</span> Extracting Term Frequencies with Bag-of-Words and TF-IDF</h2>
 <p>Before neural embeddings, text can be represented by counted symbolic patterns. N-grams and bag-of-words features turn text into numbers while ignoring much of its long-range structure.</p>
@@ -531,22 +529,25 @@ P(w_t\mid w_1,\ldots,w_{t-1})\approx P(w_t\mid w_{t-n+1},\ldots,w_{t-1})
 <p><strong>N-gram probability:</strong></p>
 <p>If <span class="math inline">\(\operatorname{count}(context, next)=3\)</span> and <span class="math inline">\(\operatorname{count}(context)=10\)</span>, the unsmoothed estimate is 0.3.</p>
 </div>
+<p>The runnable example fits both the vocabulary and inverse-document-frequency weights on <code>train_documents</code>, then calls <code>transform</code> on new text without changing either learned object. Calling <code>fit_transform</code> on validation or test text would change the column weights and leak held-out data into the representation.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Count and TF-IDF matrices with a fixed training vocabulary</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c04-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c04-c01-1"><a href="#lst-m2-c04-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.feature_extraction.text <span class="im">import</span> CountVectorizer, TfidfVectorizer</span>
 <span id="lst-m2-c04-c01-2"><a href="#lst-m2-c04-c01-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c04-c01-3"><a href="#lst-m2-c04-c01-3" aria-hidden="true" tabindex="-1"></a>documents <span class="op">=</span> [<span class="st">"cat sat"</span>, <span class="st">"dog sat"</span>, <span class="st">"cat chased dog"</span>]</span>
-<span id="lst-m2-c04-c01-4"><a href="#lst-m2-c04-c01-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c04-c01-5"><a href="#lst-m2-c04-c01-5" aria-hidden="true" tabindex="-1"></a>counts <span class="op">=</span> CountVectorizer(ngram_range<span class="op">=</span>(<span class="dv">1</span>, <span class="dv">2</span>))</span>
-<span id="lst-m2-c04-c01-6"><a href="#lst-m2-c04-c01-6" aria-hidden="true" tabindex="-1"></a>X_count <span class="op">=</span> counts.fit_transform(documents)</span>
-<span id="lst-m2-c04-c01-7"><a href="#lst-m2-c04-c01-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c04-c01-8"><a href="#lst-m2-c04-c01-8" aria-hidden="true" tabindex="-1"></a>tfidf <span class="op">=</span> TfidfVectorizer(vocabulary<span class="op">=</span>counts.vocabulary_, ngram_range<span class="op">=</span>(<span class="dv">1</span>, <span class="dv">2</span>))</span>
-<span id="lst-m2-c04-c01-9"><a href="#lst-m2-c04-c01-9" aria-hidden="true" tabindex="-1"></a>X_tfidf <span class="op">=</span> tfidf.fit_transform(documents)</span>
-<span id="lst-m2-c04-c01-10"><a href="#lst-m2-c04-c01-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c04-c01-11"><a href="#lst-m2-c04-c01-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(counts.get_feature_names_out())</span>
-<span id="lst-m2-c04-c01-12"><a href="#lst-m2-c04-c01-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(X_count.shape, X_tfidf.shape)</span>
-<span id="lst-m2-c04-c01-13"><a href="#lst-m2-c04-c01-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(X_count.toarray())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m2-c04-c01-3"><a href="#lst-m2-c04-c01-3" aria-hidden="true" tabindex="-1"></a>train_documents <span class="op">=</span> [<span class="st">"cat sat"</span>, <span class="st">"dog sat"</span>, <span class="st">"cat chased dog"</span>]</span>
+<span id="lst-m2-c04-c01-4"><a href="#lst-m2-c04-c01-4" aria-hidden="true" tabindex="-1"></a>new_documents <span class="op">=</span> [<span class="st">"dog chased cat"</span>]</span>
+<span id="lst-m2-c04-c01-5"><a href="#lst-m2-c04-c01-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c04-c01-6"><a href="#lst-m2-c04-c01-6" aria-hidden="true" tabindex="-1"></a>counts <span class="op">=</span> CountVectorizer(ngram_range<span class="op">=</span>(<span class="dv">1</span>, <span class="dv">2</span>))</span>
+<span id="lst-m2-c04-c01-7"><a href="#lst-m2-c04-c01-7" aria-hidden="true" tabindex="-1"></a>X_count <span class="op">=</span> counts.fit_transform(train_documents)</span>
+<span id="lst-m2-c04-c01-8"><a href="#lst-m2-c04-c01-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c04-c01-9"><a href="#lst-m2-c04-c01-9" aria-hidden="true" tabindex="-1"></a>tfidf <span class="op">=</span> TfidfVectorizer(vocabulary<span class="op">=</span>counts.vocabulary_, ngram_range<span class="op">=</span>(<span class="dv">1</span>, <span class="dv">2</span>))</span>
+<span id="lst-m2-c04-c01-10"><a href="#lst-m2-c04-c01-10" aria-hidden="true" tabindex="-1"></a>X_tfidf <span class="op">=</span> tfidf.fit_transform(train_documents)</span>
+<span id="lst-m2-c04-c01-11"><a href="#lst-m2-c04-c01-11" aria-hidden="true" tabindex="-1"></a>X_new_tfidf <span class="op">=</span> tfidf.transform(new_documents)</span>
+<span id="lst-m2-c04-c01-12"><a href="#lst-m2-c04-c01-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c04-c01-13"><a href="#lst-m2-c04-c01-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(counts.get_feature_names_out())</span>
+<span id="lst-m2-c04-c01-14"><a href="#lst-m2-c04-c01-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(X_count.shape, X_tfidf.shape, X_new_tfidf.shape)</span>
+<span id="lst-m2-c04-c01-15"><a href="#lst-m2-c04-c01-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(X_count.toarray())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Both matrices have one row per document and the same feature columns.</p>
 <p>The tiny corpus is for inspecting columns, not for comparing classifier quality.</p>
 <p>Count features discard word order but expose a direct numeric description of each document. The vocabulary determines the columns of the resulting document-term matrix.</p>
@@ -568,7 +569,7 @@ P(w_t\mid w_1,\ldots,w_{t-1})\approx P(w_t\mid w_{t-n+1},\ldots,w_{t-1})
 <p><span id="eq-m2-c04-e04"><span class="math display">\[
 X\in\mathbb{R}^{N\times\lvert V\rvert}
 \tag{4.4}\]</span></span></p>
-<p>where N is number of documents; |V| is number of feature coordinates.</p>
+<p>where <span class="math inline">\(N\)</span> is the number of documents and <span class="math inline">\(|V|\)</span> is the number of feature coordinates. This chapter also uses <span class="math inline">\(B\)</span> for a processed batch; both letters index document rows, while <span class="math inline">\(T\)</span> is reserved for sequence length.</p>
 <p>Construct one vocabulary-feature vector for each document, then stack those vectors as rows. Every row has |V| coordinates because all documents are measured against the same vocabulary.</p>
 <p>Matrix dimensions determine which weight vectors can multiply the feature batch.</p>
 <p>TF-IDF combines within-document frequency with inverse document frequency.</p>
@@ -576,16 +577,16 @@ X\in\mathbb{R}^{N\times\lvert V\rvert}
 <p><span id="eq-m2-c04-e05"><span class="math display">\[
 \mathrm{tfidf}_{d,j}=\mathrm{tf}_{d,j}\log\left(\frac{N}{\mathrm{df}_j}\right)
 \tag{4.5}\]</span></span></p>
-<p>where <span class="math inline">\(tf_{d,j}\)</span> is term frequency in document d; <span class="math inline">\(df_{j}\)</span> is document frequency; N is number of documents.</p>
+<p>where <span class="math inline">\(\mathrm{tf}_{d,j}\)</span> is the raw count of term <span class="math inline">\(j\)</span> in document <span class="math inline">\(d\)</span>, <span class="math inline">\(\mathrm{df}_j\geq1\)</span> is the number of fitted documents containing that term, <span class="math inline">\(N\geq1\)</span> is the number of fitted documents, and <span class="math inline">\(\log\)</span> is the natural logarithm. An unseen term has no fitted document frequency, so validation and test text must retain the training vocabulary. Scikit-learn uses smoothing and row normalization by default, so its exact values differ from this unsmoothed teaching formula.</p>
 <p>The term-frequency factor measures local evidence in one document; the inverse-document-frequency factor downweights terms that appear in many documents.</p>
-<p>a term becomes large when it is frequent in this document and relatively rare across the corpus.</p>
+<p>A term receives a large weight when it is frequent in this document and relatively rare across the corpus.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Feature batch</strong></p>
 <p>For 10 documents and a 500-word vocabulary, X has dimensions 10 x 500.</p>
 </div>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: TF-IDF</strong></p>
-<p>If <span class="math inline">\(tf = 3\)</span>, <span class="math inline">\(N = 100\)</span>, and <span class="math inline">\(df = 10\)</span>, then <span class="math inline">\(tfidf = 3 \log(10)\)</span>.</p>
+<p>If <span class="math inline">\(\mathrm{tf}=3\)</span>, <span class="math inline">\(N=100\)</span>, and <span class="math inline">\(\mathrm{df}=10\)</span>, then <span class="math inline">\(\mathrm{tfidf}=3\log(10)\approx6.91\)</span>. The term scores highly because it appears three times here but in only one tenth of the fitted documents.</p>
 </div>
 <p>Each matrix row represents one document and each column represents one vocabulary feature. A classifier applies one set of learned class weights to every row at once.</p>
 </section>
@@ -650,7 +651,7 @@ Z=XW+b,\quad X\in\mathbb{R}^{B\times\lvert V\rvert},\quad W\in\mathbb{R}^{\lvert
 <p>The resulting class scores are logits: unnormalized evidence for each class. The next part explains how a linear rule produces such scores and how probability functions turn them into decisions.</p>
 </section>
 <section id="sec-m2-c04-s04" class="level2" data-number="4.4">
-<h2 data-number="4.4" class="anchored" data-anchor-id="sec-m2-c04-s04"><span class="header-section-number">4.4</span> Overcoming the Limits of Sparse Orthogonal Counts</h2>
+<h2 data-number="4.4" class="anchored" data-anchor-id="sec-m2-c04-s04"><span class="header-section-number">4.4</span> Why Sparse Counts Cannot Express Word Similarity</h2>
 <p>A dense learned representation replaces vocabulary-count coordinates with a smaller set of trainable coordinates that can be transformed by neural layers.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Sparse representation:</strong></span> A high-dimensional vector with many zeros, often tied directly to token identity.</li>
@@ -662,7 +663,7 @@ Z=XW+b,\quad X\in\mathbb{R}^{B\times\lvert V\rvert},\quad W\in\mathbb{R}^{\lvert
 <p>A dense coordinate does not correspond to one named word. Its meaning is distributed across training examples, and gradient descent changes it whenever the representation helps or harms the objective.</p>
 <p>Embedding tables begin with one dense row per token ID. Sequence models then combine those rows across positions, so the dense representation is both a data structure and the input on which recurrence or attention operates.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Computation map</strong></span></p>
-<p>The computation starts with raw text and produces model layers through the intermediate objects shown below.</p>
+<p>Raw text becomes vocabulary coordinates, then a sparse feature row, then a dense representation consumed by model layers.</p>
 <div id="fig-m2-c04-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Native computation diagram: Tokenization creates discrete IDs before learned layers replace them with dense, contextual vectors.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c04-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -673,11 +674,11 @@ Figure&nbsp;4.2: Tokenization creates discrete IDs before learned layers replace
 </figcaption>
 </figure>
 </div>
-<p>The output of raw text is the input required by model layers; the intermediate stages name the stored objects that make the transition possible.</p>
+<p>The sparse row preserves explicit word counts; the dense vector gives later layers trainable coordinates in which related inputs can move closer together.</p>
 <p>Sparse count vectors treat different vocabulary entries as unrelated coordinates. Learned embeddings replace those fixed coordinates with vectors whose values can change during training.</p>
 </section>
 <section id="sec-m2-c04-s05" class="level2" data-number="4.5">
-<h2 data-number="4.5" class="anchored" data-anchor-id="sec-m2-c04-s05"><span class="header-section-number">4.5</span> Visualizing Sparse Text Features and Document Matrices</h2>
+<h2 data-number="4.5" class="anchored" data-anchor-id="sec-m2-c04-s05"><span class="header-section-number">4.5</span> Sparse Features Share One Vocabulary Axis</h2>
 <p>Sparse feature arrays and class-score matrices share the vocabulary axis.</p>
 <p>Classical text features depend on the unit counted. Character, word, and subword choices change the vocabulary coordinates before BoW or TF-IDF is computed.</p>
 <div id="fig-m2-c04-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram comparing character, word, and subword token sequences.">

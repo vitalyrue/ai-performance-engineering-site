@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -473,7 +473,6 @@ window.Quarto = {
 <p>Every trainable parameter affects the loss through a sequence of intermediate calculations. The chain rule traces how a small change at one point changes the final loss.</p>
 <p>A loss depends on every parameter through many intermediate calculations. Computation graphs and the chain rule organize those dependencies so reverse-mode autodiff can calculate all required gradients efficiently.</p>
 <p>In code, <code>torch.autograd</code> records differentiable operations implicitly; <code>loss.backward()</code> populates <code>.grad</code>, and <code>torch.no_grad()</code> separates parameter updates from graph construction.</p>
-<p>Chapter 11 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c11-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 11 opener for Chain rule and backpropagation, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c11-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -484,7 +483,6 @@ Figure&nbsp;11.1: Forward values and local derivatives determine every backward 
 </figcaption>
 </figure>
 </div>
-<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c11-s01" class="level2" data-number="11.1">
 <h2 data-number="11.1" class="anchored" data-anchor-id="sec-m2-c11-s01"><span class="header-section-number">11.1</span> Calculating Derivatives and Multivariable Gradients</h2>
 <p>A derivative is a local rate of change, and a gradient collects the partial derivatives of one scalar loss with respect to many parameters.</p>
@@ -551,7 +549,7 @@ Figure&nbsp;11.2: Forward operations create a scalar loss, and the backward pass
 </figcaption>
 </figure>
 </div>
-<p>The output of input tensors is the input required by parameter gradients; the intermediate stages name the stored objects that make the transition possible.</p>
+<p>The forward pass combines the input <span class="math inline">\(x\)</span> and parameters <span class="math inline">\(w,b\)</span> to produce the intermediate values <span class="math inline">\(z,p\)</span> and the scalar loss <span class="math inline">\(L\)</span>. The backward pass follows those stored operations in reverse and adds gradients to <code>w.grad</code> and <code>b.grad</code>.</p>
 <p>A computation graph records the intermediate values that connect one input and parameter set to a scalar loss.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>A small computation graph:</strong></span></p>
 <p><span id="eq-m2-c11-e04"><span class="math display">\[
@@ -657,6 +655,7 @@ J_{i,j}=\frac{\partial y_{i}}{\partial x_{j}}
 <p><strong>Example: Chain rule</strong></p>
 <p>If <span class="math inline">\(∂L/∂y\)</span>=5 and <span class="math inline">\(∂y/∂x\)</span>=3, then <span class="math inline">\(∂L/∂x\)</span>=15.</p>
 </div>
+<p>The following runnable PyTorch example creates one scalar leaf tensor <span class="math inline">\(x=2\)</span>, evaluates <span class="math inline">\(y=3x^2+1\)</span>, and calls <code>backward()</code> on the scalar result. The expected output is <code>12.0</code>, because the derivative <span class="math inline">\(6x\)</span> equals 12 at <span class="math inline">\(x=2\)</span>. Calling <code>backward()</code> again without clearing <code>x.grad</code> would accumulate another 12 rather than replace the existing value.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A scalar loss creates gradients on tensors that require them.</p>
 </div>
@@ -720,12 +719,12 @@ Figure&nbsp;11.3: Reverse accumulation reuses stored forward values to assign a 
 <p><span class="math inline">\(L = -\log(p) = -\log(0.750) = 0.288  (y=1)\)</span></p>
 <p><strong>Local derivatives at each node:</strong></p>
 <p><span class="math inline">\(\frac{dL}{dp}  = -\frac{1}{p} = -\frac{1}{0.750} = -1.333\)</span></p>
-<p><span class="math inline">\(\frac{dp}{dz}  = p^{\star}(1-p) = 0.750 \cdot 0.250 = 0.188\)</span></p>
+<p><span class="math inline">\(\frac{dp}{dz} = p(1-p) = 0.750\cdot0.250 = 0.188\)</span></p>
 <p><span class="math inline">\(\frac{dz}{dw}  = x = 2.0\)</span></p>
 <p><span class="math inline">\(\frac{dz}{db}  = 1.0\)</span></p>
 <p><strong>Backward pass (chain rule):</strong></p>
 <p><span class="math inline">\(\frac{dL}{dz}  = \frac{dL}{dp}  \cdot  \frac{dp}{dz} = -1.333  \cdot  0.188 = -0.250\)</span></p>
-<p>(Equivalently: <span class="math inline">\(∂L/∂z\)</span> = p - <span class="math inline">\(y = 0.750 - 1.0\)</span> = -0.250 check)</p>
+<p>Equivalently, <span class="math inline">\(\frac{dL}{dz}=p-y=0.750-1.0=-0.250\)</span>.</p>
 <p><span class="math inline">\(\frac{dL}{dw}  = \frac{dL}{dz}  \cdot  \frac{dz}{dw} = -0.250  \cdot  2.0 = -0.500\)</span></p>
 <p><span class="math inline">\(\frac{dL}{db}  = \frac{dL}{dz}  \cdot  \frac{dz}{db} = -0.250  \cdot  1.0 = -0.250\)</span></p>
 <p>These values appear in <code>w.grad</code> and <code>b.grad</code> after <code>loss.backward()</code>.</p>
@@ -759,9 +758,6 @@ w_{\mathrm{next}}=w-\mathrm{lr}\,\frac{dL}{dw}
 <li>optimizer.step() mutates parameters using those gradients.</li>
 <li><code>optimizer.zero_grad()</code> prevents gradients from previous batches from being added again.</li>
 </ul>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>It should now be clear how to mark every node in the sequence <span class="math inline">\(z=Xw+b\)</span>, sigmoid, and binary cross-entropy, and describe the local derivative attached to each node.</strong></p>
-</div>
 <p>Backpropagation is reverse-mode chain rule over the computation graph created by the forward pass.</p>
 <p>Multilayer classifiers apply these gradients to affine maps and nonlinearities.</p>
 
