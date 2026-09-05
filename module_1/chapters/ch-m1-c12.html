@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -518,39 +518,54 @@ Table&nbsp;12.2: The evaluation example keeps subjective judgments separate from
 <p>The evaluation example scored model output given structured product facts. FinanceBench introduces source documents whose relevant facts are not reliably available from model memory. A traced RAG pipeline captures each stage of the evidence path so a poor answer can be attributed to its actual component.</p>
 <ol type="1">
 <li>A no-retrieval run on a fixed question slice establishes correct, partially correct, wrong, and refused baseline outcomes.</li>
-<li>Dataset filtering limits ingestion to referenced filings, while <code>doc_name</code>, company, period, and zero-indexed <code>page_number</code> metadata are attached before chunking.</li>
+<li>Dataset filtering limits ingestion to referenced filings, while <code>doc_name</code>, company, period, and one-based <code>source_page</code> metadata are attached before chunking. The loader records <code>source_page</code> as its zero-based parser page plus one.</li>
 <li>The baseline index records its embedding model, chunk size, overlap, and persistent FAISS storage configuration.</li>
-<li><code>answer_with_rag</code> returns the answer and retrieved chunks together; document and page metadata remain in context, and an empty retrieval produces an explicit outcome.</li>
+<li><code>answer_with_rag</code> returns the answer and retrieved chunks together; document and page metadata remain in context, and an empty retrieval returns <code>status: insufficient_evidence</code> with no answer and an empty retrieved list.</li>
 <li>The same questions pass through naive and RAG paths so retrieval changes without changing the evaluation set.</li>
 <li>Final correctness, grounding faithfulness, and evidence-page hit remain separate per-question measurements before aggregation.</li>
 <li>One-variable experiments vary prompt, model, <code>k</code>, chunk size, or reranking while retaining the same comparison slice.</li>
 </ol>
 <p><strong>Code example 12.1 - a RAG return specification preserves retrieval evidence.</strong></p>
+<p>This abbreviated Python example assumes that the vector store, formatter, and generation model are injected by the application. Chunk metadata already carries the one-based <code>source_page</code> created during Chapter 6 ingestion. <code>generation_model.invoke</code> returns a parsed response with <code>.text</code> and <code>.cited_pages</code>; the function keeps only those cited pages rather than treating every retrieved page as a citation. The function returns a complete trace with <code>status: answered</code> or an <code>insufficient_evidence</code> trace; it does not generate an answer after an empty retrieval.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 12.1 - a RAG return specification preserves retrieval evidence.</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c12-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c12-c01-1"><a href="#lst-m1-c12-c01-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> answer_with_rag(query: <span class="bu">str</span>, k: <span class="bu">int</span> <span class="op">=</span> <span class="dv">4</span>) <span class="op">-&gt;</span> <span class="bu">dict</span>:</span>
 <span id="lst-m1-c12-c01-2"><a href="#lst-m1-c12-c01-2" aria-hidden="true" tabindex="-1"></a>    chunks <span class="op">=</span> vectorstore.similarity_search(query, k<span class="op">=</span>k)</span>
-<span id="lst-m1-c12-c01-3"><a href="#lst-m1-c12-c01-3" aria-hidden="true" tabindex="-1"></a>    context <span class="op">=</span> format_with_metadata(chunks)</span>
-<span id="lst-m1-c12-c01-4"><a href="#lst-m1-c12-c01-4" aria-hidden="true" tabindex="-1"></a>    answer <span class="op">=</span> generation_model.invoke(</span>
-<span id="lst-m1-c12-c01-5"><a href="#lst-m1-c12-c01-5" aria-hidden="true" tabindex="-1"></a>        grounded_prompt(question<span class="op">=</span>query, context<span class="op">=</span>context)</span>
-<span id="lst-m1-c12-c01-6"><a href="#lst-m1-c12-c01-6" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m1-c12-c01-7"><a href="#lst-m1-c12-c01-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
-<span id="lst-m1-c12-c01-8"><a href="#lst-m1-c12-c01-8" aria-hidden="true" tabindex="-1"></a>        <span class="st">"answer"</span>: answer,</span>
-<span id="lst-m1-c12-c01-9"><a href="#lst-m1-c12-c01-9" aria-hidden="true" tabindex="-1"></a>        <span class="st">"retrieved_chunks"</span>: [</span>
-<span id="lst-m1-c12-c01-10"><a href="#lst-m1-c12-c01-10" aria-hidden="true" tabindex="-1"></a>            {</span>
-<span id="lst-m1-c12-c01-11"><a href="#lst-m1-c12-c01-11" aria-hidden="true" tabindex="-1"></a>                <span class="st">"text"</span>: chunk.page_content,</span>
-<span id="lst-m1-c12-c01-12"><a href="#lst-m1-c12-c01-12" aria-hidden="true" tabindex="-1"></a>                <span class="st">"doc_name"</span>: chunk.metadata[<span class="st">"doc_name"</span>],</span>
-<span id="lst-m1-c12-c01-13"><a href="#lst-m1-c12-c01-13" aria-hidden="true" tabindex="-1"></a>                <span class="st">"page_number"</span>: chunk.metadata[<span class="st">"page_number"</span>],</span>
-<span id="lst-m1-c12-c01-14"><a href="#lst-m1-c12-c01-14" aria-hidden="true" tabindex="-1"></a>            }</span>
-<span id="lst-m1-c12-c01-15"><a href="#lst-m1-c12-c01-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> chunk <span class="kw">in</span> chunks</span>
-<span id="lst-m1-c12-c01-16"><a href="#lst-m1-c12-c01-16" aria-hidden="true" tabindex="-1"></a>        ],</span>
-<span id="lst-m1-c12-c01-17"><a href="#lst-m1-c12-c01-17" aria-hidden="true" tabindex="-1"></a>    }</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m1-c12-c01-3"><a href="#lst-m1-c12-c01-3" aria-hidden="true" tabindex="-1"></a>    retrieved <span class="op">=</span> [</span>
+<span id="lst-m1-c12-c01-4"><a href="#lst-m1-c12-c01-4" aria-hidden="true" tabindex="-1"></a>        {</span>
+<span id="lst-m1-c12-c01-5"><a href="#lst-m1-c12-c01-5" aria-hidden="true" tabindex="-1"></a>            <span class="st">"chunk_text"</span>: chunk.page_content,</span>
+<span id="lst-m1-c12-c01-6"><a href="#lst-m1-c12-c01-6" aria-hidden="true" tabindex="-1"></a>            <span class="st">"doc_name"</span>: chunk.metadata[<span class="st">"doc_name"</span>],</span>
+<span id="lst-m1-c12-c01-7"><a href="#lst-m1-c12-c01-7" aria-hidden="true" tabindex="-1"></a>            <span class="st">"source_page"</span>: chunk.metadata[<span class="st">"source_page"</span>],</span>
+<span id="lst-m1-c12-c01-8"><a href="#lst-m1-c12-c01-8" aria-hidden="true" tabindex="-1"></a>            <span class="st">"reranker_score"</span>: chunk.metadata.get(<span class="st">"reranker_score"</span>),</span>
+<span id="lst-m1-c12-c01-9"><a href="#lst-m1-c12-c01-9" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="lst-m1-c12-c01-10"><a href="#lst-m1-c12-c01-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> chunk <span class="kw">in</span> chunks</span>
+<span id="lst-m1-c12-c01-11"><a href="#lst-m1-c12-c01-11" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="lst-m1-c12-c01-12"><a href="#lst-m1-c12-c01-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> retrieved:</span>
+<span id="lst-m1-c12-c01-13"><a href="#lst-m1-c12-c01-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> {</span>
+<span id="lst-m1-c12-c01-14"><a href="#lst-m1-c12-c01-14" aria-hidden="true" tabindex="-1"></a>            <span class="st">"status"</span>: <span class="st">"insufficient_evidence"</span>,</span>
+<span id="lst-m1-c12-c01-15"><a href="#lst-m1-c12-c01-15" aria-hidden="true" tabindex="-1"></a>            <span class="st">"question"</span>: query,</span>
+<span id="lst-m1-c12-c01-16"><a href="#lst-m1-c12-c01-16" aria-hidden="true" tabindex="-1"></a>            <span class="st">"answer"</span>: <span class="va">None</span>,</span>
+<span id="lst-m1-c12-c01-17"><a href="#lst-m1-c12-c01-17" aria-hidden="true" tabindex="-1"></a>            <span class="st">"cited_pages"</span>: [],</span>
+<span id="lst-m1-c12-c01-18"><a href="#lst-m1-c12-c01-18" aria-hidden="true" tabindex="-1"></a>            <span class="st">"retrieved"</span>: [],</span>
+<span id="lst-m1-c12-c01-19"><a href="#lst-m1-c12-c01-19" aria-hidden="true" tabindex="-1"></a>            <span class="st">"k"</span>: k,</span>
+<span id="lst-m1-c12-c01-20"><a href="#lst-m1-c12-c01-20" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="lst-m1-c12-c01-21"><a href="#lst-m1-c12-c01-21" aria-hidden="true" tabindex="-1"></a>    response <span class="op">=</span> generation_model.invoke(</span>
+<span id="lst-m1-c12-c01-22"><a href="#lst-m1-c12-c01-22" aria-hidden="true" tabindex="-1"></a>        grounded_prompt(question<span class="op">=</span>query, context<span class="op">=</span>format_with_metadata(retrieved))</span>
+<span id="lst-m1-c12-c01-23"><a href="#lst-m1-c12-c01-23" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m1-c12-c01-24"><a href="#lst-m1-c12-c01-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
+<span id="lst-m1-c12-c01-25"><a href="#lst-m1-c12-c01-25" aria-hidden="true" tabindex="-1"></a>        <span class="st">"status"</span>: <span class="st">"answered"</span>,</span>
+<span id="lst-m1-c12-c01-26"><a href="#lst-m1-c12-c01-26" aria-hidden="true" tabindex="-1"></a>        <span class="st">"question"</span>: query,</span>
+<span id="lst-m1-c12-c01-27"><a href="#lst-m1-c12-c01-27" aria-hidden="true" tabindex="-1"></a>        <span class="st">"answer"</span>: response.text,</span>
+<span id="lst-m1-c12-c01-28"><a href="#lst-m1-c12-c01-28" aria-hidden="true" tabindex="-1"></a>        <span class="st">"cited_pages"</span>: response.cited_pages,</span>
+<span id="lst-m1-c12-c01-29"><a href="#lst-m1-c12-c01-29" aria-hidden="true" tabindex="-1"></a>        <span class="st">"retrieved"</span>: retrieved,</span>
+<span id="lst-m1-c12-c01-30"><a href="#lst-m1-c12-c01-30" aria-hidden="true" tabindex="-1"></a>        <span class="st">"k"</span>: k,</span>
+<span id="lst-m1-c12-c01-31"><a href="#lst-m1-c12-c01-31" aria-hidden="true" tabindex="-1"></a>    }</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Why the returned chunks matter</strong></p>
 <p>If the function returns only the answer, retrieval evaluation, citation verification, debugging, and later reranking experiments lose the evidence that produced the output.</p>
 </div>
-<p>The retrieval trace is the connecting record. It stores the question, source filters, ranked chunks, selected context, source identifiers, answer, and citations. A wrong answer with a missed labeled page points toward retrieval; a wrong answer with correct evidence points toward generation or validation. The same trace supports later reranking and chunking experiments without relying on memory of what the pipeline returned.</p>
+<p>The retrieval trace is the connecting record. Its shared fields are <code>status</code>, <code>question</code>, <code>answer</code>, <code>cited_pages</code>, <code>retrieved</code>, and <code>k</code>; each retrieved entry has <code>chunk_text</code>, <code>doc_name</code>, one-based <code>source_page</code>, and <code>reranker_score</code>. A wrong answer with a missed labeled page points toward retrieval; a wrong answer with correct evidence points toward generation or validation. The same trace supports later reranking and chunking experiments without relying on memory of what the pipeline returned.</p>
 </section>
 <section id="sec-m1-c12-s04" class="level2" data-number="12.4">
 <h2 data-number="12.4" class="anchored" data-anchor-id="sec-m1-c12-s04"><span class="header-section-number">12.4</span> Controlled tool choice</h2>
@@ -640,29 +655,44 @@ Table&nbsp;12.3: The controlled analyst can be tested one component specificatio
 <li>The host creates state containing the normalized question, user identity, session identity, dataset version, and remaining step budget.</li>
 <li>The router returns <code>structured</code>; an out-of-scope branch is therefore not entered.</li>
 <li>The agent selects <code>filter_by_intent</code> with the canonical intent <code>get_refund</code>. The application validates the enum and executes the filter.</li>
-<li>The observation returns a bounded row reference or row set. The agent applies <code>count_rows</code> to that bounded result and returns a typed count with provenance.</li>
-<li>The tool returns a typed integer with dataset and filter provenance.</li>
+<li>The filter returns an opaque <code>row_ref</code> to the complete authorized filtered set and a capped preview for inspection. The agent passes the reference to <code>count_rows</code>; the preview never determines the total.</li>
+<li><code>count_rows</code> rechecks the caller and current dataset version, then returns a typed count with the dataset version and intent scope.</li>
 <li>The final-answer node formats the count and its scope. A validator checks that the number equals the tool result and that no unsupported explanation was added.</li>
 <li>The trace records router output, both tool calls, observations, latency, cost, model and tool versions, and the verified final state.</li>
 </ol>
 <p><strong>The same request expressed as state transitions.</strong></p>
+<p>This abbreviated Python example receives the router, tools, validated <code>IntentFilter</code> and <code>CountRows</code> models, and final validator as explicit helpers. A tool framework can register wrappers that convert structured tool arguments into those models before calling the plain Python functions. The application binds each tool call to the caller and currently loaded dataset recorded in <code>state0</code>; <code>filter_by_intent</code> returns <code>{row_ref, preview}</code> for the complete authorized result, and <code>count_rows</code> returns <code>{count, dataset_version, intent}</code> after its own checks. Each route or tool call spends one step. A non-structured route returns a typed stop result, while an exhausted budget or mismatched count result raises a failure for the application to handle.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> The same request expressed as state transitions.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c12-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c12-c02-1"><a href="#lst-m1-c12-c02-1" aria-hidden="true" tabindex="-1"></a>state0 <span class="op">=</span> {</span>
-<span id="lst-m1-c12-c02-2"><a href="#lst-m1-c12-c02-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"question"</span>: <span class="st">"How many refund requests are in the dataset?"</span>,</span>
-<span id="lst-m1-c12-c02-3"><a href="#lst-m1-c12-c02-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"route"</span>: <span class="va">None</span>,</span>
-<span id="lst-m1-c12-c02-4"><a href="#lst-m1-c12-c02-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"row_ref"</span>: <span class="va">None</span>,</span>
-<span id="lst-m1-c12-c02-5"><a href="#lst-m1-c12-c02-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"count"</span>: <span class="va">None</span>,</span>
-<span id="lst-m1-c12-c02-6"><a href="#lst-m1-c12-c02-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">"steps_left"</span>: <span class="dv">12</span>,</span>
-<span id="lst-m1-c12-c02-7"><a href="#lst-m1-c12-c02-7" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="lst-m1-c12-c02-8"><a href="#lst-m1-c12-c02-8" aria-hidden="true" tabindex="-1"></a>state1 <span class="op">=</span> route(state0)                         <span class="co"># route = "structured"</span></span>
-<span id="lst-m1-c12-c02-9"><a href="#lst-m1-c12-c02-9" aria-hidden="true" tabindex="-1"></a>state2 <span class="op">=</span> call(<span class="st">"filter_by_intent"</span>, intent<span class="op">=</span><span class="st">"get_refund"</span>)</span>
-<span id="lst-m1-c12-c02-10"><a href="#lst-m1-c12-c02-10" aria-hidden="true" tabindex="-1"></a>state3 <span class="op">=</span> call(<span class="st">"count_rows"</span>, rows<span class="op">=</span>state2.row_ref)</span>
-<span id="lst-m1-c12-c02-11"><a href="#lst-m1-c12-c02-11" aria-hidden="true" tabindex="-1"></a>state4 <span class="op">=</span> verify_final(</span>
-<span id="lst-m1-c12-c02-12"><a href="#lst-m1-c12-c02-12" aria-hidden="true" tabindex="-1"></a>    answer<span class="op">=</span><span class="ss">f"</span><span class="sc">{</span>state3<span class="sc">.</span>count<span class="sc">}</span><span class="ss"> refund requests"</span>,</span>
-<span id="lst-m1-c12-c02-13"><a href="#lst-m1-c12-c02-13" aria-hidden="true" tabindex="-1"></a>    expected_count<span class="op">=</span>state3.count,</span>
-<span id="lst-m1-c12-c02-14"><a href="#lst-m1-c12-c02-14" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c12-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c12-c02-1"><a href="#lst-m1-c12-c02-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> spend_step(state):</span>
+<span id="lst-m1-c12-c02-2"><a href="#lst-m1-c12-c02-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> state[<span class="st">"steps_left"</span>] <span class="op">&lt;=</span> <span class="dv">0</span>:</span>
+<span id="lst-m1-c12-c02-3"><a href="#lst-m1-c12-c02-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">RuntimeError</span>(<span class="st">"step budget exhausted"</span>)</span>
+<span id="lst-m1-c12-c02-4"><a href="#lst-m1-c12-c02-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {<span class="op">**</span>state, <span class="st">"steps_left"</span>: state[<span class="st">"steps_left"</span>] <span class="op">-</span> <span class="dv">1</span>}</span>
+<span id="lst-m1-c12-c02-5"><a href="#lst-m1-c12-c02-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c12-c02-6"><a href="#lst-m1-c12-c02-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> refund_count_trace(</span>
+<span id="lst-m1-c12-c02-7"><a href="#lst-m1-c12-c02-7" aria-hidden="true" tabindex="-1"></a>    state0, <span class="op">*</span>, route, filter_by_intent, count_rows, verify_final, IntentFilter, CountRows</span>
+<span id="lst-m1-c12-c02-8"><a href="#lst-m1-c12-c02-8" aria-hidden="true" tabindex="-1"></a>):</span>
+<span id="lst-m1-c12-c02-9"><a href="#lst-m1-c12-c02-9" aria-hidden="true" tabindex="-1"></a>    routed <span class="op">=</span> spend_step(state0)</span>
+<span id="lst-m1-c12-c02-10"><a href="#lst-m1-c12-c02-10" aria-hidden="true" tabindex="-1"></a>    state1 <span class="op">=</span> {<span class="op">**</span>routed, <span class="st">"route"</span>: route(routed)}</span>
+<span id="lst-m1-c12-c02-11"><a href="#lst-m1-c12-c02-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> state1[<span class="st">"route"</span>] <span class="op">!=</span> <span class="st">"structured"</span>:</span>
+<span id="lst-m1-c12-c02-12"><a href="#lst-m1-c12-c02-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> {<span class="op">**</span>state1, <span class="st">"status"</span>: <span class="st">"out_of_scope"</span>}</span>
+<span id="lst-m1-c12-c02-13"><a href="#lst-m1-c12-c02-13" aria-hidden="true" tabindex="-1"></a>    filter_state <span class="op">=</span> spend_step(state1)</span>
+<span id="lst-m1-c12-c02-14"><a href="#lst-m1-c12-c02-14" aria-hidden="true" tabindex="-1"></a>    filtered <span class="op">=</span> filter_by_intent(IntentFilter(intent<span class="op">=</span><span class="st">"get_refund"</span>, limit<span class="op">=</span><span class="dv">20</span>))</span>
+<span id="lst-m1-c12-c02-15"><a href="#lst-m1-c12-c02-15" aria-hidden="true" tabindex="-1"></a>    state2 <span class="op">=</span> {<span class="op">**</span>filter_state, <span class="op">**</span>filtered}</span>
+<span id="lst-m1-c12-c02-16"><a href="#lst-m1-c12-c02-16" aria-hidden="true" tabindex="-1"></a>    count_state <span class="op">=</span> spend_step(state2)</span>
+<span id="lst-m1-c12-c02-17"><a href="#lst-m1-c12-c02-17" aria-hidden="true" tabindex="-1"></a>    counted <span class="op">=</span> count_rows(CountRows(rows<span class="op">=</span>count_state[<span class="st">"row_ref"</span>]))</span>
+<span id="lst-m1-c12-c02-18"><a href="#lst-m1-c12-c02-18" aria-hidden="true" tabindex="-1"></a>    state3 <span class="op">=</span> {<span class="op">**</span>count_state, <span class="op">**</span>counted}</span>
+<span id="lst-m1-c12-c02-19"><a href="#lst-m1-c12-c02-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (</span>
+<span id="lst-m1-c12-c02-20"><a href="#lst-m1-c12-c02-20" aria-hidden="true" tabindex="-1"></a>        state3[<span class="st">"dataset_version"</span>] <span class="op">!=</span> state0[<span class="st">"dataset_version"</span>]</span>
+<span id="lst-m1-c12-c02-21"><a href="#lst-m1-c12-c02-21" aria-hidden="true" tabindex="-1"></a>        <span class="kw">or</span> state3[<span class="st">"intent"</span>] <span class="op">!=</span> <span class="st">"get_refund"</span></span>
+<span id="lst-m1-c12-c02-22"><a href="#lst-m1-c12-c02-22" aria-hidden="true" tabindex="-1"></a>    ):</span>
+<span id="lst-m1-c12-c02-23"><a href="#lst-m1-c12-c02-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">RuntimeError</span>(<span class="st">"stale or mismatched count result"</span>)</span>
+<span id="lst-m1-c12-c02-24"><a href="#lst-m1-c12-c02-24" aria-hidden="true" tabindex="-1"></a>    state4 <span class="op">=</span> verify_final(</span>
+<span id="lst-m1-c12-c02-25"><a href="#lst-m1-c12-c02-25" aria-hidden="true" tabindex="-1"></a>        answer<span class="op">=</span><span class="ss">f"</span><span class="sc">{</span>state3[<span class="st">'count'</span>]<span class="sc">}</span><span class="ss"> refund requests"</span>,</span>
+<span id="lst-m1-c12-c02-26"><a href="#lst-m1-c12-c02-26" aria-hidden="true" tabindex="-1"></a>        expected_count<span class="op">=</span>state3[<span class="st">"count"</span>],</span>
+<span id="lst-m1-c12-c02-27"><a href="#lst-m1-c12-c02-27" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m1-c12-c02-28"><a href="#lst-m1-c12-c02-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {<span class="op">**</span>state3, <span class="st">"final"</span>: state4, <span class="st">"status"</span>: <span class="st">"ok"</span>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>What the model does not own</strong></p>
 <p>The model does not authorize dataset access, invent the intent taxonomy, execute the filter, count rows, write durable memory, or decide that the run satisfies acceptance criteria. It proposes actions and language inside those application controls.</p>

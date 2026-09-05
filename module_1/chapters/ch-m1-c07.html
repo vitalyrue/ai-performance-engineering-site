@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -506,8 +506,7 @@ Figure&nbsp;7.3: Evidence availability and answer support separate retrieval fai
 </figure>
 </div>
 <p>The same wrong answer can arise because the evidence never appeared, because context assembly dropped it, or because generation ignored it. The retrieval trace and claim-support record locate the component where the failure began.</p>
-<p>The RAG triad separates three relationships. Context relevance asks whether the selected evidence is useful for the question. Faithfulness asks whether the answer’s claims follow from that evidence. Answer relevance asks whether the supported answer actually addresses the requested task. The dimensions correspond to different components and therefore to different repair actions.</p>
-<p>The dimensions also interact. Highly relevant evidence can still produce an unfaithful answer, and a faithful summary can still answer the wrong question. Missing evidence may cap the best possible faithfulness and completeness. A diagnostic record keeps query, ranked candidates, selected context, claims, citations, and final answer together so each relationship can be scored without reconstructing the run.</p>
+<p>The three dimensions correspond to different components and therefore to different repair actions. They also interact: highly relevant evidence can still produce an unfaithful answer, and a faithful summary can still answer the wrong question. Missing evidence limits how completely the task can be answered from the selected context, but it does not force low faithfulness: an answer can explicitly say that the context lacks a needed fact and remain fully supported. A diagnostic record keeps query, ranked candidates, selected context, claims, citations, and final answer together so each relationship can be scored without reconstructing the run.</p>
 </section>
 <section id="sec-m1-c07-s02" class="level2" data-number="7.2">
 <h2 data-number="7.2" class="anchored" data-anchor-id="sec-m1-c07-s02"><span class="header-section-number">7.2</span> Retrieval evidence metrics</h2>
@@ -539,18 +538,18 @@ Figure&nbsp;7.3: Evidence availability and answer support separate retrieval fai
 </div>
 <p>Mean Reciprocal Rank (MRR) summarizes where the first relevant result appears.</p>
 <p><span id="eq-m1-c07-e04"><span class="math display">\[
-MRR=\frac{1}{N}\sum_{i=1}^{N}\frac{1}{r_i}
+MRR=\frac{1}{N}\sum_{i=1}^{N}\begin{cases}\frac{1}{r_i},&amp;\text{if a relevant result is retrieved}\\0,&amp;\text{otherwise}\end{cases}
 \tag{7.4}\]</span></span></p>
-<p>Here, <span class="math inline">\(N\)</span> is the number of questions and <span class="math inline">\(r_i\)</span> is the rank of the first relevant result for question <span class="math inline">\(i\)</span>. The reciprocal makes rank 1 contribute 1, rank 2 contribute 0.5, and later hits contribute progressively less. MRR ignores additional relevant results after the first.</p>
+<p>Here, <span class="math inline">\(N\)</span> is the number of questions and <span class="math inline">\(r_i\)</span> is the rank of the first relevant result for question <span class="math inline">\(i\)</span>. A question with no relevant result contributes zero rather than an undefined reciprocal. The reciprocal makes rank 1 contribute 1, rank 2 contribute 0.5, and later hits contribute progressively less. MRR ignores additional relevant results after the first.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation - hit@5 and reciprocal rank</strong></p>
-<p>For three questions, the first relevant pages appear at ranks 1, 2, and 5.</p>
+<p>For four questions, the first relevant pages appear at ranks 1, 2, and 5; the fourth question has no relevant page in the evaluated list.</p>
 <ol type="1">
-<li>All three ranks are within 5, so every question has hit@5 = 1 and average hit@5 = 1.0.</li>
-<li>Reciprocal ranks are 1, 1/2, and 1/5.</li>
-<li>MRR = (1 + 0.5 + 0.2) / 3 = 0.567 after rounding.</li>
+<li>The first three questions have hit@5 = 1; the missed question has hit@5 = 0, so average hit@5 = 3/4 = 0.75.</li>
+<li>Reciprocal-rank contributions are 1, 1/2, 1/5, and 0 for the miss.</li>
+<li>MRR = (1 + 0.5 + 0.2 + 0) / 4 = 0.425.</li>
 </ol>
-<p><strong>Result:</strong> The retriever always finds evidence by rank 5, but the average first hit is not near the top.</p>
+<p><strong>Result:</strong> The retriever finds evidence for most questions by rank 5, but one miss and later hits lower both metrics.</p>
 <p><strong>Interpretation:</strong> Context order and a small top-k budget may still suffer. Hit@5 alone hides the difference between rank 1 and rank 5.</p>
 </div>
 <div id="fig-m1-c07-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Retrieval recall and precision ask whether relevant documents were found and how much noise was returned. Source: Week 3, PDF p. 57.">
@@ -582,25 +581,32 @@ Figure&nbsp;7.4: Retrieval recall and precision ask whether relevant documents w
 </ol>
 <p>Ragas provides model-based RAG metrics that can automate part of this claim-support analysis. The current v0.4 collections interface accepts the question, response, and retrieved contexts explicitly and returns a score with optional reasoning.</p>
 <p><strong>Code example 7.1 - Ragas v0.4 faithfulness scores the answer against the contexts retained in the trace.</strong></p>
+<p>The caller awaits this asynchronous function, which means it waits for the evaluator’s response without blocking other scheduled work. It supplies the Chapter 6 trace and a compatible evaluator model, then merges the returned fields into the experiment record. A trace with no generated answer returns an unscored result.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 7.1 - Ragas v0.4 faithfulness scores the answer against the contexts retained in the trace.</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c07-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c07-c01-1"><a href="#lst-m1-c07-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> ragas</span>
 <span id="lst-m1-c07-c01-2"><a href="#lst-m1-c07-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> ragas.metrics.collections <span class="im">import</span> Faithfulness</span>
 <span id="lst-m1-c07-c01-3"><a href="#lst-m1-c07-c01-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m1-c07-c01-4"><a href="#lst-m1-c07-c01-4" aria-hidden="true" tabindex="-1"></a>faithfulness <span class="op">=</span> Faithfulness(llm<span class="op">=</span>evaluator_llm)</span>
-<span id="lst-m1-c07-c01-5"><a href="#lst-m1-c07-c01-5" aria-hidden="true" tabindex="-1"></a>result <span class="op">=</span> <span class="cf">await</span> faithfulness.ascore(</span>
-<span id="lst-m1-c07-c01-6"><a href="#lst-m1-c07-c01-6" aria-hidden="true" tabindex="-1"></a>    user_input<span class="op">=</span>trace[<span class="st">"question"</span>],</span>
-<span id="lst-m1-c07-c01-7"><a href="#lst-m1-c07-c01-7" aria-hidden="true" tabindex="-1"></a>    response<span class="op">=</span>trace[<span class="st">"answer"</span>],</span>
-<span id="lst-m1-c07-c01-8"><a href="#lst-m1-c07-c01-8" aria-hidden="true" tabindex="-1"></a>    retrieved_contexts<span class="op">=</span>[</span>
-<span id="lst-m1-c07-c01-9"><a href="#lst-m1-c07-c01-9" aria-hidden="true" tabindex="-1"></a>        item[<span class="st">"chunk_text"</span>] <span class="cf">for</span> item <span class="kw">in</span> trace[<span class="st">"retrieved"</span>]</span>
-<span id="lst-m1-c07-c01-10"><a href="#lst-m1-c07-c01-10" aria-hidden="true" tabindex="-1"></a>    ],</span>
-<span id="lst-m1-c07-c01-11"><a href="#lst-m1-c07-c01-11" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="lst-m1-c07-c01-12"><a href="#lst-m1-c07-c01-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m1-c07-c01-13"><a href="#lst-m1-c07-c01-13" aria-hidden="true" tabindex="-1"></a>record[<span class="st">"ragas_version"</span>] <span class="op">=</span> ragas.__version__</span>
-<span id="lst-m1-c07-c01-14"><a href="#lst-m1-c07-c01-14" aria-hidden="true" tabindex="-1"></a>record[<span class="st">"faithfulness"</span>] <span class="op">=</span> <span class="bu">float</span>(result.value)</span>
-<span id="lst-m1-c07-c01-15"><a href="#lst-m1-c07-c01-15" aria-hidden="true" tabindex="-1"></a>record[<span class="st">"faithfulness_reason"</span>] <span class="op">=</span> result.reason</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The evaluator model, Ragas version, metric prompt, and case-level reason belong in the experiment record. Faithfulness is a model-based proxy for support, so a human-audited subset and deterministic citation checks remain necessary. Earlier Ragas releases used <code>SingleTurnSample</code> and <code>single_turn_ascore</code>. Pin implementation examples to the installed version and verify the current API before use.</p>
+<span id="lst-m1-c07-c01-4"><a href="#lst-m1-c07-c01-4" aria-hidden="true" tabindex="-1"></a><span class="cf">async</span> <span class="kw">def</span> score_faithfulness(trace, evaluator_llm):</span>
+<span id="lst-m1-c07-c01-5"><a href="#lst-m1-c07-c01-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> trace[<span class="st">"status"</span>] <span class="op">!=</span> <span class="st">"answered"</span>:</span>
+<span id="lst-m1-c07-c01-6"><a href="#lst-m1-c07-c01-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> {<span class="st">"ragas_version"</span>: ragas.__version__,</span>
+<span id="lst-m1-c07-c01-7"><a href="#lst-m1-c07-c01-7" aria-hidden="true" tabindex="-1"></a>                <span class="st">"faithfulness"</span>: <span class="va">None</span>,</span>
+<span id="lst-m1-c07-c01-8"><a href="#lst-m1-c07-c01-8" aria-hidden="true" tabindex="-1"></a>                <span class="st">"faithfulness_reason"</span>: <span class="st">"No answer was generated."</span>}</span>
+<span id="lst-m1-c07-c01-9"><a href="#lst-m1-c07-c01-9" aria-hidden="true" tabindex="-1"></a>    faithfulness <span class="op">=</span> Faithfulness(llm<span class="op">=</span>evaluator_llm)</span>
+<span id="lst-m1-c07-c01-10"><a href="#lst-m1-c07-c01-10" aria-hidden="true" tabindex="-1"></a>    result <span class="op">=</span> <span class="cf">await</span> faithfulness.ascore(</span>
+<span id="lst-m1-c07-c01-11"><a href="#lst-m1-c07-c01-11" aria-hidden="true" tabindex="-1"></a>        user_input<span class="op">=</span>trace[<span class="st">"question"</span>],</span>
+<span id="lst-m1-c07-c01-12"><a href="#lst-m1-c07-c01-12" aria-hidden="true" tabindex="-1"></a>        response<span class="op">=</span>trace[<span class="st">"answer"</span>],</span>
+<span id="lst-m1-c07-c01-13"><a href="#lst-m1-c07-c01-13" aria-hidden="true" tabindex="-1"></a>        retrieved_contexts<span class="op">=</span>[</span>
+<span id="lst-m1-c07-c01-14"><a href="#lst-m1-c07-c01-14" aria-hidden="true" tabindex="-1"></a>            item[<span class="st">"chunk_text"</span>] <span class="cf">for</span> item <span class="kw">in</span> trace[<span class="st">"retrieved"</span>]</span>
+<span id="lst-m1-c07-c01-15"><a href="#lst-m1-c07-c01-15" aria-hidden="true" tabindex="-1"></a>        ],</span>
+<span id="lst-m1-c07-c01-16"><a href="#lst-m1-c07-c01-16" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m1-c07-c01-17"><a href="#lst-m1-c07-c01-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
+<span id="lst-m1-c07-c01-18"><a href="#lst-m1-c07-c01-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">"ragas_version"</span>: ragas.__version__,</span>
+<span id="lst-m1-c07-c01-19"><a href="#lst-m1-c07-c01-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">"faithfulness"</span>: <span class="bu">float</span>(result.value),</span>
+<span id="lst-m1-c07-c01-20"><a href="#lst-m1-c07-c01-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">"faithfulness_reason"</span>: result.reason,</span>
+<span id="lst-m1-c07-c01-21"><a href="#lst-m1-c07-c01-21" aria-hidden="true" tabindex="-1"></a>    }</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>This abbreviated example makes evaluator calls, but does not retrieve documents or generate the answer being scored. Record the evaluator model, Ragas version, metric prompt, and case-level reason with the score. Faithfulness is a model-based proxy for support, so a human-audited subset and deterministic citation checks remain necessary. Earlier Ragas releases used <code>SingleTurnSample</code> and <code>single_turn_ascore</code>. Pin implementation examples to the installed version and verify the current API before use.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Faithfulness is context-relative</strong></p>
 <p>A statement can be true in the world but unfaithful to the supplied evidence. A grounded product must either retrieve support or label the statement as external knowledge; it cannot silently substitute model memory for retrieved reference data.</p>
@@ -701,9 +707,9 @@ Table&nbsp;7.2: RAG experiments connect one changed factor to a predicted metric
 <h2 data-number="7.6" class="anchored" data-anchor-id="sec-m1-c07-s06"><span class="header-section-number">7.6</span> FinanceBench evaluation trace</h2>
 <p>The experiment plan has separated settings, metrics, and trade-offs. A row-level trace now shows whether those definitions connect cleanly from source file to answer and aggregate report. The same <code>financebench_id</code> follows a question through baseline, retrieval, evidence-page grading, generation, judge scores, and experiment comparison.</p>
 <ol type="1">
-<li>Load the question, <code>question_type</code>, ground-truth answer, document link, and labeled evidence page.</li>
+<li>Load the question, <code>question_type</code>, ground-truth answer, labeled evidence document name, and one-based evidence page.</li>
 <li>Run naive generation and record response, refusal or confident-answer behavior, tokens, latency, and model version.</li>
-<li>Retrieve chunks and preserve document name, page, rank, retrieval score, and chunk text.</li>
+<li>Retrieve chunks and preserve document name, one-based source page, rank, retrieval score, and chunk text.</li>
 <li>Calculate page-hit@k by mapping retrieved chunks back to their source pages.</li>
 <li>Generate from the selected evidence and store cited pages plus the complete prompt version.</li>
 <li>Score answer correctness and faithfulness; retain judge explanations and model version.</li>
@@ -714,23 +720,33 @@ Table&nbsp;7.2: RAG experiments connect one changed factor to a predicted metric
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 7.2 - one experiment row keeps component and end-to-end evidence together.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c07-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c07-c02-1"><a href="#lst-m1-c07-c02-1" aria-hidden="true" tabindex="-1"></a>experiment_row <span class="op">=</span> {</span>
-<span id="lst-m1-c07-c02-2"><a href="#lst-m1-c07-c02-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"experiment_id"</span>: <span class="st">"chunk1000_k5_prompt_v1"</span>,</span>
-<span id="lst-m1-c07-c02-3"><a href="#lst-m1-c07-c02-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"financebench_id"</span>: case.financebench_id,</span>
-<span id="lst-m1-c07-c02-4"><a href="#lst-m1-c07-c02-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"question_type"</span>: case.question_type,</span>
-<span id="lst-m1-c07-c02-5"><a href="#lst-m1-c07-c02-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"question"</span>: case.question,</span>
-<span id="lst-m1-c07-c02-6"><a href="#lst-m1-c07-c02-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">"ground_truth"</span>: case.answer,</span>
-<span id="lst-m1-c07-c02-7"><a href="#lst-m1-c07-c02-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">"evidence_page"</span>: case.evidence_page,</span>
-<span id="lst-m1-c07-c02-8"><a href="#lst-m1-c07-c02-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">"retrieved_pages"</span>: [item.source_page <span class="cf">for</span> item <span class="kw">in</span> retrieved],</span>
-<span id="lst-m1-c07-c02-9"><a href="#lst-m1-c07-c02-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">"page_hit_at_5"</span>: <span class="bu">int</span>(case.evidence_page <span class="kw">in</span> retrieved_pages[:<span class="dv">5</span>]),</span>
-<span id="lst-m1-c07-c02-10"><a href="#lst-m1-c07-c02-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">"rag_answer"</span>: rag_answer.text,</span>
-<span id="lst-m1-c07-c02-11"><a href="#lst-m1-c07-c02-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">"correctness"</span>: correctness_score,</span>
-<span id="lst-m1-c07-c02-12"><a href="#lst-m1-c07-c02-12" aria-hidden="true" tabindex="-1"></a>    <span class="st">"faithfulness"</span>: faithfulness_score,</span>
-<span id="lst-m1-c07-c02-13"><a href="#lst-m1-c07-c02-13" aria-hidden="true" tabindex="-1"></a>    <span class="st">"input_tokens"</span>: usage.input_tokens,</span>
-<span id="lst-m1-c07-c02-14"><a href="#lst-m1-c07-c02-14" aria-hidden="true" tabindex="-1"></a>    <span class="st">"output_tokens"</span>: usage.output_tokens,</span>
-<span id="lst-m1-c07-c02-15"><a href="#lst-m1-c07-c02-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">"latency_ms"</span>: elapsed_ms,</span>
-<span id="lst-m1-c07-c02-16"><a href="#lst-m1-c07-c02-16" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Calculate aggregate correctness, faithfulness, and page-hit results from the recorded rows so the result remains reproducible. Question-type slices can show whether RAG helps domain-relevant questions more than metrics-generated or novel-generated questions.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c07-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c07-c02-1"><a href="#lst-m1-c07-c02-1" aria-hidden="true" tabindex="-1"></a>answer_trace <span class="op">=</span> answer_with_rag(case.question, k<span class="op">=</span><span class="dv">5</span>)</span>
+<span id="lst-m1-c07-c02-2"><a href="#lst-m1-c07-c02-2" aria-hidden="true" tabindex="-1"></a>retrieved_pages <span class="op">=</span> [</span>
+<span id="lst-m1-c07-c02-3"><a href="#lst-m1-c07-c02-3" aria-hidden="true" tabindex="-1"></a>    (item[<span class="st">"doc_name"</span>], item[<span class="st">"source_page"</span>])</span>
+<span id="lst-m1-c07-c02-4"><a href="#lst-m1-c07-c02-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> item <span class="kw">in</span> answer_trace[<span class="st">"retrieved"</span>]</span>
+<span id="lst-m1-c07-c02-5"><a href="#lst-m1-c07-c02-5" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="lst-m1-c07-c02-6"><a href="#lst-m1-c07-c02-6" aria-hidden="true" tabindex="-1"></a>evidence_page <span class="op">=</span> (case.evidence_doc_name, case.evidence_page)</span>
+<span id="lst-m1-c07-c02-7"><a href="#lst-m1-c07-c02-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c07-c02-8"><a href="#lst-m1-c07-c02-8" aria-hidden="true" tabindex="-1"></a>experiment_row <span class="op">=</span> {</span>
+<span id="lst-m1-c07-c02-9"><a href="#lst-m1-c07-c02-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">"experiment_id"</span>: <span class="st">"chunk1000_k5_prompt_v1"</span>,</span>
+<span id="lst-m1-c07-c02-10"><a href="#lst-m1-c07-c02-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">"financebench_id"</span>: case.financebench_id,</span>
+<span id="lst-m1-c07-c02-11"><a href="#lst-m1-c07-c02-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">"question_type"</span>: case.question_type,</span>
+<span id="lst-m1-c07-c02-12"><a href="#lst-m1-c07-c02-12" aria-hidden="true" tabindex="-1"></a>    <span class="st">"question"</span>: answer_trace[<span class="st">"question"</span>],</span>
+<span id="lst-m1-c07-c02-13"><a href="#lst-m1-c07-c02-13" aria-hidden="true" tabindex="-1"></a>    <span class="st">"ground_truth"</span>: case.answer,</span>
+<span id="lst-m1-c07-c02-14"><a href="#lst-m1-c07-c02-14" aria-hidden="true" tabindex="-1"></a>    <span class="st">"evidence_page"</span>: evidence_page,</span>
+<span id="lst-m1-c07-c02-15"><a href="#lst-m1-c07-c02-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">"retrieved_pages"</span>: retrieved_pages,</span>
+<span id="lst-m1-c07-c02-16"><a href="#lst-m1-c07-c02-16" aria-hidden="true" tabindex="-1"></a>    <span class="st">"page_hit_at_5"</span>: <span class="bu">int</span>(evidence_page <span class="kw">in</span> retrieved_pages[:answer_trace[<span class="st">"k"</span>]]),</span>
+<span id="lst-m1-c07-c02-17"><a href="#lst-m1-c07-c02-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">"rag_answer"</span>: answer_trace[<span class="st">"answer"</span>],</span>
+<span id="lst-m1-c07-c02-18"><a href="#lst-m1-c07-c02-18" aria-hidden="true" tabindex="-1"></a>    <span class="st">"cited_pages"</span>: answer_trace[<span class="st">"cited_pages"</span>],</span>
+<span id="lst-m1-c07-c02-19"><a href="#lst-m1-c07-c02-19" aria-hidden="true" tabindex="-1"></a>    <span class="st">"retrieved"</span>: answer_trace[<span class="st">"retrieved"</span>],</span>
+<span id="lst-m1-c07-c02-20"><a href="#lst-m1-c07-c02-20" aria-hidden="true" tabindex="-1"></a>    <span class="st">"status"</span>: answer_trace[<span class="st">"status"</span>],</span>
+<span id="lst-m1-c07-c02-21"><a href="#lst-m1-c07-c02-21" aria-hidden="true" tabindex="-1"></a>    <span class="st">"correctness"</span>: correctness_score,</span>
+<span id="lst-m1-c07-c02-22"><a href="#lst-m1-c07-c02-22" aria-hidden="true" tabindex="-1"></a>    <span class="st">"faithfulness"</span>: faithfulness_score,</span>
+<span id="lst-m1-c07-c02-23"><a href="#lst-m1-c07-c02-23" aria-hidden="true" tabindex="-1"></a>    <span class="st">"input_tokens"</span>: usage.input_tokens,</span>
+<span id="lst-m1-c07-c02-24"><a href="#lst-m1-c07-c02-24" aria-hidden="true" tabindex="-1"></a>    <span class="st">"output_tokens"</span>: usage.output_tokens,</span>
+<span id="lst-m1-c07-c02-25"><a href="#lst-m1-c07-c02-25" aria-hidden="true" tabindex="-1"></a>    <span class="st">"latency_ms"</span>: elapsed_ms,</span>
+<span id="lst-m1-c07-c02-26"><a href="#lst-m1-c07-c02-26" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>This abbreviated row construction assumes <code>case.evidence_doc_name</code> and <code>case.evidence_page</code> are the labelled source pair and that <code>answer_with_rag</code> returns the Chapter 6 trace. Its expected output copies the actual answer, citations, retrieved records, and status into one row; page hit compares document and page together, so page 7 in two different files is not treated as the same evidence. Calculate aggregate correctness, faithfulness, and page-hit results from the recorded rows so the result remains reproducible. Question-type slices can show whether RAG helps domain-relevant questions more than metrics-generated or novel-generated questions.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter checkpoint</strong></p>
 <p>RAG is measurable because retrieval identifiers, evidence pages, answer text, and scores share one record. Chapter 8 keeps that evidence path while adding deterministic control flow, tools, validation, and human decisions.</p>

@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -534,7 +534,7 @@ Figure&nbsp;6.3: RAG assigns document preparation, retrieval, and answer generat
 <li><strong>Online request evidence:</strong> query text, filters, retrieved identifiers and scores, reranker version, selected context, model output, and citations.</li>
 <li><strong>Data requirement:</strong> source identifiers must survive every stage so a generated citation can be checked against an actual retrieved unit.</li>
 </ul>
-<p>The offline path produces durable retrieval artifacts: normalized source units, provenance, chunk lineage, embeddings, index versions, and build-time quality checks. Its cadence follows source updates and index maintenance. The online path begins with one request and produces a query, filters, ranked candidates, selected context, an answer, citations, and a trace under a latency budget.</p>
+<p>After ingestion, the offline path stores normalized source units, chunk lineage, embeddings, index versions, and build-time quality checks. The online path begins with one request and produces a query, filters, ranked candidates, selected context, an answer, citations, and a trace under a latency budget.</p>
 <p>The separation creates distinct service objectives. Offline quality concerns completeness, reproducibility, freshness, and deletion propagation. Online quality concerns retrieval relevance, authorization, latency, context capacity, and grounded generation. A shared source identifier connects the paths so an online citation can be traced to the exact indexed unit and original document.</p>
 </section>
 <section id="sec-m1-c06-s03" class="level2" data-number="6.3">
@@ -546,8 +546,8 @@ Figure&nbsp;6.3: RAG assigns document preparation, retrieval, and answer generat
 </ul>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Parsing review</strong></p>
-<p>This method applies to raw document bytes, extracted text, page images, and structural metadata before chunk creation.. It is useful when the reference documents contain scans, multiple columns, tables, headers, footers, or mixed reading directions..</p>
-<p>It works by compare extracted text with representative rendered pages, measure empty or very short pages, and preserve page and section identifiers.. A retriever cannot return evidence the parser omitted or corrupted.</p>
+<p>A parsing review compares raw document bytes, extracted text, page images, and structural metadata before chunk creation. It is useful when the reference documents contain scans, multiple columns, tables, headers, footers, or mixed reading directions.</p>
+<p>Compare extracted text with representative rendered pages, measure empty or very short pages, and preserve page and section identifiers. A retriever cannot return evidence the parser omitted or corrupted.</p>
 <p>A limit to keep in mind: A text-only check cannot detect incorrect reading order or lost diagram meaning.</p>
 </div>
 <p>Preprocessing can remove repeated headers, navigation elements, and boilerplate, but it should not erase qualifiers, units, dates, or section boundaries. Every transformation should be reproducible from the original source and recorded in the index build manifest.</p>
@@ -658,15 +658,16 @@ Figure&nbsp;6.5: A vector index stores embedding vectors beside original chunks 
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Embedding selection</strong></p>
-<p>This method applies to the language, domain, and unit length represented by document chunks and user queries.. It is useful when questions paraphrase relevant text or use conceptual rather than exact matching..</p>
-<p>It works by evaluate candidate models on labeled query-evidence pairs and keep document/query embedding versions identical within one index.. Changing the embedding model changes the ranking space and normally requires rebuilding the vector index.</p>
+<p>Embedding selection considers the language, domain, and unit length represented by document chunks and user queries. It is useful when questions paraphrase relevant text or use conceptual rather than exact matching.</p>
+<p>Evaluate candidate models on labeled query-evidence pairs and keep document and query embedding versions identical within one index. Changing the embedding model changes the ranking space and normally requires rebuilding the vector index.</p>
 <p>A limit to keep in mind: Domain jargon, identifiers, code symbols, and numeric constraints may be represented poorly.</p>
 </div>
 </section>
 <section id="sec-m1-c06-s06" class="level2" data-number="6.6">
 <h2 data-number="6.6" class="anchored" data-anchor-id="sec-m1-c06-s06"><span class="header-section-number">6.6</span> Staged retrieval pipeline</h2>
 <p>Vector similarity supplies semantic candidates from the indexed chunks. A production question can also depend on exact identifiers, dates, permissions, and subtle relevance that one embedding score cannot capture. Retrieval therefore combines query construction, search methods, metadata filters, candidate diversification, and reranking.</p>
-<p><strong>BM25</strong> is a probabilistic lexical relevance function that rewards matching terms and is strong for names, codes, and domain vocabulary. <strong>Semantic search</strong> retrieves paraphrases through embeddings. <strong>Hybrid retrieval</strong> combines both signals. A <strong>reranker</strong> examines the query and each candidate together, trading additional latency for a more precise ordering.</p>
+<p><strong>BM25</strong> is a lexical relevance function that rewards matching terms and is strong for names, codes, and domain vocabulary. A matching term contributes more when it is rare in the collection; repeated occurrences have diminishing benefit, and a very long document is normalized so length alone does not win. <strong>Semantic search</strong> retrieves paraphrases through embeddings. <strong>Hybrid retrieval</strong> combines both signals. A <strong>reranker</strong> examines the query and each candidate together, trading additional latency for a more precise ordering.</p>
+<p>Consider the question, “What was Acme’s FY2024 free cash flow?” A table row that contains <code>FY2024</code> and <code>free cash flow</code> may rank first under BM25 because it matches the exact year and measure. A prose summary that says “cash generation improved last year” may rank higher in vector search because the wording is related. Hybrid retrieval keeps both candidates by combining their separate ranks or calibrated scores; it does not treat either raw score as a probability. Maximum Marginal Relevance (MMR) then prefers a candidate that is relevant but not a near-copy of one already selected, so the context can include the table row and a distinct explanatory passage rather than two adjacent copies of the row. Finally, a reranker reads the question with each candidate and can move the row first when it actually states the requested FY2024 value. This sequence makes the ranking decision inspectable: exact-term match, semantic match, diversity choice, then query-document judgment.</p>
 <p>Metadata filters should apply authorization, document date, company, language, or content type before context reaches the model. Maximum Marginal Relevance balances query similarity and redundancy so the result set covers distinct evidence.</p>
 <div id="fig-m1-c06-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Retrieval failures include missing relevant evidence, noisy candidates, incomplete chunks, and incorrect ranking. Source: Week 3, PDF p. 34.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -756,6 +757,7 @@ Figure&nbsp;6.7: Retrieval finds information and generation uses it; either stag
 <span id="lst-m1-c06-c01-25"><a href="#lst-m1-c06-c01-25" aria-hidden="true" tabindex="-1"></a>index <span class="op">=</span> FAISS.from_documents(chunks, embedding_model)</span>
 <span id="lst-m1-c06-c01-26"><a href="#lst-m1-c06-c01-26" aria-hidden="true" tabindex="-1"></a>index.save_local(<span class="st">"financebench_faiss"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p><code>page</code> is the source evidence unit, <code>chunks</code> are retrievable children carrying inherited metadata, the BGE model identifier defines the vector space, and <code>index</code> stores search records. The <code>source_page</code> field is converted to the one-based page number used by the assignment labels. Persist the source hashes, parser and splitter versions, metadata schema, embedding identifier, and FAISS settings beside the index; the binary index alone is not reproducible evidence.</p>
+<p>This abbreviated ingestion example assumes <code>financial_pdfs</code> is a collection of path-like PDF objects and that <code>infer_company</code> and <code>infer_period</code> return metadata from an approved source. Its expected result is an index whose chunks retain <code>doc_name</code> and a one-based <code>source_page</code>; the loader’s zero-based <code>page</code> value is never used as the display page.</p>
 <p><strong>Code example 6.2 - the online function returns answer evidence and trace objects, not prose alone.</strong></p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 6.2 - the online function returns answer evidence and trace objects, not prose alone.</p>
@@ -775,17 +777,23 @@ Figure&nbsp;6.7: Retrieval finds information and generation uses it; either stag
 <span id="lst-m1-c06-c02-13"><a href="#lst-m1-c06-c02-13" aria-hidden="true" tabindex="-1"></a>        }</span>
 <span id="lst-m1-c06-c02-14"><a href="#lst-m1-c06-c02-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> doc, score <span class="kw">in</span> reranked</span>
 <span id="lst-m1-c06-c02-15"><a href="#lst-m1-c06-c02-15" aria-hidden="true" tabindex="-1"></a>    ]</span>
-<span id="lst-m1-c06-c02-16"><a href="#lst-m1-c06-c02-16" aria-hidden="true" tabindex="-1"></a>    answer <span class="op">=</span> generation_model(</span>
-<span id="lst-m1-c06-c02-17"><a href="#lst-m1-c06-c02-17" aria-hidden="true" tabindex="-1"></a>        render_grounded_prompt(question<span class="op">=</span>question, evidence<span class="op">=</span>context)</span>
-<span id="lst-m1-c06-c02-18"><a href="#lst-m1-c06-c02-18" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m1-c06-c02-19"><a href="#lst-m1-c06-c02-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
-<span id="lst-m1-c06-c02-20"><a href="#lst-m1-c06-c02-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">"question"</span>: question,</span>
-<span id="lst-m1-c06-c02-21"><a href="#lst-m1-c06-c02-21" aria-hidden="true" tabindex="-1"></a>        <span class="st">"answer"</span>: answer.text,</span>
-<span id="lst-m1-c06-c02-22"><a href="#lst-m1-c06-c02-22" aria-hidden="true" tabindex="-1"></a>        <span class="st">"cited_pages"</span>: answer.cited_pages,</span>
-<span id="lst-m1-c06-c02-23"><a href="#lst-m1-c06-c02-23" aria-hidden="true" tabindex="-1"></a>        <span class="st">"retrieved"</span>: context,</span>
-<span id="lst-m1-c06-c02-24"><a href="#lst-m1-c06-c02-24" aria-hidden="true" tabindex="-1"></a>        <span class="st">"k"</span>: k,</span>
-<span id="lst-m1-c06-c02-25"><a href="#lst-m1-c06-c02-25" aria-hidden="true" tabindex="-1"></a>    }</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The result structure preserves enough information for Chapter 7 to distinguish a missed evidence page from an answer that ignored retrieved evidence. The baseline and RAG outputs should share question identifiers so a row-level comparison remains possible.</p>
+<span id="lst-m1-c06-c02-16"><a href="#lst-m1-c06-c02-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> context:</span>
+<span id="lst-m1-c06-c02-17"><a href="#lst-m1-c06-c02-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> {</span>
+<span id="lst-m1-c06-c02-18"><a href="#lst-m1-c06-c02-18" aria-hidden="true" tabindex="-1"></a>            <span class="st">"question"</span>: question, <span class="st">"answer"</span>: <span class="va">None</span>, <span class="st">"cited_pages"</span>: [],</span>
+<span id="lst-m1-c06-c02-19"><a href="#lst-m1-c06-c02-19" aria-hidden="true" tabindex="-1"></a>            <span class="st">"retrieved"</span>: [], <span class="st">"k"</span>: k, <span class="st">"status"</span>: <span class="st">"insufficient_evidence"</span>,</span>
+<span id="lst-m1-c06-c02-20"><a href="#lst-m1-c06-c02-20" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="lst-m1-c06-c02-21"><a href="#lst-m1-c06-c02-21" aria-hidden="true" tabindex="-1"></a>    answer <span class="op">=</span> generation_model(</span>
+<span id="lst-m1-c06-c02-22"><a href="#lst-m1-c06-c02-22" aria-hidden="true" tabindex="-1"></a>        render_grounded_prompt(question<span class="op">=</span>question, evidence<span class="op">=</span>context)</span>
+<span id="lst-m1-c06-c02-23"><a href="#lst-m1-c06-c02-23" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m1-c06-c02-24"><a href="#lst-m1-c06-c02-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
+<span id="lst-m1-c06-c02-25"><a href="#lst-m1-c06-c02-25" aria-hidden="true" tabindex="-1"></a>        <span class="st">"question"</span>: question,</span>
+<span id="lst-m1-c06-c02-26"><a href="#lst-m1-c06-c02-26" aria-hidden="true" tabindex="-1"></a>        <span class="st">"answer"</span>: answer.text,</span>
+<span id="lst-m1-c06-c02-27"><a href="#lst-m1-c06-c02-27" aria-hidden="true" tabindex="-1"></a>        <span class="st">"cited_pages"</span>: answer.cited_pages,</span>
+<span id="lst-m1-c06-c02-28"><a href="#lst-m1-c06-c02-28" aria-hidden="true" tabindex="-1"></a>        <span class="st">"retrieved"</span>: context,</span>
+<span id="lst-m1-c06-c02-29"><a href="#lst-m1-c06-c02-29" aria-hidden="true" tabindex="-1"></a>        <span class="st">"k"</span>: k,</span>
+<span id="lst-m1-c06-c02-30"><a href="#lst-m1-c06-c02-30" aria-hidden="true" tabindex="-1"></a>        <span class="st">"status"</span>: <span class="st">"answered"</span>,</span>
+<span id="lst-m1-c06-c02-31"><a href="#lst-m1-c06-c02-31" aria-hidden="true" tabindex="-1"></a>    }</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>This abbreviated online example assumes the index, reranker, generation model, and prompt renderer are supplied by the application. On a successful retrieval it returns the question, answer, cited pages, the selected records, <code>k</code>, and an <code>answered</code> status. With no selected records it returns the same trace shape with <code>answer</code> set to <code>None</code>, <code>cited_pages</code> and <code>retrieved</code> empty, and status <code>insufficient_evidence</code>; it does not call the generation model. The result structure preserves enough information for Chapter 7 to distinguish a missed evidence page from an answer that ignored retrieved evidence. The baseline and RAG outputs should share question identifiers so a row-level comparison remains possible.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter checkpoint</strong></p>
 <p>A complete RAG build records where each retrieved passage came from and returns a trace beside the answer. Chapter 7 defines the component metrics and experiments that show whether the pipeline improved.</p>

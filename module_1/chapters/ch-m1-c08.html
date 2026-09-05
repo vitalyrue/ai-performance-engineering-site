@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -448,11 +448,11 @@ Figure&nbsp;8.3: A workflow is a predefined structure for reliable reuse. Applic
 <p>A workflow can still call an LLM. Reliability comes from controlling when it is called, what inputs it receives, how outputs are checked, and which branch follows.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Workflow</strong></p>
-<p>This method applies to tasks with known phases, stable policies, expected branches, or consequential state changes.. It is useful when reliability, auditability, latency bounds, and clear failure recovery matter..</p>
-<p>It works by represent steps and transitions in code or a graph, define state schemas, and validate each output before the next transition.. Implement and test a known process once; then reuse it on every request.</p>
+<p>This method applies to tasks with known phases, stable policies, expected branches, or consequential state changes. It is useful when reliability, auditability, latency bounds, and clear failure recovery matter.</p>
+<p>It represents steps and transitions in code or a graph, defines state schemas, and validates each output before the next transition. Implement and test a known process once; then reuse it on every request.</p>
 <p>A limit to keep in mind: Fixed sequential paths can perform poorly when the next useful action depends on unforeseen observations.</p>
 </div>
-<p>A workflow is an application-defined graph or sequence whose allowed steps are known before a request begins. Model calls may fill in text, classifications, or structured fields inside those steps, but the application determines which transitions exist, what each step receives, and which validator or fallback follows a failure.</p>
+<p>In the resulting application-defined graph or sequence, model calls may fill in text, classifications, or structured fields. The application still determines which transitions exist, what each step receives, and which validator or fallback follows a failure.</p>
 <p>Workflow quality is measured at both step and outcome level. Step traces reveal parse errors, invalid transitions, retries, and branch selection; outcome metrics show whether the complete process met quality, latency, cost, and policy targets. This makes a workflow appropriate for repeatable processes whose control logic benefits from software-managed execution.</p>
 </section>
 <section id="sec-m1-c08-s03" class="level2" data-number="8.3">
@@ -466,21 +466,23 @@ Figure&nbsp;8.3: A workflow is a predefined structure for reliable reuse. Applic
 <li><strong>Design rule:</strong> use deterministic code for parsing, arithmetic, schema checks, and known transformations whenever possible.</li>
 </ul>
 <p><strong>Code example 8.1 - a chained workflow validates the extracted object before retrieval.</strong></p>
+<p>This abbreviated Python function assumes that <code>ticket_text</code> is the incoming request, <code>customer_state</code> is application-supplied account state, and <code>ALLOWED_INTENTS</code> plus every named helper are supplied by the application. The classifier and extractor may call models; validators return an <code>ok</code> flag and reason. The function returns either a human-route result or a validated reply, and it does not send a message or modify customer data.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 8.1 - a chained workflow validates the extracted object before retrieval.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c08-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c08-c01-1"><a href="#lst-m1-c08-c01-1" aria-hidden="true" tabindex="-1"></a>intent <span class="op">=</span> classify_intent(ticket_text)</span>
-<span id="lst-m1-c08-c01-2"><a href="#lst-m1-c08-c01-2" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> intent <span class="kw">in</span> ALLOWED_INTENTS</span>
-<span id="lst-m1-c08-c01-3"><a href="#lst-m1-c08-c01-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m1-c08-c01-4"><a href="#lst-m1-c08-c01-4" aria-hidden="true" tabindex="-1"></a>entities <span class="op">=</span> extract_entities(ticket_text, schema<span class="op">=</span>TicketEntities)</span>
-<span id="lst-m1-c08-c01-5"><a href="#lst-m1-c08-c01-5" aria-hidden="true" tabindex="-1"></a>validated <span class="op">=</span> validate_customer_and_order(entities)</span>
-<span id="lst-m1-c08-c01-6"><a href="#lst-m1-c08-c01-6" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="kw">not</span> validated.ok:</span>
-<span id="lst-m1-c08-c01-7"><a href="#lst-m1-c08-c01-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> route_to_human(reason<span class="op">=</span>validated.reason)</span>
-<span id="lst-m1-c08-c01-8"><a href="#lst-m1-c08-c01-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m1-c08-c01-9"><a href="#lst-m1-c08-c01-9" aria-hidden="true" tabindex="-1"></a>policy_chunks <span class="op">=</span> retrieve_policy(intent, entities.product_type)</span>
-<span id="lst-m1-c08-c01-10"><a href="#lst-m1-c08-c01-10" aria-hidden="true" tabindex="-1"></a>draft <span class="op">=</span> draft_grounded_reply(ticket_text, policy_chunks)</span>
-<span id="lst-m1-c08-c01-11"><a href="#lst-m1-c08-c01-11" aria-hidden="true" tabindex="-1"></a><span class="cf">return</span> validate_reply(draft, policy_chunks, customer_state)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p><code>classify_intent</code> and <code>extract_entities</code> may use models, while <code>validate_customer_and_order</code> and <code>validate_reply</code> enforce application rules. The human route is a normal branch, not an exception hidden inside a prompt.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c08-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c08-c01-1"><a href="#lst-m1-c08-c01-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> handle_ticket(ticket_text, customer_state):</span>
+<span id="lst-m1-c08-c01-2"><a href="#lst-m1-c08-c01-2" aria-hidden="true" tabindex="-1"></a>    intent <span class="op">=</span> classify_intent(ticket_text)</span>
+<span id="lst-m1-c08-c01-3"><a href="#lst-m1-c08-c01-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> intent <span class="kw">in</span> ALLOWED_INTENTS</span>
+<span id="lst-m1-c08-c01-4"><a href="#lst-m1-c08-c01-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c08-c01-5"><a href="#lst-m1-c08-c01-5" aria-hidden="true" tabindex="-1"></a>    entities <span class="op">=</span> extract_entities(ticket_text, schema<span class="op">=</span>TicketEntities)</span>
+<span id="lst-m1-c08-c01-6"><a href="#lst-m1-c08-c01-6" aria-hidden="true" tabindex="-1"></a>    validated <span class="op">=</span> validate_customer_and_order(entities)</span>
+<span id="lst-m1-c08-c01-7"><a href="#lst-m1-c08-c01-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> validated.ok:</span>
+<span id="lst-m1-c08-c01-8"><a href="#lst-m1-c08-c01-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> route_to_human(reason<span class="op">=</span>validated.reason)</span>
+<span id="lst-m1-c08-c01-9"><a href="#lst-m1-c08-c01-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c08-c01-10"><a href="#lst-m1-c08-c01-10" aria-hidden="true" tabindex="-1"></a>    policy_chunks <span class="op">=</span> retrieve_policy(intent, entities.product_type)</span>
+<span id="lst-m1-c08-c01-11"><a href="#lst-m1-c08-c01-11" aria-hidden="true" tabindex="-1"></a>    draft <span class="op">=</span> draft_grounded_reply(ticket_text, policy_chunks)</span>
+<span id="lst-m1-c08-c01-12"><a href="#lst-m1-c08-c01-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> validate_reply(draft, policy_chunks, customer_state)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><code>classify_intent</code> and <code>extract_entities</code> may use models, while <code>validate_customer_and_order</code> and <code>validate_reply</code> enforce application rules. The human-route return is a normal branch, not an exception hidden inside a prompt.</p>
 <p>Prompt chaining divides a larger transformation into stages with explicit intermediate representations. One stage may extract facts, another normalize them, and a final stage compose an answer. Each intermediate output has a schema and local evaluation, allowing an early error to be located before it propagates through the remaining calls.</p>
 <p>The additional calls create latency, cost, and compounding reliability trade-offs. If three stages succeed independently with probability 0.95, the probability that all three succeed is about 0.86 before retries or validation are considered. Chaining is therefore useful when intermediate results and schemas improve control or observability enough to justify the extra failure opportunities.</p>
 </section>
@@ -583,12 +585,12 @@ Figure&nbsp;8.5: An orchestrator creates or selects worker tasks and synthesizes
 <p><strong>Reflection</strong> asks a model to critique its own or another model’s output before revision. It can help when a clear rubric exists, but repeated self-critique can increase cost without adding new evidence. External tests, retrieved sources, and independent graders provide stronger signals than unconstrained introspection.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Evaluator-optimizer</strong></p>
-<p>This method applies to a candidate response and a grader that returns specific, checkable deficiencies.. It is useful when quality can improve through revision and the evaluation cost is justified..</p>
-<p>It works by generate, grade, revise from criterion-level feedback, and stop on pass, unchanged score, or budget.. The loop is useful only when feedback adds information that the original generation did not already contain.</p>
+<p>This method applies to a candidate response and a grader that returns specific, checkable deficiencies. It is useful when quality can improve through revision and the evaluation cost is justified.</p>
+<p>It generates a candidate, grades it, revises it from criterion-level feedback, and stops on pass, unchanged score, or budget. The loop is useful only when feedback adds information that the original generation did not already contain.</p>
 <p>A limit to keep in mind: A weak evaluator can reward superficial changes or create reward hacking.</p>
 </div>
 <p>Log every candidate and score. If only the final answer is kept, an apparent improvement cannot be separated from grader inconsistency or sampling luck.</p>
-<p>Evaluator-optimizer and reflection loops add feedback between attempts. An evaluator converts a candidate into criterion-level findings; the next attempt receives those findings and produces a revised candidate. The loop ends on a pass condition, a fixed attempt or cost budget, or a no-progress condition.</p>
+<p>Between attempts, the evaluator’s criterion-level findings become inputs to the next revision. The loop ends on a pass condition, a fixed attempt or cost budget, or a no-progress condition.</p>
 <p>The evaluator becomes part of the system’s behavior and needs its own calibration. An unstable or exploitable judge can reward verbosity, format tricks, or repeated self-justification. Calibration tests must show that its score tracks real improvement. Evaluation compares final quality with a one-pass baseline while also recording attempts, evaluator scores, latency, cost, and unchanged-output loops.</p>
 </section>
 <section id="sec-m1-c08-s07" class="level2" data-number="8.7">
@@ -625,7 +627,7 @@ Figure&nbsp;8.6: Workflow patterns are selected by task structure and should be 
 </figcaption>
 </figure>
 </div>
-<p>The table’s final sentence is the decision rule: complexity must improve a measured final result. A simpler workflow remains the baseline.</p>
+<p>The escalation-condition column in Table 8.2 gives the decision rule: add complexity only when it improves a measured final result. A simpler workflow remains the baseline.</p>
 <div id="tbl-m1-c08-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m1-c08-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -676,7 +678,7 @@ Table&nbsp;8.2: Workflow choice begins with the task dependency and risk structu
 </div>
 </figure>
 </div>
-<p>Record the state before and after every step, the input and output schema, model and prompt version, tool call and result, validation decision, retry, cost, and wall time. This record connects workflow debugging to controlled agent tool use in Chapter 9.</p>
+<p>The application records the state before and after every step, the input and output schema, model and prompt version, tool call and result, validation decision, retry, cost, and wall time. This record connects workflow debugging to controlled agent tool use in Chapter 9.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter checkpoint</strong></p>
 <p>A workflow encodes known control flow and uses models inside tested boundaries. An agent is justified only when the next useful action cannot be specified safely before observing the environment.</p>

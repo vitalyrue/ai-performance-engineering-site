@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -549,7 +549,7 @@ Figure&nbsp;10.3: ReAct interleaves one thought, action, and observation at a ti
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>ReAct</strong></p>
 <p>This method applies to goals for which the next action is uncertain until the latest tool result is observed. It is useful when the search space is exploratory, the tool set is focused, and frequent adaptation matters.</p>
-<p>It works by the model selects one typed action, the application executes it, and the observation returns to the state before the next decision. it is the smallest general agent loop and therefore the right baseline before adding planner machinery</p>
+<p>The model selects one typed action, the application executes it, and the resulting observation returns to state before the next decision. This is the smallest general agent loop and therefore the right baseline before adding planner machinery.</p>
 <p>A limit to keep in mind: serial tool calls, repeated reasoning tokens, tool-selection errors, and infinite-loop risk without a step budget</p>
 </div>
 <div id="fig-m1-c10-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Plan-and-Act maintains an explicit plan and revises the remaining steps after each observation. Source: Week 5, PDF p. 9.">
@@ -564,25 +564,30 @@ Figure&nbsp;10.4: Plan-and-Act maintains an explicit plan and revises the remain
 </div>
 <p>The replan node is the defining addition. A static plan-and-execute system cannot absorb newly discovered constraints without a separate correction path.</p>
 <p><strong>A replanner returns either remaining work or a final response.</strong></p>
+<p>This abbreviated Python example assumes that <code>state</code> has the fields read below and that <code>objective_satisfied</code>, <code>compose_answer</code>, and <code>revise_using</code> are supplied by the application. It returns a <code>Plan</code> or <code>Response</code>; a malformed state should be rejected before this replanner runs.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A replanner returns either remaining work or a final response.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c10-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c10-c01-1"><a href="#lst-m1-c10-c01-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Plan:</span>
-<span id="lst-m1-c10-c01-2"><a href="#lst-m1-c10-c01-2" aria-hidden="true" tabindex="-1"></a>    steps: <span class="bu">list</span>[<span class="bu">str</span>]</span>
-<span id="lst-m1-c10-c01-3"><a href="#lst-m1-c10-c01-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m1-c10-c01-4"><a href="#lst-m1-c10-c01-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Response:</span>
-<span id="lst-m1-c10-c01-5"><a href="#lst-m1-c10-c01-5" aria-hidden="true" tabindex="-1"></a>    response: <span class="bu">str</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c10-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c10-c01-1"><a href="#lst-m1-c10-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dataclasses <span class="im">import</span> dataclass</span>
+<span id="lst-m1-c10-c01-2"><a href="#lst-m1-c10-c01-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c10-c01-3"><a href="#lst-m1-c10-c01-3" aria-hidden="true" tabindex="-1"></a><span class="at">@dataclass</span></span>
+<span id="lst-m1-c10-c01-4"><a href="#lst-m1-c10-c01-4" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Plan:</span>
+<span id="lst-m1-c10-c01-5"><a href="#lst-m1-c10-c01-5" aria-hidden="true" tabindex="-1"></a>    steps: <span class="bu">list</span>[<span class="bu">str</span>]</span>
 <span id="lst-m1-c10-c01-6"><a href="#lst-m1-c10-c01-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m1-c10-c01-7"><a href="#lst-m1-c10-c01-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> replan(state) <span class="op">-&gt;</span> Plan <span class="op">|</span> Response:</span>
-<span id="lst-m1-c10-c01-8"><a href="#lst-m1-c10-c01-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> objective_satisfied(state):</span>
-<span id="lst-m1-c10-c01-9"><a href="#lst-m1-c10-c01-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> Response(response<span class="op">=</span>compose_answer(state))</span>
-<span id="lst-m1-c10-c01-10"><a href="#lst-m1-c10-c01-10" aria-hidden="true" tabindex="-1"></a>    remaining <span class="op">=</span> revise_using(</span>
-<span id="lst-m1-c10-c01-11"><a href="#lst-m1-c10-c01-11" aria-hidden="true" tabindex="-1"></a>        objective<span class="op">=</span>state.objective,</span>
-<span id="lst-m1-c10-c01-12"><a href="#lst-m1-c10-c01-12" aria-hidden="true" tabindex="-1"></a>        original_plan<span class="op">=</span>state.original_plan,</span>
-<span id="lst-m1-c10-c01-13"><a href="#lst-m1-c10-c01-13" aria-hidden="true" tabindex="-1"></a>        completed<span class="op">=</span>state.past_steps,</span>
-<span id="lst-m1-c10-c01-14"><a href="#lst-m1-c10-c01-14" aria-hidden="true" tabindex="-1"></a>        observations<span class="op">=</span>state.observations,</span>
-<span id="lst-m1-c10-c01-15"><a href="#lst-m1-c10-c01-15" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m1-c10-c01-16"><a href="#lst-m1-c10-c01-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Plan(steps<span class="op">=</span>remaining)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m1-c10-c01-7"><a href="#lst-m1-c10-c01-7" aria-hidden="true" tabindex="-1"></a><span class="at">@dataclass</span></span>
+<span id="lst-m1-c10-c01-8"><a href="#lst-m1-c10-c01-8" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Response:</span>
+<span id="lst-m1-c10-c01-9"><a href="#lst-m1-c10-c01-9" aria-hidden="true" tabindex="-1"></a>    response: <span class="bu">str</span></span>
+<span id="lst-m1-c10-c01-10"><a href="#lst-m1-c10-c01-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c10-c01-11"><a href="#lst-m1-c10-c01-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> replan(state) <span class="op">-&gt;</span> Plan <span class="op">|</span> Response:</span>
+<span id="lst-m1-c10-c01-12"><a href="#lst-m1-c10-c01-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> objective_satisfied(state):</span>
+<span id="lst-m1-c10-c01-13"><a href="#lst-m1-c10-c01-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> Response(response<span class="op">=</span>compose_answer(state))</span>
+<span id="lst-m1-c10-c01-14"><a href="#lst-m1-c10-c01-14" aria-hidden="true" tabindex="-1"></a>    remaining <span class="op">=</span> revise_using(</span>
+<span id="lst-m1-c10-c01-15"><a href="#lst-m1-c10-c01-15" aria-hidden="true" tabindex="-1"></a>        objective<span class="op">=</span>state.objective,</span>
+<span id="lst-m1-c10-c01-16"><a href="#lst-m1-c10-c01-16" aria-hidden="true" tabindex="-1"></a>        original_plan<span class="op">=</span>state.original_plan,</span>
+<span id="lst-m1-c10-c01-17"><a href="#lst-m1-c10-c01-17" aria-hidden="true" tabindex="-1"></a>        completed<span class="op">=</span>state.past_steps,</span>
+<span id="lst-m1-c10-c01-18"><a href="#lst-m1-c10-c01-18" aria-hidden="true" tabindex="-1"></a>        observations<span class="op">=</span>state.observations,</span>
+<span id="lst-m1-c10-c01-19"><a href="#lst-m1-c10-c01-19" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m1-c10-c01-20"><a href="#lst-m1-c10-c01-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> Plan(steps<span class="op">=</span>remaining)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Plan-state invariant</strong></p>
 <p>The plan should contain only unfinished work. Completed steps and their observations belong in execution history, and the final response should be produced only when the objective and policy checks pass.</p>
@@ -638,6 +643,7 @@ T_{DAG}\ge\max_{\pi\in\mathrm{paths}(G)}\sum_{v\in\pi}t_v
 <p><strong>Interpretation:</strong> The scheduler exposes parallelism already present in the dependency graph; it cannot safely invent independence that the plan did not establish.</p>
 </div>
 <p><strong>A scheduler dispatches only tasks whose dependencies are satisfied.</strong></p>
+<p>This abbreviated Python loop assumes task objects with <code>id</code> and <code>dependencies</code>, an initially empty <code>results</code> mapping, and an application-supplied <code>run_in_parallel</code>. It returns the joiner’s answer and raises <code>InvalidPlan</code> when no unfinished task is runnable.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A scheduler dispatches only tasks whose dependencies are satisfied.</p>
 </div>
@@ -677,7 +683,7 @@ Figure&nbsp;10.6: CodeAct emits executable code so one action can express loops,
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>CodeAct</strong></p>
 <p>This method applies to computational subtasks expressible as code over explicitly mounted data and approved libraries. It is useful when a compact program replaces many repetitive tool calls or performs deterministic data analysis.</p>
-<p>It works by the model writes a program, an isolated runtime enforces time, memory, network, filesystem, and output limits, and captured results return as an observation. code is a powerful action language, but it is safe only when the executor supplies a deliberately small capability envelope</p>
+<p>The model writes a program, an isolated runtime enforces time, memory, network, filesystem, and output limits, and captured results return as an observation. Code is a powerful action language, but it is safe only when the executor supplies a deliberately small capability envelope.</p>
 <p>A limit to keep in mind: sandbox escape risk, nondeterministic dependencies, large outputs, hidden side effects, and harder policy review</p>
 </div>
 <div id="tbl-m1-c10-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -749,7 +755,7 @@ Figure&nbsp;10.7: Model Context Protocol (MCP) replaces pairwise host-service ad
 </figure>
 </div>
 <p>For <code>N</code> hosts and <code>M</code> services, the integration topology can move from <code>N x M</code> bespoke adapters toward <code>N + M</code> protocol implementations. Operations, authentication, and semantics still need clear operational responsibility.</p>
-<p>The host manages the model interaction and user trust boundary. It creates one client session for each server. The server exposes capabilities backed by a database, API, filesystem, or other system. Local <code>stdio</code> transport minimizes network exposure; remote transport requires explicit authentication, authorization, and lifecycle handling.</p>
+<p>The host is the application that manages model interaction and the user trust boundary; it creates a client session for each server. A server exposes capabilities backed by a database, API, filesystem, or other system. For a simple discovery exchange, the host sends a tools-list request, the server returns typed tool definitions, and the host applies its policy and asks for any required user approval before invocation. Local <code>stdio</code> transport minimizes network exposure; remote transport requires explicit authentication, authorization, and lifecycle handling.</p>
 <div id="tbl-m1-c10-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m1-c10-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -799,8 +805,8 @@ Table&nbsp;10.3: MCP primitives divide control among model, application, host, s
 <tr class="odd">
 <td>Roots</td>
 <td>Host advertises</td>
-<td>Bound the server to allowed filesystem or URI roots</td>
-<td>Over-broad scope expands blast radius</td>
+<td>Tell a server the relevant filesystem or URI roots</td>
+<td>Over-broad scope expands blast radius; access control remains separate</td>
 </tr>
 <tr class="even">
 <td>Elicitation</td>
@@ -825,6 +831,7 @@ Figure&nbsp;10.8: An adapter can expose MCP-discovered capabilities as ordinary 
 </div>
 <p>The agent loop need not change when the transport changes. That separation is useful only if tool identity, permissions, errors, and provenance remain visible in traces.</p>
 <p><strong>A host keeps capability discovery separate from agent execution.</strong></p>
+<p>This abbreviated async Python example assumes an authenticated client, a policy object, and an application-supplied <code>create_agent</code>. It returns an agent restricted to allowed discovered tools; discovery or policy failures stop construction rather than yielding an unrestricted agent.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A host keeps capability discovery separate from agent execution.</p>
 </div>
@@ -838,6 +845,7 @@ Figure&nbsp;10.8: An adapter can expose MCP-discovered capabilities as ordinary 
 <span id="lst-m1-c10-c03-8"><a href="#lst-m1-c10-c03-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> create_agent(model<span class="op">=</span>model, tools<span class="op">=</span>allowed)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A server implementation can expose the same typed capability boundary with FastMCP. The current FastMCP v3 decorator derives a JSON input schema from the function signature and validates arguments before calling the function, but application rules still constrain data access and side effects.</p>
 <p><strong>Code example 10.1 - FastMCP exposes narrow support capabilities while preserving approval boundaries.</strong></p>
+<p>This abbreviated server example assumes the three stores and search helper enforce their own access rules. It returns allowlisted records, bounded search results, or a draft; access failures must be returned as typed tool errors, and only the application may submit a draft after approval.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 10.1 - FastMCP exposes narrow support capabilities while preserving approval boundaries.</p>
 </div>
@@ -869,7 +877,7 @@ Figure&nbsp;10.8: An adapter can expose MCP-discovered capabilities as ordinary 
 <li><strong>Prompt injection defense:</strong> label retrieved content as data, isolate it from policy, constrain allowed actions, and require evidence for claims.</li>
 <li><strong>Confused-deputy defense:</strong> bind every call to user intent, tool identity, narrow scopes, current authorization, and destination.</li>
 <li><strong>Human approval:</strong> require explicit confirmation before sending, purchasing, deleting, publishing, or changing durable state.</li>
-<li><strong>Roots and credentials:</strong> expose only required paths and short-lived capabilities; do not pass ambient secrets to every server.</li>
+<li><strong>Roots and credentials:</strong> share only required paths and short-lived capabilities; roots tell a server the relevant workspace scope, while access controls still enforce what it may read or write. Do not pass ambient secrets to every server.</li>
 <li><strong>Supply-chain control:</strong> pin or verify server packages, record version and provenance, and treat server updates as behavior changes.</li>
 <li><strong>Audit trail:</strong> log discovery, selected tool, normalized arguments, approval, server identity, result status, cost, and final state.</li>
 </ul>
@@ -887,10 +895,10 @@ Figure&nbsp;10.9: MCP standardizes calls, while consent, token scope, server pol
 </div>
 <p>A valid protocol message does not prove that the requested action is authorized. The host binds a user-approved intent to a resource-scoped token, and each server validates and executes with its own policy and credentials.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Dated supplement - elicitation and consent</strong></p>
-<p>The draft elicitation specification allows a server to request missing structured information or direct the user to a URL through the host.</p>
+<p><strong>Dated supplement - elicitation and consent (MCP 2025-06-18)</strong></p>
+<p>The MCP 2025-06-18 elicitation specification lets a server request missing structured information from the user through the host. For example, the server sends <code>elicitation/create</code> with a response schema; the host identifies the requesting server, presents the request, and sends back an accept, decline, or cancel response.</p>
 <p>The host must identify which server is asking, explain what information is requested, let the user decline or cancel, and validate the response schema.</p>
-<p>A server must not request passwords, API keys, or other secrets through a form. A URL-based authorization flow must bind the elicitation to the same authenticated user who completes it.</p>
+<p>A server must not request passwords, API keys, or other secrets through a form. A URL-based authorization flow, when separately supported, must bind the interaction to the same authenticated user who completes it.</p>
 </div>
 <p>After those protections are specified, the remaining choice is whether the protocol solves a real sharing boundary:</p>
 <div id="tbl-m1-c10-t04" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -959,7 +967,7 @@ Figure&nbsp;10.10: Naive one-shot retrieval fails on chained questions and vague
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Iterative retrieval</strong></p>
 <p>This method applies to queries whose first retrieval may be noisy, incomplete, or expressed with the wrong vocabulary. It is useful when the system can cheaply inspect relevance and try a bounded number of refined searches.</p>
-<p>It works by retrieve, grade or inspect evidence, rewrite the query when evidence is insufficient, and generate only after a stop rule passes. end-to-end recall can rise because the system learns from each miss rather than treating the first candidate set as final</p>
+<p>The system retrieves candidates, grades or inspects the evidence, rewrites the query when evidence is insufficient, and generates only after a stop rule passes. End-to-end recall can rise because the system learns from each miss rather than treating the first candidate set as final.</p>
 <p>A limit to keep in mind: extra latency and model calls, grader errors, semantic drift during rewriting, and loops without an attempt cap</p>
 </div>
 <p>The retriever itself is a product choice. Exact search is often strongest for symbols, identifiers, error strings, and rapidly changing code. BM25 fits keyword-rich corpora. Embeddings help with conceptual paraphrases and cross-language similarity. SQL or an API should answer structured filters and aggregates directly. Agentic control does not erase those differences; it selects among them.</p>
@@ -1075,6 +1083,7 @@ Table&nbsp;10.6: Agentic RAG patterns place control at different points in retri
 </figure>
 </div>
 <p><strong>A bounded iterative-retrieval state machine.</strong></p>
+<p>This abbreviated Python example assumes that the retriever, grader, and rewrite helper are supplied by the application and that state records attempts, a maximum, documents, and the latest grade. Each node returns updated state; a grade must be stored before the rewrite node can read its reason, and the budget-exhausted route returns an evidence-gap result rather than generating an answer.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A bounded iterative-retrieval state machine.</p>
 </div>
@@ -1082,22 +1091,25 @@ Table&nbsp;10.6: Agentic RAG patterns place control at different points in retri
 <span id="lst-m1-c10-c05-2"><a href="#lst-m1-c10-c05-2" aria-hidden="true" tabindex="-1"></a>    docs <span class="op">=</span> retriever_for(state.route).search(state.query)</span>
 <span id="lst-m1-c10-c05-3"><a href="#lst-m1-c10-c05-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> state.add_attempt(query<span class="op">=</span>state.query, docs<span class="op">=</span>docs)</span>
 <span id="lst-m1-c10-c05-4"><a href="#lst-m1-c10-c05-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m1-c10-c05-5"><a href="#lst-m1-c10-c05-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> route_after_retrieval(state):</span>
+<span id="lst-m1-c10-c05-5"><a href="#lst-m1-c10-c05-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> grade_step(state):</span>
 <span id="lst-m1-c10-c05-6"><a href="#lst-m1-c10-c05-6" aria-hidden="true" tabindex="-1"></a>    verdict <span class="op">=</span> evidence_grader(state.question, state.latest_docs)</span>
-<span id="lst-m1-c10-c05-7"><a href="#lst-m1-c10-c05-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> verdict.sufficient:</span>
-<span id="lst-m1-c10-c05-8"><a href="#lst-m1-c10-c05-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">"generate"</span></span>
-<span id="lst-m1-c10-c05-9"><a href="#lst-m1-c10-c05-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> state.attempts <span class="op">&gt;=</span> state.max_attempts:</span>
-<span id="lst-m1-c10-c05-10"><a href="#lst-m1-c10-c05-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">"insufficient_evidence"</span></span>
-<span id="lst-m1-c10-c05-11"><a href="#lst-m1-c10-c05-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="st">"rewrite"</span></span>
-<span id="lst-m1-c10-c05-12"><a href="#lst-m1-c10-c05-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m1-c10-c05-13"><a href="#lst-m1-c10-c05-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rewrite_step(state):</span>
-<span id="lst-m1-c10-c05-14"><a href="#lst-m1-c10-c05-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> state.with_query(</span>
-<span id="lst-m1-c10-c05-15"><a href="#lst-m1-c10-c05-15" aria-hidden="true" tabindex="-1"></a>        rewrite_using_failure_reason(</span>
-<span id="lst-m1-c10-c05-16"><a href="#lst-m1-c10-c05-16" aria-hidden="true" tabindex="-1"></a>            original<span class="op">=</span>state.question,</span>
-<span id="lst-m1-c10-c05-17"><a href="#lst-m1-c10-c05-17" aria-hidden="true" tabindex="-1"></a>            previous<span class="op">=</span>state.query,</span>
-<span id="lst-m1-c10-c05-18"><a href="#lst-m1-c10-c05-18" aria-hidden="true" tabindex="-1"></a>            reason<span class="op">=</span>state.latest_grade.reason,</span>
-<span id="lst-m1-c10-c05-19"><a href="#lst-m1-c10-c05-19" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="lst-m1-c10-c05-20"><a href="#lst-m1-c10-c05-20" aria-hidden="true" tabindex="-1"></a>    )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m1-c10-c05-7"><a href="#lst-m1-c10-c05-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> state.with_latest_grade(verdict)</span>
+<span id="lst-m1-c10-c05-8"><a href="#lst-m1-c10-c05-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c10-c05-9"><a href="#lst-m1-c10-c05-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> route_after_grade(state):</span>
+<span id="lst-m1-c10-c05-10"><a href="#lst-m1-c10-c05-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> state.latest_grade.sufficient:</span>
+<span id="lst-m1-c10-c05-11"><a href="#lst-m1-c10-c05-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">"generate"</span></span>
+<span id="lst-m1-c10-c05-12"><a href="#lst-m1-c10-c05-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> state.attempts <span class="op">&gt;=</span> state.max_attempts:</span>
+<span id="lst-m1-c10-c05-13"><a href="#lst-m1-c10-c05-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="st">"insufficient_evidence"</span></span>
+<span id="lst-m1-c10-c05-14"><a href="#lst-m1-c10-c05-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="st">"rewrite"</span></span>
+<span id="lst-m1-c10-c05-15"><a href="#lst-m1-c10-c05-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c10-c05-16"><a href="#lst-m1-c10-c05-16" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rewrite_step(state):</span>
+<span id="lst-m1-c10-c05-17"><a href="#lst-m1-c10-c05-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> state.with_query(</span>
+<span id="lst-m1-c10-c05-18"><a href="#lst-m1-c10-c05-18" aria-hidden="true" tabindex="-1"></a>        rewrite_using_failure_reason(</span>
+<span id="lst-m1-c10-c05-19"><a href="#lst-m1-c10-c05-19" aria-hidden="true" tabindex="-1"></a>            original<span class="op">=</span>state.question,</span>
+<span id="lst-m1-c10-c05-20"><a href="#lst-m1-c10-c05-20" aria-hidden="true" tabindex="-1"></a>            previous<span class="op">=</span>state.query,</span>
+<span id="lst-m1-c10-c05-21"><a href="#lst-m1-c10-c05-21" aria-hidden="true" tabindex="-1"></a>            reason<span class="op">=</span>state.latest_grade.reason,</span>
+<span id="lst-m1-c10-c05-22"><a href="#lst-m1-c10-c05-22" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="lst-m1-c10-c05-23"><a href="#lst-m1-c10-c05-23" aria-hidden="true" tabindex="-1"></a>    )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Stopping is part of retrieval quality</strong></p>
 <p>When the evidence budget is exhausted, the correct output may be an evidence-gap response. Forcing generation after a miss converts a retriever limitation into an unsupported answer.</p>
