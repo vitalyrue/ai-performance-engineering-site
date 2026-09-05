@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>1&nbsp; SFT for task responses – Reinforcement Learning for LLM Post-Training</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m5-c02.html" rel="next">
+<link href="../parts/part-m5-p01.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m5-p01.html">Part I — Learning from saved examples</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m5-c01.html"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">SFT for task responses</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Reinforcement Learning for LLM Post-Training</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Reinforcement Learning for LLM Post-Training</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m5-front.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Choosing better LLM answers</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m5-p01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I — Learning from saved examples</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c01.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">SFT for task responses</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">DPO for preferred answers</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m5-p02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II — Learning from new attempts</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">PPO for scored attempts</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">GRPO and DAPO for reasoning</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m5-p03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III — Verifying results and choosing models</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">RL from tests and tool results</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Choosing and evaluating training methods</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m5-a01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Course sources and further reading</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m5-c01-s01" id="toc-sec-m5-c01-s01" class="nav-link active" data-scroll-target="#sec-m5-c01-s01"><span class="header-section-number">1.1</span> From pre-training to task behavior</a></li>
+  <li><a href="#sec-m5-c01-s02" id="toc-sec-m5-c01-s02" class="nav-link" data-scroll-target="#sec-m5-c01-s02"><span class="header-section-number">1.2</span> Computing probabilities for text</a></li>
+  <li><a href="#sec-m5-c01-s03" id="toc-sec-m5-c01-s03" class="nav-link" data-scroll-target="#sec-m5-c01-s03"><span class="header-section-number">1.3</span> Training on demonstrated answers</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m5-p01.html">Part I — Learning from saved examples</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m5-c01.html"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">SFT for task responses</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m5-c01" class="quarto-section-identifier"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">SFT for task responses</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>A pre-trained model can produce plausible text without consistently following a task’s format or constraints. Supervised fine-tuning (SFT) uses trusted prompt-response examples to make those demonstrated responses more likely. This chapter traces one example from text to token probabilities and a supervised update, then separates what imitation teaches from questions that require other evidence.</p>
+<ul>
+<li><p><strong>Pre-trained language model:</strong> A model trained to predict the next token in internet-scale text. It has broad linguistic and factual capability, but it does not yet have task-specific evidence about which valid response best serves a user.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Supervised Fine-Tuning (SFT):</strong></span> Training that continues from the pre-trained model using trusted prompt-response examples. It increases the probability of the demonstrated response and teaches formats, tones, and skills shown in those examples.</p></li>
+</ul>
+<p>Post-training changes how that same model responds to prompts used in deployment. SFT, preference optimization, and online reinforcement learning use different evidence; they are not compulsory stages in one training chain.</p>
+<section id="sec-m5-c01-s01" class="level2" data-number="1.1">
+<h2 data-number="1.1" class="anchored" data-anchor-id="sec-m5-c01-s01"><span class="header-section-number">1.1</span> From pre-training to task behavior</h2>
+<p>The starting model already knows many language patterns, while SFT supplies trusted task examples. The useful distinction is the evidence each method adds. A project may stop after SFT, use preference training without later PPO, or use online rewards when newly generated attempts must be scored.</p>
+<p>A pre-trained model may know many facts and still answer an instruction in the wrong format, overlook the user’s constraint, or choose a plausible but inferior response. Post-training begins from that capable baseline and supplies evidence about what a good answer should look like for a particular use. It changes behavior; it is not a substitute for learning the underlying language and world regularities during pre-training.</p>
+<p>The following methods answer different training questions.</p>
+<ul>
+<li><p><strong>Pre-training:</strong> Next-token likelihood builds language, world regularities, and broad skills, but gives no task-specific notion of helpfulness.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>SFT:</strong></span> One target completion per prompt teaches instruction format, tone, and demonstrated skills, but treats that one sample as the only target.</p></li>
+<li><p><strong>Preference optimization:</strong> A chosen-versus-rejected pair teaches relative quality and alignment, but the quality signal is only as good as the comparison or reward behind it.</p></li>
+<li><p><strong>RL for reasoning and agents:</strong> A learned, human, or verifier reward can shape multi-step behavior toward an outcome, but reward design can distort the behavior it reinforces.</p></li>
+</ul>
+<p>The available evidence determines which method fits the task.</p>
+<ul>
+<li><p><strong>Demonstrations:</strong> Use SFT when one clear answer is enough to teach the missing behavior.</p></li>
+<li><p><strong>Comparisons:</strong> Add preference evidence when the important distinction is which of two acceptable-looking answers is better.</p></li>
+<li><p><strong>Online rewards:</strong> Use online rewards when the current policy must generate new attempts and a scorer can evaluate them reliably.</p></li>
+</ul>
+<p>Richer feedback requires different stored values, numerical objectives, and software components.</p>
+</section>
+<section id="sec-m5-c01-s02" class="level2" data-number="1.2">
+<h2 data-number="1.2" class="anchored" data-anchor-id="sec-m5-c01-s02"><span class="header-section-number">1.2</span> Computing probabilities for text</h2>
+<p>The LLM policy <span class="math inline">\(\pi_\theta\)</span> is the complete next-token decision rule, while <span class="math inline">\(\pi_\theta(y\mid x)\)</span> is the probability it assigns to one exact answer. To connect the model’s weights to the number used in training, hold the prompt and current text prefix fixed, normalize the model’s raw scores into a next-token distribution, select the probability of the recorded token, and combine those selected values into one answer score.</p>
+<ul>
+<li><strong>LLM policy <span class="math inline">\(\pi_\theta\)</span>:</strong> The symbol <span class="math inline">\(\pi_\theta\)</span> names the LLM’s complete decision rule, with <span class="math inline">\(\theta\)</span> denoting its trainable weights. For one text state <span class="math inline">\(s_t\)</span>, <span class="math inline">\(\pi_\theta(\cdot\mid s_t)\)</span> is the full next-token probability distribution returned by that rule. Selecting candidate token <span class="math inline">\(a_t\)</span> gives the scalar <span class="math inline">\(\pi_\theta(a_t\mid s_t)\)</span>. Repeating the calculation for every recorded answer token and multiplying the selected values gives <span class="math inline">\(\pi_\theta(y\mid x)\)</span> for one exact answer <span class="math inline">\(y\)</span> after prompt <span class="math inline">\(x\)</span>.</li>
+</ul>
+<p>The policy is the complete rule; a policy probability is one output of that rule. The numerical calculation begins by fixing exactly what text the LLM can see before it chooses the next token.</p>
+<ul>
+<li><strong>Current text state <span class="math inline">\(s_t\)</span>:</strong> The prompt <span class="math inline">\(x\)</span> plus the answer tokens already present before token step <span class="math inline">\(t\)</span>. The state is the complete text input used for the next-token calculation at that step.</li>
+</ul>
+<p>A forward pass applies the model weights <span class="math inline">\(\theta\)</span> to this fixed state and returns one raw score for every vocabulary token. These raw scores are logits; they do not yet sum to one and are not probabilities.</p>
+<ul>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Softmax:</strong></span> At token step <span class="math inline">\(t\)</span>, the model returns a logit vector <span class="math inline">\(z_t\)</span> with one raw score for every vocabulary token. Softmax exponentiates and normalizes that vector into non-negative next-token probabilities that sum to one. Training then selects the probability assigned to the recorded token.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Policy output <span class="math inline">\(\pi_\theta(\cdot\mid s_t)\)</span>:</strong></span> The complete probability vector produced after softmax for state <span class="math inline">\(s_t\)</span>. The dot represents every candidate token in the vocabulary. Selecting the entry for candidate token <span class="math inline">\(a_t\)</span> gives <span class="math inline">\(\pi_\theta(a_t\mid s_t)\)</span>, one scalar probability between zero and one rather than the policy itself.</p></li>
+</ul>
+<p>The calculation therefore separates the model weights, the full distribution they produce, and the one value used to score a token. Repeating it at the recorded answer positions supplies the factors used to calculate <span class="math inline">\(\pi_\theta(y\mid x)\)</span>. The vertical bar means “given.”</p>
+<p><span id="eq-m5-c01-e01"><span class="math display">\[
+\pi_{\theta}(a_t \mid s_t) = \frac{\exp(z_t[a_t])}{\sum_{j\in V}\exp(z_t[j])}
+\tag{1.1}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(\pi_\theta(a_t\mid s_t)\)</span>:</strong> Scalar probability assigned to candidate token <span class="math inline">\(a_t\)</span> in state <span class="math inline">\(s_t\)</span>.</li>
+<li><strong><span class="math inline">\(\theta\)</span>:</strong> All LLM weights used by the forward pass; post-training changes some or all of these numerical parameters.</li>
+<li><strong><span class="math inline">\(t\)</span>:</strong> Index of the current answer position.</li>
+<li><strong><span class="math inline">\(s_t\)</span>:</strong> Prompt plus the response prefix already present at token step <span class="math inline">\(t\)</span>.</li>
+<li><strong><span class="math inline">\(a_t\)</span>:</strong> Candidate next token being selected or scored.</li>
+<li><strong><span class="math inline">\(\pi_\theta(\cdot\mid s_t)\)</span>:</strong> Complete normalized probability vector returned for state <span class="math inline">\(s_t\)</span>.</li>
+<li><strong><span class="math inline">\(z_t\)</span>:</strong> Logit vector returned by the model for state <span class="math inline">\(s_t\)</span>.</li>
+<li><strong><span class="math inline">\(z_t[a_t]\)</span>:</strong> Raw logit assigned to candidate token <span class="math inline">\(a_t\)</span>.</li>
+<li><strong><span class="math inline">\(V\)</span>:</strong> Set of all token IDs in the model vocabulary.</li>
+<li><strong><span class="math inline">\(j\)</span>:</strong> One vocabulary-token index in the denominator.</li>
+<li><strong><span class="math inline">\(\exp\)</span>:</strong> Base-<span class="math inline">\(e\)</span> exponential applied to a logit before normalization.</li>
+</ul>
+<p><strong>Mechanism:</strong> Exponentiation makes each logit contribution positive; the denominator sums those values; division returns the selected token’s normalized share. <strong>Interpretation:</strong> Calculate one next-token probability between zero and one, with all vocabulary-token probabilities summing to one.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: softmax turns logits into a token probability</strong></p>
+<p>At one fixed prompt and response prefix, a toy model has token IDs 0, 1, and 2 with logits 2, 1, and 0 in that order.</p>
+<p><strong>Inputs and measurement</strong></p>
+<p>One policy forward pass returns one raw logit for every token in this three-token toy vocabulary. Softmax exponentiates and normalizes all three values; the trainer then reads the share assigned to token ID 0.</p>
+<p><strong>Calculation</strong></p>
+<ol type="1">
+<li><strong>Calculation:</strong> <span class="math inline">\(\pi_\theta(a_t=0\mid s_t)=e^2/(e^2+e^1+e^0)=0.665\)</span>.</li>
+</ol>
+<p><strong>Interpretation:</strong> Token ID 0 receives probability 0.665, or 66.5 percent of the probability mass. The other token probabilities are approximately 0.245 and 0.090, so the three values sum to one. Generation can sample from them, while training can score a recorded token without sampling.</p>
+</div>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Nat:</strong></span> The unit used for information quantities calculated with the natural logarithm <span class="math inline">\(\ln\)</span>. Using logarithm base 2 gives bits instead. A log probability and its negative-log loss have opposite signs, even though both use the same logarithm.</li>
+</ul>
+<p>Applying <span class="math inline">\(\ln\)</span> changes the numerical representation; it does not replace the original probability. For <span class="math inline">\(p=0.5\)</span>, the probability remains 0.5, its log-probability is <span class="math inline">\(-0.693\)</span>, and the corresponding negative-log loss is <span class="math inline">\(0.693\)</span>.</p>
+<p><span id="eq-m5-c01-e02"><span class="math display">\[
+p = 0.5, \ln p = -0.693, -\ln p = 0.693
+\tag{1.2}\]</span></span></p>
+<p>Because <span class="math inline">\(\ln\)</span> is used, the two logarithmic values may be described as <span class="math inline">\(-0.693\)</span> nats and <span class="math inline">\(0.693\)</span> nats. A log-probability is at most zero and moves closer to zero as the text becomes more likely. Its negative is the non-negative value commonly used in training losses.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Teacher-forced scoring:</strong></span> A controlled scoring pass for a fixed prompt and written answer. The recorded answer tokens are supplied to the model; no replacement answer is sampled.</li>
+</ul>
+<p>A full-answer probability is one score derived from the policy, not a second policy. For fixed prompt <span class="math inline">\(x\)</span> and complete answer <span class="math inline">\(y\)</span>, teacher forcing supplies the recorded answer rather than sampling a replacement. A causal model reads the prompt and shifted answer prefix; the logit row before each recorded token scores that token. One forward pass normally returns all of those rows at once. Multiplying the selected probabilities gives <span class="math inline">\(\pi_\theta(y\mid x)\)</span>, while summing their logarithms gives the stable answer score used in training. Here <span class="math inline">\(y\)</span> includes the model’s end or stop token, so the result is the probability of the complete sequence. If the stop token is omitted, the product describes only the recorded prefix.</p>
+<p><span id="eq-m5-c01-e03"><span class="math display">\[
+\pi_{\theta}(y \mid x) = \prod_{t=1}^{T}\pi_{\theta}(y_t \mid x, y_{&lt;t})
+\tag{1.3}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(\pi_\theta(y\mid x)\)</span>:</strong> Scalar probability assigned to the exact complete answer <span class="math inline">\(y\)</span> after prompt <span class="math inline">\(x\)</span>.</li>
+<li><strong><span class="math inline">\(\pi_\theta\)</span>:</strong> The same next-token policy, evaluated at every answer position.</li>
+<li><strong><span class="math inline">\(\theta\)</span>:</strong> LLM weight values held fixed while this answer is scored.</li>
+<li><strong><span class="math inline">\(x\)</span>:</strong> Prompt held fixed while the answer is scored.</li>
+<li><strong><span class="math inline">\(y\)</span>:</strong> Complete written answer.</li>
+<li><strong><span class="math inline">\(t\)</span>:</strong> Answer-position index from 1 through <span class="math inline">\(T\)</span>.</li>
+<li><strong><span class="math inline">\(y_t\)</span>:</strong> Answer token at position <span class="math inline">\(t\)</span>.</li>
+<li><strong><span class="math inline">\(y_{&lt;t}\)</span>:</strong> Answer prefix before token <span class="math inline">\(t\)</span>.</li>
+<li><strong><span class="math inline">\(T\)</span>:</strong> Number of tokens in <span class="math inline">\(y\)</span>.</li>
+</ul>
+<p><strong>Mechanism:</strong> Each factor is the probability of the recorded next token given the prompt and earlier recorded answer tokens; the product chains all <span class="math inline">\(T\)</span> decisions. <strong>Interpretation:</strong> Calculate the probability of producing that exact token sequence. Longer answers usually have smaller raw products, so comparisons use summed log-probabilities. <strong>Scale:</strong> The product is a probability. Applying the natural logarithm produces a log score reported in nats.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: token probabilities become one answer score</strong></p>
+<p>A fixed three-token answer receives next-token probabilities 0.50, 0.40, and 0.20 under one policy.</p>
+<p><strong>Inputs and measurement</strong></p>
+<p>Teacher forcing runs the recorded answer through the model, applies softmax at each position, and gathers the probability of each recorded token ID.</p>
+<p><strong>Calculation</strong></p>
+<ol type="1">
+<li><strong>Completion probability and log score:</strong> <span class="math inline">\(0.50\times0.40\times0.20=0.040\)</span>; <span class="math inline">\(\ln(0.040)=-3.219\)</span>.</li>
+</ol>
+<p><strong>Interpretation:</strong> The recorded three-token sequence has probability 0.040, or 4 percent under this toy policy, and log-probability −3.219 nats. DPO repeats this token aggregation for each saved answer under both current and reference policies.</p>
+</div>
+<p>A full-answer score follows five ordered operations.</p>
+<ol type="1">
+<li><p><strong>Tokenize:</strong> Convert the fixed prompt and answer into token IDs using the model’s tokenizer and chat template.</p></li>
+<li><p><strong>Run the model:</strong> Produce a vocabulary-logit vector at every recorded answer position.</p></li>
+<li><p><strong>Normalize:</strong> Apply log-softmax so every vocabulary entry becomes a next-token log probability.</p></li>
+<li><p><strong>Gather:</strong> Select the log probability assigned to each recorded next-token ID.</p></li>
+<li><p><strong>Aggregate:</strong> Sum the gathered answer-token values to obtain <span class="math inline">\(\log\pi_\theta(y\mid x)\)</span>.</p></li>
+</ol>
+<p>The token trace maps to four reinforcement-learning objects.</p>
+<ul>
+<li><p><strong>State:</strong> Prompt, prior generated tokens, relevant conversation history, and in agentic systems tool observations.</p></li>
+<li><p><strong>Action:</strong> Usually the next token; at a higher level it can be a full completion, tool call, or structured decision.</p></li>
+<li><p><strong>Reward:</strong> A scalar score from human preferences, a learned reward model, or a verifiable outcome such as unit tests.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Policy:</strong></span> <span class="math inline">\(\pi_\theta\)</span>, the complete LLM decision rule introduced earlier; at each state it returns a next-token distribution, and post-training changes <span class="math inline">\(\theta\)</span> so preferred actions become more likely.</p></li>
+</ul>
+<p>The generic reinforcement-learning loop has one key difference from supervised learning: feedback arrives from an environment after an action, rather than from a fixed target sequence.</p>
+<div id="fig-m5-c01-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A state enters an LLM policy, which selects an action. The environment returns an observation and score that influence the next update and state.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m5-c01-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m5-c01-f01.png" class="img-fluid figure-img" style="width:6.35in" alt="A state enters an LLM policy, which selects an action. The environment returns an observation and score that influence the next update and state.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m5-c01-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1.1: Result feedback closes the LLM action loop (Session 1, PDF p.&nbsp;21).
+</figcaption>
+</figure>
+</div>
+<p>For an LLM, feedback may come from a human-preference dataset, a learned reward model, a unit-test runner, or a tool-using task environment. The application samples or selects the next action from the policy distribution, records the result, and supplies the training signal used by the chosen update method.</p>
+</section>
+<section id="sec-m5-c01-s03" class="level2" data-number="1.3">
+<h2 data-number="1.3" class="anchored" data-anchor-id="sec-m5-c01-s03"><span class="header-section-number">1.3</span> Training on demonstrated answers</h2>
+<p>The policy calculation can score any fixed answer token by token. SFT now needs to turn a trusted recorded answer into a loss while preventing prompt text and role markers from becoming training targets. Prepare the recorded conversation first, identify the assistant response positions, and then calculate the loss only on those positions.</p>
+<ul>
+<li><strong>Response-only masking prepares token targets:</strong> The conversation supplies context, but normally only assistant response tokens are training targets. The chat template converts role-structured messages into the exact text and special tokens seen by the model; response-only masking then sets prompt and role-marker positions to −100 so PyTorch cross-entropy ignores them. If every token is left as a target, the model is trained to reproduce the user prompt and template markers instead of learning only the demonstrated answer.</li>
+</ul>
+<p>Four software components carry the demonstrated answer into the update.</p>
+<ul>
+<li><p><strong><code>datasets</code>:</strong> Store role-structured conversations and keep training prompts separate from held-out prompts.</p></li>
+<li><p><strong><code>transformers</code>:</strong> Apply the checkpoint’s chat template, tokenize the text, and run the causal language model.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>TRL <code>SFTTrainer</code>:</strong></span> Batch examples and calculate the supervised token loss using the prepared response labels.</p></li>
+<li><p><strong><code>peft</code>:</strong> Optionally limit the update to LoRA adapters instead of changing every base-model parameter.</p></li>
+</ul>
+<p><strong>Code 1.1. SFT preprocessing creates response-only training labels.</strong> This is an abbreviated preprocessing excerpt, not a runnable program. Its inputs are one <code>record</code> and a tokenizer with the checkpoint’s chat template; its output is <code>batch</code>, whose <code>labels</code> tensor has the same shape as <code>input_ids</code>. The template-specific <code>find_assistant_start</code> helper is intentionally not defined here: production code must replace it with a tokenizer-provided assistant mask or a helper verified for the exact chat template.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m5-c01-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m5-c01-c01-1"><a href="#lst-m5-c01-c01-1" aria-hidden="true" tabindex="-1"></a>record <span class="op">=</span> {</span>
+<span id="lst-m5-c01-c01-2"><a href="#lst-m5-c01-c01-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"messages"</span>: [</span>
+<span id="lst-m5-c01-c01-3"><a href="#lst-m5-c01-c01-3" aria-hidden="true" tabindex="-1"></a>        {<span class="st">"role"</span>: <span class="st">"user"</span>,      <span class="st">"content"</span>: <span class="st">"Explain why a test failed."</span>},</span>
+<span id="lst-m5-c01-c01-4"><a href="#lst-m5-c01-c01-4" aria-hidden="true" tabindex="-1"></a>        {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: <span class="st">"Read the first failing assertion."</span>},</span>
+<span id="lst-m5-c01-c01-5"><a href="#lst-m5-c01-c01-5" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="lst-m5-c01-c01-6"><a href="#lst-m5-c01-c01-6" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="lst-m5-c01-c01-7"><a href="#lst-m5-c01-c01-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m5-c01-c01-8"><a href="#lst-m5-c01-c01-8" aria-hidden="true" tabindex="-1"></a>text  <span class="op">=</span> tokenizer.apply_chat_template(</span>
+<span id="lst-m5-c01-c01-9"><a href="#lst-m5-c01-c01-9" aria-hidden="true" tabindex="-1"></a>    record[<span class="st">"messages"</span>], tokenize<span class="op">=</span><span class="va">False</span>, add_generation_prompt<span class="op">=</span><span class="va">False</span></span>
+<span id="lst-m5-c01-c01-10"><a href="#lst-m5-c01-c01-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="lst-m5-c01-c01-11"><a href="#lst-m5-c01-c01-11" aria-hidden="true" tabindex="-1"></a>batch <span class="op">=</span> tokenizer(text, return_tensors<span class="op">=</span><span class="st">"pt"</span>, truncation<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m5-c01-c01-12"><a href="#lst-m5-c01-c01-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m5-c01-c01-13"><a href="#lst-m5-c01-c01-13" aria-hidden="true" tabindex="-1"></a><span class="co"># The assistant marker identifies where the response tokens begin.</span></span>
+<span id="lst-m5-c01-c01-14"><a href="#lst-m5-c01-c01-14" aria-hidden="true" tabindex="-1"></a><span class="co"># SINGLE-TURN ONLY: multi-turn code must mask every non-assistant span.</span></span>
+<span id="lst-m5-c01-c01-15"><a href="#lst-m5-c01-c01-15" aria-hidden="true" tabindex="-1"></a>assistant_start              <span class="op">=</span> find_assistant_start(batch, tokenizer)</span>
+<span id="lst-m5-c01-c01-16"><a href="#lst-m5-c01-c01-16" aria-hidden="true" tabindex="-1"></a>labels                       <span class="op">=</span> batch[<span class="st">"input_ids"</span>].clone()</span>
+<span id="lst-m5-c01-c01-17"><a href="#lst-m5-c01-c01-17" aria-hidden="true" tabindex="-1"></a>labels[:, :assistant_start]  <span class="op">=</span> <span class="op">-</span><span class="dv">100</span>              <span class="co"># context: ignore in loss</span></span>
+<span id="lst-m5-c01-c01-18"><a href="#lst-m5-c01-c01-18" aria-hidden="true" tabindex="-1"></a>batch[<span class="st">"labels"</span>]              <span class="op">=</span> labels             <span class="co"># response token IDs remain targets</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><code>record</code> holds the role-structured text, <code>apply_chat_template</code> serializes the roles, and <code>batch["input_ids"]</code> is the token sequence consumed by the causal model. The expected invariant is that every context label before <code>assistant_start</code> equals <code>-100</code>, while assistant-token labels equal their corresponding token IDs. The excerpt prints nothing and does not perform an optimizer step. Multi-turn code must identify every assistant span and retain an assistant termination token when it is part of the desired response.</p>
+<p>The SFT objective converts one recorded answer into token-by-token training pressure. It rewards the model for assigning high probability to each demonstrated next token, so it teaches imitation before comparison or outcome quality.</p>
+<p><span id="eq-m5-c01-e04"><span class="math display">\[
+L_{\mathrm{SFT}} = -\frac{1}{|M|}\sum_{t\in M}\log\pi_{\theta}(y_t \mid x, y_{&lt;t})
+\tag{1.4}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(L_{\mathrm{SFT}}\)</span>:</strong> Mean supervised loss minimized during SFT.</li>
+<li><strong><span class="math inline">\(M\)</span>:</strong> Assistant-response positions retained by the response mask.</li>
+<li><strong><span class="math inline">\(|M|\)</span>:</strong> Number of target response tokens.</li>
+<li><strong><span class="math inline">\(y_t\)</span> and <span class="math inline">\(y_{&lt;t}\)</span>:</strong> Demonstrated token at <span class="math inline">\(t\)</span> and its earlier demonstrated prefix.</li>
+<li><strong><span class="math inline">\(\pi_\theta\)</span>:</strong> Trainable next-token policy.</li>
+</ul>
+<p><strong>Mechanism:</strong> The condition <span class="math inline">\(t\in M\)</span> excludes tokens outside assistant spans; an assistant termination token remains a target when it is part of the desired response. The sum adds negative log-probability for each retained token, and division by <span class="math inline">\(|M|\)</span> gives a mean. <strong>Interpretation:</strong> Increase probability of the recorded continuation. The equation cannot rank a second plausible whole answer by itself. <strong>Scale:</strong> Because the loss uses the natural logarithm and averages over target positions, report it in nats per target token. <strong>Limit:</strong> If <span class="math inline">\(|M|=0\)</span> because truncation or a malformed template leaves no assistant tokens, the mean is undefined. Filter that record or batch before calculating the loss.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: SFT token-loss arithmetic</strong></p>
+<p>A recorded answer contains three target token positions. The policy currently assigns the recorded IDs probabilities 0.80, 0.50, and 0.25 at those positions.</p>
+<p><strong>Inputs and measurement</strong></p>
+<p>The tokenizer supplies the known target IDs. One policy forward pass returns logits at every target position; log-softmax and gather return the selected-token log probabilities. Exponentiation gives the three probabilities used here.</p>
+<p><strong>Calculation</strong></p>
+<ol type="1">
+<li><strong>Calculation:</strong> <span class="math inline">\(-\log(0.80)=0.223\)</span>; <span class="math inline">\(-\log(0.50)=0.693\)</span>; <span class="math inline">\(-\log(0.25)=1.386\)</span>; mean loss <span class="math inline">\(=(0.223+0.693+1.386)/3=0.767\)</span> nats per target token.</li>
+</ol>
+<p><strong>Interpretation:</strong> The least likely third target token contributes the largest loss. Gradient descent therefore applies the strongest local pressure to raise that token’s probability on similar contexts.</p>
+</div>
+<ul>
+<li><p><strong>Imitation, not ranking:</strong> The loss is a supervised correction signal attached to the exact demonstrated token sequence, not a quality score for free-form answers. If two answers are both acceptable but only one appears in the dataset, SFT receives no direct evidence that the other should be ranked below it. Preference evidence adds that comparison through a direct preference objective.</p></li>
+<li><p><strong>Preference evidence:</strong> Suppose a prompt asks for a Python function. An SFT example may demonstrate one correct implementation. A preference pair can additionally identify that a second response is preferred because it validates input, has the requested signature, and explains complexity. SFT raises probability for the demonstration; preference optimization raises the relative probability of the chosen answer over the rejected answer. The pair therefore identifies which answer better satisfies the requested constraints.</p></li>
+</ul>
+<p>SFT is a good fit when trusted demonstrations directly show the required response format and behavior. It raises the probability of those demonstrated assistant tokens, but it does not rank alternative answers or score newly generated attempts. The resulting checkpoint can be deployed as-is or used as the reference or starting policy for another method when the task has additional feedback.</p>
+
+
+</section>
+
+<!-- module5-publication-footer:start -->
+<footer class="module5-publication-footer" aria-label="Publication details" style="margin-top: 2rem; padding-top: .75rem; border-top: 1px solid #d9dee3; color: #5d6876; font-size: .875rem;">
+  <p style="margin: 0;">Compiled by: Vitaly Rubinovich<br>Edition date: 2026-09-05 22:31 Asia/Jerusalem</p>
+</footer>
+<!-- module5-publication-footer:end -->
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../parts/part-m5-p01.html" class="pagination-link" aria-label="Part I — Learning from saved examples">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part I — Learning from saved examples</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m5-c02.html" class="pagination-link" aria-label="DPO for preferred answers">
+        <span class="nav-page-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">DPO for preferred answers</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

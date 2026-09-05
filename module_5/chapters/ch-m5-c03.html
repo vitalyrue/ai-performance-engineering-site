@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>3&nbsp; PPO for scored attempts – Reinforcement Learning for LLM Post-Training</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m5-c04.html" rel="next">
+<link href="../parts/part-m5-p02.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m5-p02.html">Part II — Learning from new attempts</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m5-c03.html"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">PPO for scored attempts</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Reinforcement Learning for LLM Post-Training</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Reinforcement Learning for LLM Post-Training</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m5-front.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Choosing better LLM answers</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m5-p01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I — Learning from saved examples</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">SFT for task responses</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">DPO for preferred answers</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m5-p02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II — Learning from new attempts</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c03.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">PPO for scored attempts</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">GRPO and DAPO for reasoning</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-m5-p03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III — Verifying results and choosing models</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">RL from tests and tool results</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m5-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Choosing and evaluating training methods</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m5-a01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Course sources and further reading</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m5-c03-s01" id="toc-sec-m5-c03-s01" class="nav-link active" data-scroll-target="#sec-m5-c03-s01"><span class="header-section-number">3.1</span> Keeping PPO model roles separate</a></li>
+  <li><a href="#sec-m5-c03-s02" id="toc-sec-m5-c03-s02" class="nav-link" data-scroll-target="#sec-m5-c03-s02"><span class="header-section-number">3.2</span> Combining task reward with a KL penalty</a></li>
+  <li><a href="#sec-m5-c03-s03" id="toc-sec-m5-c03-s03" class="nav-link" data-scroll-target="#sec-m5-c03-s03"><span class="header-section-number">3.3</span> Estimating token credit with GAE</a></li>
+  <li><a href="#sec-m5-c03-s04" id="toc-sec-m5-c03-s04" class="nav-link" data-scroll-target="#sec-m5-c03-s04"><span class="header-section-number">3.4</span> Turning token credit into a gradient</a></li>
+  <li><a href="#sec-m5-c03-s05" id="toc-sec-m5-c03-s05" class="nav-link" data-scroll-target="#sec-m5-c03-s05"><span class="header-section-number">3.5</span> Limiting reused-batch updates with PPO clipping</a></li>
+  <li><a href="#sec-m5-c03-s06" id="toc-sec-m5-c03-s06" class="nav-link" data-scroll-target="#sec-m5-c03-s06"><span class="header-section-number">3.6</span> Following a PPO update in PyTorch</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m5-p02.html">Part II — Learning from new attempts</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m5-c03.html"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">PPO for scored attempts</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m5-c03" class="quarto-section-identifier"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">PPO for scored attempts</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>DPO learns from recorded chosen/rejected pairs. It cannot test a new answer that the current model discovers unless that answer is first added to the dataset. Proximal Policy Optimization (PPO) instead samples fresh answers, sends each answer to a scorer, and uses the returned score to update the policy. This makes new behavior available for training, but it also makes generation expensive and lets errors in the scorer shape the model.</p>
+<p>PPO reuses each recent rollout for several optimizer steps. On every reuse, it scores the same sampled tokens under the updated policy and compares those probabilities with the probabilities stored when the rollout was generated. Its clipped surrogate removes additional objective benefit from some terms after their current-to-old ratios cross configured bounds. Clipping does not cap the token probability, guarantee a Kullback-Leibler (KL) bound, or repair a bad scorer; it only changes the objective evaluated on the stored batch.</p>
+<p>A separate reference penalty discourages the trainable policy from moving too far from an unchanged SFT model. The scorer supplies the completion result, the value model estimates expected shaped return, and the frozen reference supplies comparison probabilities. The rest of this chapter follows those values through one rollout so that the source and effect of every number remain visible.</p>
+<section id="sec-m5-c03-s01" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="sec-m5-c03-s01"><span class="header-section-number">3.1</span> Keeping PPO model roles separate</h2>
+<p>PPO begins with one newly generated and scored response. The update must retain the sampled tokens and states, then obtain probabilities, a result score, a drift measurement, and a comparison value for those same decisions. Trace the stored rollout record first, then separate the trainable policy, frozen reference, reward model, and value model that evaluate it.</p>
+<p>For a prompt with <span class="math inline">\(L\)</span> tokens and a response with <span class="math inline">\(T\)</span> tokens, the initial state <span class="math inline">\(s_0\)</span> is the <span class="math inline">\(L\)</span>-token prompt. Choosing response token <span class="math inline">\(a_0\)</span> appends that token and produces <span class="math inline">\(s_1\)</span>; after <span class="math inline">\(T\)</span> decisions, the terminal state contains the complete answer. The policy emits one vocabulary-sized logit vector at each state, and a sampling rule selects the realized action.</p>
+<p>One retained rollout contains five aligned objects.</p>
+<ul>
+<li><p><strong>Prompt token IDs <span class="math inline">\(x\)</span> (length <span class="math inline">\(L\)</span>):</strong> The conditioning context reused for every response-token prediction.</p></li>
+<li><p><strong>Response token IDs <span class="math inline">\(a_0\)</span> through <span class="math inline">\(a_{T-1}\)</span> (length <span class="math inline">\(T\)</span>):</strong> The sampled actions whose policy probabilities are gathered during training.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Policy logits <span class="math inline">\(z_t\)</span> (vector of length <span class="math inline">\(|V|\)</span>):</strong></span> The raw score vector at each response position; <span class="math inline">\(|V|\)</span> is the number of token types in the vocabulary.</p></li>
+<li><p><strong>Selected log probability <span class="math inline">\(\log \pi_\theta(a_t\mid s_t)\)</span> (scalar):</strong> The stored rollout-policy value later compared with the current probability for the same token and state.</p></li>
+<li><p><strong>Completion score <span class="math inline">\(R_{\mathrm{task}}\)</span> (scalar):</strong> The evaluator result returned after the full response and later converted into token-aligned rewards.</p></li>
+</ul>
+<p>A PPO update reuses the same stored response across four model roles. Sharing one trace keeps every returned probability, score, and value aligned to the decisions that produced the answer.</p>
+<p>In the running repair case, the policy generates a diagnosis and patch, the reward model or test runner scores whether it passes, the reference measures change from SFT behavior, and the value head estimates discounted future shaped return at each response token. All four roles evaluate the same sampled response rather than producing unrelated numbers.</p>
+<div id="fig-m5-c03-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A stored rollout is evaluated by a trainable policy, frozen reference, answer scorer, and value model before the PPO objective forms an update.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m5-c03-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m5-c03-f01.png" class="img-fluid figure-img" style="width:6.35in" alt="A stored rollout is evaluated by a trainable policy, frozen reference, answer scorer, and value model before the PPO objective forms an update.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m5-c03-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.1: Four model roles evaluate one PPO rollout (Session 2, p.&nbsp;31).
+</figcaption>
+</figure>
+</div>
+<p>The four model roles produce the probabilities, completion score, and critic values needed to form token rewards and advantages.</p>
+<ul>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Policy <span class="math inline">\(\pi_\theta\)</span>:</strong></span> The trainable LLM decision rule defined in Chapter 1. At every prompt/prefix it returns a next-token distribution; PPO samples from that distribution, stores the selected-token log-probabilities, and updates <span class="math inline">\(\theta\)</span>.</p></li>
+<li><p><strong>Reference <span class="math inline">\(\pi_{\mathrm{ref}}\)</span>:</strong> The frozen SFT copy of that decision rule. It scores the same prefixes and selected tokens to measure KL divergence from SFT behavior, but its weights do not receive the PPO update.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Reward model <span class="math inline">\(r_\psi\)</span>:</strong></span> Maps a completed prompt/response pair to a scalar score. The parameter symbol <span class="math inline">\(\psi\)</span> distinguishes this scorer from the critic.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Value model <span class="math inline">\(V_\phi\)</span>:</strong></span> Maps a prompt/prefix to the expected discounted sum of future shaped token rewards under the rollout policy. It predicts return, not the next reward alone, and supplies the baseline used to build advantages.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Behavior policy:</strong></span> The probability distribution that actually samples rollout tokens. If generation changes logits with temperature, token masking, top-k, top-p, or another processor, <span class="math inline">\(\pi_\theta\)</span> denotes the distribution after those transformations. Store old probabilities from that same distribution and reproduce the corresponding transformation when re-scoring; otherwise the current-to-old ratio compares different policy definitions.</p></li>
+</ul>
+</section>
+<section id="sec-m5-c03-s02" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="sec-m5-c03-s02"><span class="header-section-number">3.2</span> Combining task reward with a KL penalty</h2>
+<p>The rollout contains one evaluator score for the complete answer and one stored probability for each sampled token. Advantage estimation needs a reward aligned to every token state and a separate cost for movement away from the unchanged SFT reference. Place the answer score on the terminal token, calculate the sampled reference cost at each token, and keep the raw score and cost visible as separate components.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Shaped token reward:</strong></span> A training reward constructed for each sampled token from the task score and any added costs or bonuses. It is calculated after the answer is scored; it is not a claim that the external scorer judged every intermediate token.</li>
+</ul>
+<p>The explicit PyTorch PPO implementation places the terminal task score <span class="math inline">\(R_{\mathrm{task}}\)</span> on the final generated token and subtracts a sampled log-ratio penalty formed from fixed rollout-policy and reference-policy log probabilities.</p>
+<p>For the same sampled token sequence, run the frozen reference model without gradients and gather its log probability at each selected token. A reward model or verifier scores the completed text once to produce <span class="math inline">\(R_{\mathrm{task}}\)</span>. <code>build_rewards</code> places that terminal number at the final token and combines it with the two gathered log-probability tensors, so every <span class="math inline">\(r_t\)</span> is constructed from stored rollout data and explicit model outputs.</p>
+<p><span id="eq-m5-c03-e01"><span class="math display">\[
+r_t = -\beta_{\mathrm{KL}}\left(\log \pi_{\mathrm{old}}(a_t \mid s_t) - \log \pi_{\mathrm{ref}}(a_t \mid s_t)\right) + \mathbf{1}[t=T-1]R_{\mathrm{task}}
+\tag{3.1}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(r_t\)</span>:</strong> Constructed training reward at token <span class="math inline">\(t\)</span>.</li>
+<li><strong><span class="math inline">\(\beta_{\mathrm{KL}}\)</span>:</strong> Coefficient converting a sampled policy-to-reference log-ratio into a reward penalty.</li>
+<li><strong><span class="math inline">\(\pi_{\mathrm{old}}\)</span> and <span class="math inline">\(\pi_{\mathrm{ref}}\)</span>:</strong> Fixed rollout and frozen reference policies used while rewards are constructed.</li>
+<li><strong><span class="math inline">\(a_t\)</span> and <span class="math inline">\(s_t\)</span>:</strong> Sampled token and its state.</li>
+<li><strong><span class="math inline">\(R_{\mathrm{task}}\)</span>:</strong> Completion-level evaluator score.</li>
+<li><strong>Final-token indicator:</strong> One at zero-based position <span class="math inline">\(t=T-1\)</span> and zero at earlier response positions.</li>
+</ul>
+<p><strong>Mechanism:</strong> Subtract reference log-probability from rollout log-probability for the sampled token, multiply that log-ratio by <span class="math inline">\(\beta_{\mathrm{KL}}\)</span>, subtract the result, and attach <span class="math inline">\(R_{\mathrm{task}}\)</span> only at the final token. <strong>Interpretation:</strong> Convert one completion score and one sampled policy-to-reference penalty per token into a token-aligned reward sequence; the scorer did not evaluate every token separately. <strong>Scale:</strong> The sampled log-ratio is reported in nats. <span class="math inline">\(\beta_{\mathrm{KL}}\)</span> converts that shift into the same task-score scale as <span class="math inline">\(R_{\mathrm{task}}\)</span> so the terms can be combined.</p>
+<p>One sampled log-ratio can be negative and is not itself a KL divergence. At a fixed token state, its expectation over actions sampled from the rollout policy equals the forward KL divergence. Averaging sampled ratios over the states visited by rollouts estimates a rollout-state-weighted mean token KL.</p>
+<p>Do not conflate the KL training penalty with a KL diagnostic. The penalty changes <span class="math inline">\(r_t\)</span> and therefore changes the gradient. A reported KL metric only measures drift for monitoring; it affects the update only if the configured objective explicitly feeds it back into the reward or loss. Likewise, <span class="math inline">\(\beta_{\mathrm{DPO}}\)</span> scales an offline preference margin, whereas <span class="math inline">\(\beta_{\mathrm{KL}}\)</span> prices online reference drift on the task-score scale.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: KL coefficient sets the reward penalty</strong></p>
+<p>For one sampled token, the rollout-minus-reference log-probability is 0.80 nats. The example compares a small and a large KL coefficient.</p>
+<p><strong>Inputs and measurement</strong></p>
+<p>Use the rollout-time log probability stored for the sampled token and gather the frozen reference probability for that same token and state. Their difference is 0.80 here. The two <span class="math inline">\(\beta_{\mathrm{KL}}\)</span> values, 0.02 and 0.20, are deliberately chosen configuration settings for a reward-scale comparison.</p>
+<p><strong>Scale:</strong> <span class="math inline">\(\beta_{\mathrm{KL}}\)</span> is the reward penalty per nat; changing it from 0.02 to 0.20 makes the same policy shift cost ten times as much reward.</p>
+<p><strong>Calculation</strong></p>
+<p><span class="math display">\[0.02\times0.80=0.016,\qquad 0.20\times0.80=0.160\]</span></p>
+<p><strong>Interpretation:</strong> Increasing <span class="math inline">\(\beta_{\mathrm{KL}}\)</span> from 0.02 to 0.20 makes the same 0.80-nat sampled log-ratio cost ten times more reward. It must therefore be calibrated to the reward scale rather than copied unchanged between tasks.</p>
+</div>
+<p>The PPO actor ultimately uses advantages derived from this shaped return, not from the raw evaluator score alone. Report <span class="math inline">\(R_{\mathrm{task}}\)</span> and the reference-policy cost separately so an apparent improvement cannot be caused only by changing the regularization term.</p>
+</section>
+<section id="sec-m5-c03-s03" class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="sec-m5-c03-s03"><span class="header-section-number">3.3</span> Estimating token credit with GAE</h2>
+<p>The rollout now has a shaped reward at each token and a value-model prediction for each token state. PPO still needs one advantage per token that connects later results to earlier decisions without copying all of the final-score noise backward. Compare one observed transition with the critic’s estimate, control how much later evidence reaches earlier tokens, and then calculate two examples.</p>
+<ul>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Generalized Advantage Estimation (GAE):</strong></span> A calculation that combines token rewards and consecutive value predictions into one advantage for each token. It controls how much later evidence influences an earlier decision.</p></li>
+<li><p><strong>Bias and variance in an advantage estimate:</strong> Bias is a systematic tendency to miss the true expected advantage; variance is how much the estimate changes across different sampled rollouts. Relying more on the critic can add bias when its predictions are wrong but usually lowers rollout-to-rollout variation. Carrying more observed future reward backward can reduce that critic bias but usually raises variation.</p></li>
+</ul>
+<p>A one-step temporal-difference residual is the difference between what was observed after one transition and what the value model predicted before it. GAE combines those residuals across time. Both <span class="math inline">\(\gamma\)</span> and <span class="math inline">\(\lambda\)</span> lie in <span class="math inline">\([0,1]\)</span> and are configuration values, not model outputs. Setting <span class="math inline">\(\lambda=0\)</span> keeps only the one-step residual; setting <span class="math inline">\(\lambda=1\)</span> carries the full discounted chain of later residuals, and with <span class="math inline">\(\gamma=1\)</span> that chain reaches the end of the rollout apart from the critic baseline. This gives PPO a separate learning signal for each response token when the final result is sparse, but it does not create the reward, validate the verifier, or constrain the policy update.</p>
+<p>Its numeric inputs come from two aligned computations on the stored rollout: <code>build_rewards</code> supplies <span class="math inline">\(r_t\)</span> after adding terminal reward and the sampled log-ratio penalty, while the critic forward pass supplies <span class="math inline">\(V_\phi(s_t)\)</span> and <span class="math inline">\(V_\phi(s_{t+1})\)</span> at consecutive response positions. GAE then performs only arithmetic on those tensors; it does not query the reward model or generate a new completion at each token.</p>
+<p>A one-step GAE residual measures the surprise of a token transition relative to the critic’s prediction.</p>
+<p><span id="eq-m5-c03-e02"><span class="math display">\[
+\delta_t = r_t + \gamma V_{\phi}(s_{t+1}) - V_{\phi}(s_t)
+\tag{3.2}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(\delta_t\)</span>:</strong> Temporal-difference residual at token <span class="math inline">\(t\)</span>.</li>
+<li><strong><span class="math inline">\(r_t\)</span>:</strong> Observed shaped token reward.</li>
+<li><strong><span class="math inline">\(\gamma\in[0,1]\)</span>:</strong> Reward-discount factor; smaller values reduce the weight of later rewards.</li>
+<li><strong><span class="math inline">\(V_\phi\)</span>:</strong> Critic with parameters <span class="math inline">\(\phi\)</span>.</li>
+<li><strong><span class="math inline">\(s_t\)</span> and <span class="math inline">\(s_{t+1}\)</span>:</strong> Consecutive token states.</li>
+</ul>
+<p><strong>Mechanism:</strong> Add immediate reward to the discounted next-state prediction, then subtract what the critic predicted before the action. <strong>Interpretation:</strong> Measure how surprising one transition was relative to the critic, producing a local correction signal. <strong>Scale:</strong> The critic prediction and observed reward must use the same return scale so their subtraction is meaningful; <span class="math inline">\(\delta_t\)</span> remains on that scale.</p>
+<p>The full GAE expression combines one-step residuals across later positions, allowing PPO to assign an earlier response token credit for outcome evidence that arrives later in the completion.</p>
+<p><span id="eq-m5-c03-e03"><span class="math display">\[
+\hat{A}_t^{\mathrm{GAE}} = \sum_{l=0}^{T-t-1}(\gamma\lambda)^l\left[r_{t+l}+\gamma V_{\phi}(s_{t+l+1})-V_{\phi}(s_{t+l})\right]
+\tag{3.3}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(\hat{A}^{\mathrm{GAE}}_t\)</span>:</strong> Estimated advantage used by PPO at token <span class="math inline">\(t\)</span>.</li>
+<li><strong><span class="math inline">\(l\)</span>:</strong> Number of transitions into the future.</li>
+<li><strong><span class="math inline">\(T\)</span>:</strong> Number of sampled response-token decisions, indexed from 0 to <span class="math inline">\(T-1\)</span>.</li>
+<li><strong><span class="math inline">\(\lambda\in[0,1]\)</span>:</strong> Weight controlling how much later evidence is retained; zero gives a one-step estimate and one keeps the full discounted residual chain.</li>
+<li><strong><span class="math inline">\(\gamma\in[0,1]\)</span>:</strong> Future-reward discount, with smaller values reducing the influence of later residuals.</li>
+<li><strong><span class="math inline">\(r\)</span> and <span class="math inline">\(V_\phi\)</span>:</strong> Transition reward and critic return prediction.</li>
+</ul>
+<p><strong>Mechanism:</strong> Each bracket is one temporal-difference residual. The product <span class="math inline">\(\gamma\lambda\)</span> is raised to the future-step offset <span class="math inline">\(l\)</span>, so more distant residuals receive less weight. The finite sum stops at the terminal transition, whose next-state value is zero unless a nonterminal cutoff is explicitly bootstrapped. <strong>Interpretation:</strong> Aggregate future critic corrections into one advantage for an earlier token.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: one-step temporal-difference residual</strong></p>
+<p>At one token transition, the shaped reward is 1.0, the critic predicts 4.0 after the token and 3.5 before it, and the discount is 0.99.</p>
+<p><strong>Inputs and measurement</strong></p>
+<p>The reward comes from the reward-shaping step. A critic forward pass on the stored token states returns the two value predictions. <span class="math inline">\(\gamma\)</span> is the configured discount, not a model output.</p>
+<p><strong>Calculation</strong></p>
+<p><span class="math display">\[\delta_t=1.0+0.99\times4.0-3.5=1.46\]</span></p>
+<p><strong>Interpretation:</strong> The positive residual of 1.46 says this transition was better than the critic predicted. GAE can carry this credit backward to earlier tokens, with <span class="math inline">\(\lambda\)</span> controlling how far that propagation reaches.</p>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: GAE combines nearby prediction errors</strong></p>
+<p>At token <span class="math inline">\(t\)</span>, two remaining temporal-difference residuals are 1.00 and 0.50. Use discount 0.99 and trace-decay 0.95.</p>
+<p><strong>Inputs and measurement</strong></p>
+<p>The reward and critic calculations produce the two residuals; <span class="math inline">\(\gamma\)</span> and <span class="math inline">\(\lambda\)</span> are configured weights. With only two remaining transitions, the finite sum contains two terms.</p>
+<p><strong>Calculation</strong></p>
+<p><span class="math display">\[1.00 + (0.99\times0.95)\times0.50 \approx 1.470\]</span></p>
+<p><strong>Interpretation:</strong> The earlier token receives advantage 1.470. The later residual contributes 0.470 after discounting, so credit reaches backward without being copied at full strength.</p>
+</div>
+<p>The critic is trained against return targets built from the same shaped reward sequence. Its value head predicts expected discounted future shaped reward, and a squared error moves that prediction toward the calculated target.</p>
+<p><span id="eq-m5-c03-e04"><span class="math display">\[
+L_V = \frac{1}{2}\,E_t\left[\left(V_{\phi}(s_t)-R_t^{\mathrm{target}}\right)^2\right]
+\tag{3.4}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(L_V\)</span>:</strong> Value-model loss.</li>
+<li><strong><span class="math inline">\(V_\phi(s_t)\)</span>:</strong> Critic prediction of discounted future shaped return at token state <span class="math inline">\(s_t\)</span>.</li>
+<li><strong><span class="math inline">\(R_t^{\mathrm{target}}\)</span>:</strong> Return target computed from observed token rewards and, for a nonterminal cutoff, a later value estimate.</li>
+<li><strong>Expectation over <span class="math inline">\(t\)</span>:</strong> Average across stored rollout token states.</li>
+</ul>
+<p><strong>Mechanism:</strong> Subtract prediction from target, square the error, multiply by one half, and average. Using a later value estimate inside the target is bootstrapping. <strong>Interpretation:</strong> Teach the critic to predict the return scale used for advantage estimation; the critic does not judge factual correctness. <strong>Scale:</strong> Squaring the critic error also squares the reward scale, so this loss changes quadratically when rewards are rescaled.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: value loss corrects one critic prediction</strong></p>
+<p>At one nonterminal token state, the shaped reward is 1.0 point, γ is 0.75, the next-state value is 4.0 points, and the current critic prediction is 3.2 points.</p>
+<p><strong>Inputs and measurement</strong></p>
+<p><code>build_rewards</code> supplies 1.0, the trainer configuration supplies discount 0.75, and one critic forward pass supplies the next-state value 4.0 and current-state value 3.2. The calculation below forms the one-step target.</p>
+<p><strong>Calculation</strong></p>
+<ol type="1">
+<li><strong>One-state value loss:</strong> <span class="math inline">\(R_t^{\mathrm{target}} = 1.0 + 0.75 \times 4.0 = 4.0\)</span>; <span class="math inline">\(\tfrac{1}{2}(3.2-4.0)^2 = 0.32\)</span></li>
+</ol>
+<p><strong>Interpretation:</strong> This state contributes 0.32 to the value loss. Gradient descent moves the critic prediction toward 4.0; it does not directly update whether the answer is correct.</p>
+</div>
+<p>This is a bootstrapped nonterminal example: the 4.0-point next-state estimate belongs in the target because the trajectory continues. At a true terminal state, <span class="math inline">\(V_\phi(s_T)=0\)</span>, so no later value is added and the target contains only rewards that have actually arrived.</p>
+</section>
+<section id="sec-m5-c03-s04" class="level2" data-number="3.4">
+<h2 data-number="3.4" class="anchored" data-anchor-id="sec-m5-c03-s04"><span class="header-section-number">3.4</span> Turning token credit into a gradient</h2>
+<p>Reward shaping and GAE have converted one scored answer into an estimated advantage for each sampled token. Those fixed rollout values must now become a direction for changing the trainable policy parameters. Define the raw task objective first, distinguish it from PPO’s shaped training return, and then form the finite-batch policy-gradient estimate.</p>
+<ul>
+<li><strong>Expected task return:</strong> The average raw evaluator score obtained when prompts are drawn from the training task distribution and completions are sampled from the current policy. It describes task performance before the reference-policy cost is added.</li>
+</ul>
+<p>Let <span class="math inline">\(x\)</span> be a prompt drawn from task distribution <span class="math inline">\(D\)</span>. Given that prompt, the policy <span class="math inline">\(\pi_\theta\)</span> samples completion <span class="math inline">\(y\)</span> and the evaluator returns <span class="math inline">\(R_{\mathrm{task}}(x,y)\)</span>. The nested expectations show both sampling steps explicitly.</p>
+<p><span id="eq-m5-c03-e05"><span class="math display">\[
+J_{\mathrm{task}}(\theta) = \mathbb{E}_{x∼D}\left[\mathbb{E}_{y∼\pi_{\theta}(\cdot\mid x)}\left[R_{\mathrm{task}}(x,y)\right]\right]
+\tag{3.5}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(J_{\mathrm{task}}(\theta)\)</span>:</strong> Expected raw task-score objective for policy parameter setting <span class="math inline">\(\theta\)</span>.</li>
+<li><strong><span class="math inline">\(\theta\)</span>:</strong> Trainable policy parameters.</li>
+<li><strong><span class="math inline">\(x \sim D\)</span>:</strong> Prompt drawn from task distribution <span class="math inline">\(D\)</span>.</li>
+<li><strong><span class="math inline">\(y \sim \pi_\theta(\cdot\mid x)\)</span>:</strong> Completion sampled conditionally from the current policy.</li>
+<li><strong><span class="math inline">\(R_{\mathrm{task}}(x,y)\)</span>:</strong> Raw evaluator score for that prompt and completion.</li>
+</ul>
+<p><strong>Mechanism:</strong> The inner expectation averages completion scores for one prompt; the outer expectation averages those prompt-level values across D. <strong>Interpretation:</strong> Measure the raw score of current-policy behavior. PPO does not optimize this quantity alone: it constructs shaped token rewards and advantages, then optimizes a clipped surrogate for that regularized return.</p>
+<p><span class="math inline">\(J_{\mathrm{task}}(\theta)\)</span> is one scalar, not a parameter update. The gradient operator <span class="math inline">\(\nabla_\theta\)</span>, read as “differentiate with respect to <span class="math inline">\(\theta\)</span>,” produces one local slope for every trainable parameter.</p>
+<p>A gradient vector has the same shape as <span class="math inline">\(\theta\)</span>. In the next equation, <span class="math inline">\(J\)</span> means any objective that is being maximized. Scaling <span class="math inline">\(\nabla_\theta J(\theta)\)</span> by the learning rate and adding it to <span class="math inline">\(\theta\)</span> gives an ascent step. PyTorch usually obtains the same direction by minimizing <span class="math inline">\(-J\)</span>. Later, PPO will substitute its clipped surrogate <span class="math inline">\(J_{\mathrm{PPO}}\)</span> for this generic <span class="math inline">\(J\)</span>; it does not update directly from the raw task-score objective above.</p>
+<p><span id="eq-m5-c03-e06"><span class="math display">\[
+\theta ← \theta + \alpha\,∇_{\theta}J(\theta)
+\tag{3.6}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(J(\theta)\)</span>:</strong> Generic scalar objective to maximize; for the PPO actor update this becomes <span class="math inline">\(J_{\mathrm{PPO}}\)</span>.</li>
+<li><strong><span class="math inline">\(\theta\)</span>:</strong> Full trainable policy-parameter vector.</li>
+<li><strong><span class="math inline">\(\alpha\)</span>:</strong> Positive learning rate.</li>
+<li><strong><span class="math inline">\(\nabla_\theta J(\theta)\)</span>:</strong> Gradient vector produced by differentiating <span class="math inline">\(J\)</span> with respect to <span class="math inline">\(\theta\)</span>.</li>
+</ul>
+<p><strong>Mechanism:</strong> Scale the gradient vector by <span class="math inline">\(\alpha\)</span> and replace <span class="math inline">\(\theta\)</span> with the old value plus that step. <strong>Interpretation:</strong> Move parameters uphill for a maximized objective. A minimization optimizer applies the negative objective instead.</p>
+<ul>
+<li><strong>REINFORCE:</strong> The basic sampled policy-gradient estimator. It raises the log probability of sampled actions whose results are better than a comparison value and lowers it for actions whose results are worse.</li>
+</ul>
+<p>For a finite batch of <span class="math inline">\(B\)</span> rollouts, PPO uses the GAE estimates <span class="math inline">\(\hat{A}_t\)</span> calculated above. The sampled actions, stored old-policy values, and advantages are treated as constants during the actor update; gradients flow through current-policy log-probabilities only. The log-derivative identity turns the gradient of expected reward into the expectation of <span class="math inline">\(\nabla_\theta\log\pi_\theta\)</span> weighted by advantage; the finite sum below is its batch estimate.</p>
+<p><span id="eq-m5-c03-e07"><span class="math display">\[
+\hat{g} = \frac{1}{B}\sum_{b=1}^{B}\sum_t ∇_{\theta}\log\pi_{\theta}\left(a_t^b\mid s_t^b\right)\hat{A}_t^b
+\tag{3.7}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(\hat{g}\)</span>:</strong> Finite-batch estimate of the policy-gradient direction.</li>
+<li><strong><span class="math inline">\(B\)</span>:</strong> Number of sampled rollouts in the batch.</li>
+<li><strong><span class="math inline">\(s_t^b\)</span> and <span class="math inline">\(a_t^b\)</span>:</strong> State and sampled action at token <span class="math inline">\(t\)</span> in rollout <span class="math inline">\(b\)</span>.</li>
+<li><strong><span class="math inline">\(\pi_\theta\)</span>:</strong> Current trainable policy.</li>
+<li><strong><span class="math inline">\(\hat{A}_t^b\)</span>:</strong> Fixed estimated advantage for that sampled token.</li>
+</ul>
+<p><strong>Mechanism:</strong> Differentiate each sampled action’s current log probability, multiply by its fixed estimated advantage, sum over tokens and rollouts, and divide by B. <strong>Interpretation:</strong> Estimate the actor update direction: positive advantages raise sampled-action probability and negative advantages lower it. Rescaling all shaped rewards also rescales the estimate.</p>
+<p>At the first actor evaluation, the current policy equals the rollout policy, so every current-to-old ratio is one and this is the ordinary on-policy direction. After the policy changes and the batch is reused, PPO replaces this expression with the ratio-weighted clipped surrogate in Section 3.5.</p>
+</section>
+<section id="sec-m5-c03-s05" class="level2" data-number="3.5">
+<h2 data-number="3.5" class="anchored" data-anchor-id="sec-m5-c03-s05"><span class="header-section-number">3.5</span> Limiting reused-batch updates with PPO clipping</h2>
+<p>The actor now has fixed advantages for tokens sampled by the rollout policy, but the trainable policy may already have changed while the batch is reused. A current-to-old selected-token ratio measures that local change on the stored states. Calculate the ratio, form the clipped surrogate, and inspect how positive and negative advantages use its bounds.</p>
+<ul>
+<li><p><strong>On-policy rollout:</strong> A sampled answer produced by the current policy or a recently saved copy of it. PPO can reuse that rollout briefly, but the stored probabilities become less representative as the trainable policy changes.</p></li>
+<li><p><strong>Importance sampling in PPO:</strong> The current-to-old selected-token ratio is a local surrogate correction on states visited by the rollout policy. It does not exactly correct every change in the trajectory-state distribution, which is one reason batches are kept recent and policy movement is monitored.</p></li>
+</ul>
+<p>The ratio calculation has two stages.</p>
+<ol type="1">
+<li><p><strong>Store rollout probabilities:</strong> Freeze the rollout copy as <span class="math inline">\(\pi_{\mathrm{old}}\)</span>, sample one response-token sequence, and retain the old log probability of every selected token after the rollout sampling transformations.</p></li>
+<li><p><strong>Re-score the same tokens:</strong> During an update, teacher-force the stored sequence through the current policy, apply the corresponding policy transformations, gather the same token IDs, and exponentiate current minus old log probability. The ratio never compares two unrelated answers.</p></li>
+</ol>
+<p><span id="eq-m5-c03-e08"><span class="math display">\[
+\rho_t(\theta) = \frac{\pi_{\theta}(a_t\mid s_t)}{\pi_{\mathrm{old}}(a_t\mid s_t)}
+\tag{3.8}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(\rho_t(\theta)\)</span>:</strong> Current-to-old ratio for sampled token <span class="math inline">\(t\)</span>.</li>
+<li><strong><span class="math inline">\(\pi_\theta\)</span>:</strong> Current behavior-policy probability in the numerator.</li>
+<li><strong><span class="math inline">\(\pi_{\mathrm{old}}\)</span>:</strong> Stored rollout-policy probability in the denominator.</li>
+<li><strong><span class="math inline">\(a_t\)</span> and <span class="math inline">\(s_t\)</span>:</strong> The same sampled token and stored state in both evaluations.</li>
+</ul>
+<p><strong>Mechanism:</strong> Divide current probability by the probability stored when the rollout was sampled. <strong>Interpretation:</strong> Measure local change for the sampled token: 1 is unchanged, above 1 is more likely, and below 1 is less likely. Symbol <span class="math inline">\(\rho\)</span> keeps this ratio distinct from shaped reward <span class="math inline">\(r_t\)</span>.</p>
+<p>PPO may reuse one stored rollout for several optimization epochs. Each extra epoch saves generation cost but makes the current policy farther from the distribution that produced the batch. Monitor clip fraction, KL diagnostics, and held-out behavior for signs that one batch is being overfit.</p>
+<p><span id="eq-m5-c03-e09"><span class="math display">\[
+J_{\mathrm{PPO}} = \mathbb{E}\left[\mathrm{min}\left(\rho_t\hat{A}_t,\mathrm{clip}(\rho_t,1-\epsilon,1+\epsilon)\hat{A}_t\right)\right]
+\tag{3.9}\]</span></span></p>
+<p><strong>Variables</strong></p>
+<ul>
+<li><strong><span class="math inline">\(J_{\mathrm{PPO}}\)</span>:</strong> Clipped surrogate objective to maximize.</li>
+<li><strong><span class="math inline">\(\rho_t\)</span>:</strong> Current-to-old token probability ratio.</li>
+<li><strong><span class="math inline">\(\hat{A}_t\)</span>:</strong> Fixed estimated token advantage from GAE.</li>
+<li><strong><span class="math inline">\(\epsilon\)</span>:</strong> Configured ratio deviation around one.</li>
+</ul>
+<p><strong>Mechanism:</strong> Compare the ordinary advantage-weighted ratio with the clipped-ratio term; <code>min</code> keeps the more conservative sampled contribution and the expectation averages sampled tokens. <strong>Interpretation:</strong> Remove additional surrogate-objective benefit after a sampled ratio crosses the relevant bound. This does not clip the probability itself or guarantee that the updated policy stays inside the interval. <strong>Scale:</strong> The ratio reweights the advantage but does not change its scale, so reward rescaling also rescales this surrogate.</p>
+<p>Clipping depends on the sign of the fixed advantage. For a positive advantage, crossing the upper ratio bound removes extra surrogate credit; for a negative advantage, crossing the lower bound removes extra credit from further suppression. The next two calculations start from the stored and current probabilities, then compare the two terms in both directions.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: PPO clipping for a positive advantage</strong></p>
+<p>A stored rollout contains one sampled token whose shaped return was better than the critic expected. Reward shaping and GAE produced the illustrative fixed advantage <span class="math inline">\(\hat{A}_t=2\)</span>.</p>
+<p><strong>Inputs and measurement</strong></p>
+<p>At rollout time, store the old behavior-policy probability of the sampled token as 0.20. During the update, teacher-force that token sequence through the current policy and gather probability 0.27. Use <span class="math inline">\(\epsilon=0.20\)</span>, so the upper bound is 1.20.</p>
+<p><strong>Calculation</strong></p>
+<ol type="1">
+<li><strong>Current-to-old policy ratio:</strong> <span class="math inline">\(\pi_\theta(a_t\mid s_t)=0.27\)</span>; <span class="math inline">\(\pi_{\mathrm{old}}(a_t\mid s_t)=0.20\)</span>; <span class="math inline">\(\rho_t=0.27/0.20=1.35\)</span></li>
+</ol>
+<p><span class="math display">\[\begin{aligned}\operatorname{clip}(1.35,0.8,1.2)&amp;=1.2\\\min(1.35\times2,1.2\times2)&amp;=2.4\end{aligned}\]</span></p>
+<p><strong>Interpretation:</strong> The observed ratio 1.35 exceeds the upper bound. This sampled positive-advantage term is evaluated as 2.4 rather than 2.7, so crossing the bound supplies no extra surrogate-objective benefit. The ratio itself remains 1.35.</p>
+</div>
+<div id="fig-m5-c03-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Course graph of the PPO clipped surrogate, showing a flat objective contribution outside the permitted policy-ratio interval.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m5-c03-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m5-c03-f02.png" class="img-fluid figure-img" style="width:6.35in" alt="Course graph of the PPO clipped surrogate, showing a flat objective contribution outside the permitted policy-ratio interval.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m5-c03-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.2: Clipping removes extra surrogate credit (Session 2, PDF p.&nbsp;61).
+</figcaption>
+</figure>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: PPO clipping for a negative advantage</strong></p>
+<p>A second stored token has fixed estimated advantage <span class="math inline">\(\hat{A}_t=-2\)</span>, and its current-to-old probability ratio is 0.70.</p>
+<p><strong>Inputs and measurement</strong></p>
+<p>The stored and current behavior-policy probabilities produce ratio 0.70. With <span class="math inline">\(\epsilon=0.20\)</span>, the lower bound is 0.80.</p>
+<p><strong>Calculation</strong></p>
+<p><span class="math display">\[\begin{aligned}\operatorname{clip}(0.70,0.8,1.2)&amp;=0.8\\\min(0.70\times(-2),0.8\times(-2))&amp;=-1.6\end{aligned}\]</span></p>
+<p><strong>Interpretation:</strong> The minimum is −1.6 rather than −1.4. Moving the observed ratio below 0.80 gives no additional surrogate-objective improvement for this sampled term, but the algorithm does not force the probability ratio back to 0.80.</p>
+</div>
+<p>Clipping cannot repair a bad reward model and does not impose a hard trust region. Shared parameters, later minibatches, and other loss terms may still move probabilities beyond the interval; clip fraction and KL diagnostics reveal how often that is happening.</p>
+</section>
+<section id="sec-m5-c03-s06" class="level2" data-number="3.6">
+<h2 data-number="3.6" class="anchored" data-anchor-id="sec-m5-c03-s06"><span class="header-section-number">3.6</span> Following a PPO update in PyTorch</h2>
+<p>One PPO update needs aligned ratios, clipped terms, token rewards, value predictions, and GAE advantages. Every value must refer to the same sampled response token. Trace those tensors in PyTorch, then connect each setting to its diagnostic.</p>
+<p>The PPO implementation uses PyTorch tensors and local functions, making token alignment, old-policy statistics, and the reward sequence explicit. <code>PPOTrainer</code> or <code>GRPOTrainer</code> can manage trainer bookkeeping in a larger run, but PyTorch still calculates differentiation and optimizer steps, while project code still defines rewards, verifiers, and independent evaluation checks.</p>
+<p>Its <code>rollout</code> function samples <span class="math inline">\(B\)</span> continuations of <span class="math inline">\(T\)</span> response tokens from one prompt, where <span class="math inline">\(B\)</span> is the number of sampled sequences in the batch and <span class="math inline">\(T\)</span> is the generated-token count per sequence. The policy and reference each produce a log-probability tensor with shape <span class="math inline">\((B,T)\)</span>, while the critic produces values at those same positions.</p>
+<p>Code 3.1 is an <strong>abbreviated notebook excerpt</strong>, not a standalone program. It requires an initialized policy with a value head, a frozen reference model, an optimizer, the configuration object <code>cfg</code>, and the five helper functions called in the excerpt. Its inputs are token sequences and scalar completion scores. It produces aligned <span class="math inline">\((B,T)\)</span> tensors for log probabilities, rewards, values, advantages, and returns; <code>ppo_update</code> then changes the policy parameters and returns a statistics record. A correct run must keep every tensor aligned to the same <span class="math inline">\(T\)</span> sampled response tokens.</p>
+<p><strong>Code 3.1. PPO rollout statistics produce the clipped update.</strong></p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m5-c03-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m5-c03-c01-1"><a href="#lst-m5-c03-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Rollout statistics, KL shaping, GAE, and PPO update</span></span>
+<span id="lst-m5-c03-c01-2"><a href="#lst-m5-c03-c01-2" aria-hidden="true" tabindex="-1"></a>seq, L, T, texts <span class="op">=</span> rollout(cfg)                    <span class="co"># token ids: (B, L + T)</span></span>
+<span id="lst-m5-c03-c01-3"><a href="#lst-m5-c03-c01-3" aria-hidden="true" tabindex="-1"></a>old_lp, old_V, _ <span class="op">=</span> aligned_logps_values(</span>
+<span id="lst-m5-c03-c01-4"><a href="#lst-m5-c03-c01-4" aria-hidden="true" tabindex="-1"></a>    policy,</span>
+<span id="lst-m5-c03-c01-5"><a href="#lst-m5-c03-c01-5" aria-hidden="true" tabindex="-1"></a>    seq,</span>
+<span id="lst-m5-c03-c01-6"><a href="#lst-m5-c03-c01-6" aria-hidden="true" tabindex="-1"></a>    L,</span>
+<span id="lst-m5-c03-c01-7"><a href="#lst-m5-c03-c01-7" aria-hidden="true" tabindex="-1"></a>    T,</span>
+<span id="lst-m5-c03-c01-8"><a href="#lst-m5-c03-c01-8" aria-hidden="true" tabindex="-1"></a>    is_policy <span class="op">=</span> <span class="va">True</span>,</span>
+<span id="lst-m5-c03-c01-9"><a href="#lst-m5-c03-c01-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="lst-m5-c03-c01-10"><a href="#lst-m5-c03-c01-10" aria-hidden="true" tabindex="-1"></a>ref_lp, _, _ <span class="op">=</span> aligned_logps_values(</span>
+<span id="lst-m5-c03-c01-11"><a href="#lst-m5-c03-c01-11" aria-hidden="true" tabindex="-1"></a>    ref,</span>
+<span id="lst-m5-c03-c01-12"><a href="#lst-m5-c03-c01-12" aria-hidden="true" tabindex="-1"></a>    seq,</span>
+<span id="lst-m5-c03-c01-13"><a href="#lst-m5-c03-c01-13" aria-hidden="true" tabindex="-1"></a>    L,</span>
+<span id="lst-m5-c03-c01-14"><a href="#lst-m5-c03-c01-14" aria-hidden="true" tabindex="-1"></a>    T,</span>
+<span id="lst-m5-c03-c01-15"><a href="#lst-m5-c03-c01-15" aria-hidden="true" tabindex="-1"></a>    is_policy <span class="op">=</span> <span class="va">False</span>,</span>
+<span id="lst-m5-c03-c01-16"><a href="#lst-m5-c03-c01-16" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="lst-m5-c03-c01-17"><a href="#lst-m5-c03-c01-17" aria-hidden="true" tabindex="-1"></a>kl_tok          <span class="op">=</span> old_lp <span class="op">-</span> ref_lp                  <span class="co"># sampled-token shift: (B, T)</span></span>
+<span id="lst-m5-c03-c01-18"><a href="#lst-m5-c03-c01-18" aria-hidden="true" tabindex="-1"></a>terminal_reward <span class="op">=</span> reward_fn(texts)                 <span class="co"># completion score: (B,)</span></span>
+<span id="lst-m5-c03-c01-19"><a href="#lst-m5-c03-c01-19" aria-hidden="true" tabindex="-1"></a>rew             <span class="op">=</span> build_rewards(terminal_reward, kl_tok, cfg.kl_coef)</span>
+<span id="lst-m5-c03-c01-20"><a href="#lst-m5-c03-c01-20" aria-hidden="true" tabindex="-1"></a>adv, ret        <span class="op">=</span> compute_gae(rew, old_V, cfg.gamma, cfg.gae_lambda)</span>
+<span id="lst-m5-c03-c01-21"><a href="#lst-m5-c03-c01-21" aria-hidden="true" tabindex="-1"></a>stats           <span class="op">=</span> ppo_update(</span>
+<span id="lst-m5-c03-c01-22"><a href="#lst-m5-c03-c01-22" aria-hidden="true" tabindex="-1"></a>    seq, L, T, old_lp, old_V, adv, ret, cfg, optimizer</span>
+<span id="lst-m5-c03-c01-23"><a href="#lst-m5-c03-c01-23" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The alignment step matters: logits at one absolute position predict the next token, so <code>aligned_logps_values</code> must select the <span class="math inline">\(T\)</span> response-token predictions rather than prompt tokens or one-token-shifted targets.</p>
+<p>The returned tensors have four distinct jobs.</p>
+<ul>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Policy/reference statistics:</strong></span> <code>old_lp</code> and <code>ref_lp</code> supply the gathered policy and reference log probabilities in the KL-shaped reward.</p></li>
+<li><p><strong>Token rewards:</strong> <code>rew</code> is the token reward sequence after terminal reward and the sampled log-ratio penalty are combined.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Critic, return, and advantage:</strong></span> <code>old_V</code> is the critic value used by the temporal-difference residual, <code>adv</code> is the resulting GAE advantage, and <code>ret</code> is the return target used by the value loss.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Policy update:</strong></span> <code>ppo_update</code> applies the clipped surrogate to stored old-policy statistics. PyTorch owns tensors, automatic differentiation, and the <code>AdamW</code> update; notebook-local functions own the explicit PPO bookkeeping.</p></li>
+</ul>
+<p>The supplied notebook includes a saved numerical run, so the tensor names can be connected to actual values rather than only symbolic shapes. It used <code>torch.manual_seed(0)</code> on CUDA with GPT-2 and the recorded default configuration: batch size 16, 16 generated tokens, temperature 1.0, <span class="math inline">\(\gamma=1.0\)</span>, <span class="math inline">\(\lambda=0.95\)</span>, KL coefficient 0.05, clip width 0.2, four PPO epochs, and learning rate <span class="math inline">\(2\times10^{-5}\)</span>. Before the first update, the policy and reference were identical and the sampled completion received task reward 0.0. The first three saved token rows were:</p>
+<div id="tbl-m5-c03-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m5-c03-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;3.1: Stored token statistics before the first PPO update.
+</figcaption>
+<div aria-describedby="tbl-m5-c03-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+<col style="width: 14%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Token</th>
+<th><code>old_lp</code></th>
+<th><code>ref_lp</code></th>
+<th>Sampled KL</th>
+<th>Critic value</th>
+<th>Advantage</th>
+<th>Return</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>thought</code></td>
+<td>-3.148</td>
+<td>-3.148</td>
+<td>0.000</td>
+<td>0.296</td>
+<td>-0.165</td>
+<td>0.131</td>
+</tr>
+<tr class="even">
+<td><code>:</code></td>
+<td>-3.544</td>
+<td>-3.544</td>
+<td>0.000</td>
+<td>0.233</td>
+<td>-0.108</td>
+<td>0.125</td>
+</tr>
+<tr class="odd">
+<td><code>'</code></td>
+<td>-0.932</td>
+<td>-0.932</td>
+<td>0.000</td>
+<td>0.265</td>
+<td>-0.147</td>
+<td>0.118</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>This trace comes from <code>sources/materials/ppo_glassbox_llm_final_vitalyrubinovich.ipynb</code>, saved output for the single-step glass-box cell. Equal old and reference log probabilities give zero sampled KL before training. The critic values are not zero because the value head is initialized separately; GAE combines those predictions with the zero task reward and produces the shown advantages and returns. Exact sampled text can change on another device or software version even with the same seed, so these numbers are evidence from the supplied run, not a promised cross-platform output.</p>
+<p>Five settings control the update; each has a direct diagnostic.</p>
+<ul>
+<li><p><strong>Clip fraction (<code>clipfrac</code>):</strong> In the supplied notebook, the fraction of sampled-token ratios outside <span class="math inline">\([1-\epsilon,1+\epsilon]\)</span>. A high value means many ratios crossed the configured interval; it does not mean every crossing changed the <code>min</code> term for its advantage sign, and it does not mean the probabilities themselves were clipped.</p></li>
+<li><p><strong>Clip <span class="math inline">\(\epsilon\)</span>:</strong> Watch clip fraction and stability. A larger <span class="math inline">\(\epsilon\)</span> leaves more sampled surrogate terms unclipped before their objective benefit becomes flat.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>GAE <span class="math inline">\(\lambda\)</span>:</strong></span> Watch reward-curve noise. It selects the bias-variance trade-off in the advantage estimator.</p></li>
+<li><p><strong>KL coefficient <span class="math inline">\(\beta\)</span>:</strong> Watch distance from the reference. Its useful value must be scaled to reward magnitude and is not portable across reward functions.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>PPO epochs:</strong></span> Watch <code>clipfrac</code> after reuse. Many epochs reuse stale rollout data and can overfit one batch.</p></li>
+<li><p><strong>Value head:</strong> Watch value loss and explained variance. The critic provides a learned baseline; a poorly fitted critic can make advantages less reliable.</p></li>
+</ul>
+<p>The retained tensors stay in update order. PPO keeps old-policy statistics and a frozen reference while optimizing the current policy.</p>
+<div id="fig-m5-c03-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Prompt and sampled response tokens are reused by policy, reference, critic, reward, GAE, and clipped-objective calculations.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m5-c03-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m5-c03-f03.png" class="img-fluid figure-img" style="width:6.35in" alt="Prompt and sampled response tokens are reused by policy, reference, critic, reward, GAE, and clipped-objective calculations.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m5-c03-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3.3: Stored tokens align PPO statistics.
+</figcaption>
+</figure>
+</div>
+<p>The rollout branch generates the response tokens. The box labeled “Reference + critic” groups two distinct roles: the frozen reference returns token log probabilities, while the critic returns value estimates. Both evaluate the identical sampled tokens, so these outputs align with the actor statistics used by the clipped objective.</p>
+<ul>
+<li><p><strong>Reward hacking:</strong> A learned reward model is an approximation to human preference. Once optimized aggressively, the policy may discover text patterns that receive high score but are unhelpful: verbose filler, reward-model artifacts, or superficial safety language. KL regularization reduces distribution shift but does not prove that the reward is correct. Evaluation must include held-out human preference, adversarial prompts, and qualitative inspection.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>PPO reproducibility and acceptance record:</strong></span> Keep the evidence needed to reconstruct a checkpoint change and challenge the failure modes that an ordinary reward curve can hide.</p></li>
+<li><p><strong>Checkpoint and rollout identity:</strong> Record every model version, prompt-split identifier, sampling setting, token count, and policy checkpoint that generated a retained batch.</p></li>
+<li><p><strong>Update measurements and cost:</strong> Report reward components, reference drift, clip fraction, advantage statistics, value loss, explained variance, generation and scoring time, optimizer time, peak memory, and generated-token volume.</p></li>
+<li><p><strong>Independent result:</strong> Attach held-out task and preference evaluation to the saved checkpoint rather than treating trainer reward as acceptance evidence.</p></li>
+<li><p><strong>Reward scale and reference drift:</strong> Perturb reward scales to detect dominating components, and inspect sampled plus held-out KL so an average does not hide extreme prompt-level changes.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Critic reliability:</strong></span> Compare value predictions with realized returns and inspect explained variance before trusting the resulting advantages.</p></li>
+<li><p><strong>Evaluation separation:</strong> Keep reward-model pairs, rollout prompts, verifier examples, and final evaluation prompts separated by task identity.</p></li>
+</ul>
+
+
+</section>
+
+<!-- module5-publication-footer:start -->
+<footer class="module5-publication-footer" aria-label="Publication details" style="margin-top: 2rem; padding-top: .75rem; border-top: 1px solid #d9dee3; color: #5d6876; font-size: .875rem;">
+  <p style="margin: 0;">Compiled by: Vitaly Rubinovich<br>Edition date: 2026-09-05 22:31 Asia/Jerusalem</p>
+</footer>
+<!-- module5-publication-footer:end -->
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../parts/part-m5-p02.html" class="pagination-link" aria-label="Part II — Learning from new attempts">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part II — Learning from new attempts</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m5-c04.html" class="pagination-link" aria-label="GRPO and DAPO for reasoning">
+        <span class="nav-page-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">GRPO and DAPO for reasoning</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
