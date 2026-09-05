@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -338,21 +338,21 @@ window.Quarto = {
 
 
 <p>How can one training job use many GPUs without turning communication, scheduling, or failure into the real bottleneck? Chapter 1 defined the versioned artifacts and software layers around a run. Single-GPU limits lead to network and process identities, then to recoverable distributed execution and measurement.</p>
-<p>The three panels move from the limits of an individual accelerator to coordinated workers, then to the recovery and efficiency measures that make a long run practical.</p>
+<p>The four stages move from one accelerator’s memory limit to synchronized workers, cluster admission, recoverable checkpoints, and measurements that reveal the remaining bottleneck.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter map</strong></p>
-<p><strong>2.1–2.2 Memory Limits &amp; Interconnects:</strong> Analyze single-GPU memory bounds across weights, optimizer states, and activations, and evaluate PCIe, NVLink, and InfiniBand network hierarchies.</p>
-<p><strong>2.3–2.4 Gradient Synchronization &amp; State Sharding:</strong> Trace PyTorch DDP ring all-reduce communication, and compare tensor and pipeline parallelism with Zero Redundancy Optimizer (ZeRO) and Fully Sharded Data Parallel (FSDP) model-state sharding.</p>
-<p><strong>2.5–2.6 Worker Coordination &amp; Gang Scheduling:</strong> Manage process group rendezvous, world size, and ranks, and configure Kubernetes gang scheduling and topology-aware pod placement.</p>
-<p><strong>2.7–2.8 Fault Recovery &amp; Hardware Efficiency:</strong> Structure distributed checkpoint recovery and atomic resumption, and measure Model FLOPs Utilization (MFU) to diagnose cluster stragglers.</p>
+<p><strong>2.1–2.2 Memory limits determine the communication path:</strong> Parameter, gradient, optimizer, activation, and temporary memory identify what must be split and which device links will carry the resulting traffic.</p>
+<p><strong>2.3–2.4 Synchronization and sharding divide different work:</strong> Distributed Data Parallel (DDP) synchronizes replicated gradients, while Fully Sharded Data Parallel (FSDP), ZeRO-3, tensor, pipeline, context, and expert parallelism split model state or computation.</p>
+<p><strong>2.5–2.6 Group formation and cluster admission start the complete job:</strong> Rendezvous assigns process identities, while the scheduler reserves and places the full worker group.</p>
+<p><strong>2.7–2.8 Recovery and measurement make long runs practical:</strong> Verified checkpoint publication limits lost work, while Model FLOPs Utilization (MFU), timelines, and counters locate wasted accelerator time.</p>
 </div>
-<div id="fig-m3-c02-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled Chapter 2 map links device memory limits to distributed workers, communication, scheduling, checkpoints, and efficiency measurements.">
+<div id="fig-m3-c02-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled four-stage Chapter 2 map shows how device limits become coordinated workers, recoverable runs, and measurable training efficiency.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c02-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m3-c02-f01.png" class="img-fluid figure-img" alt="A labelled Chapter 2 map links device memory limits to distributed workers, communication, scheduling, checkpoints, and efficiency measurements.">
+<img src="../assets/fig-m3-c02-f01.png" class="img-fluid figure-img" alt="A labelled four-stage Chapter 2 map shows how device limits become coordinated workers, recoverable runs, and measurable training efficiency.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2.1: How distributed training fits model state to coordinated hardware. The three panels move from the limits of an individual accelerator to coordinated workers, then to the recovery and efficiency measures that make a long run practical.
+Figure&nbsp;2.1: The four stages connect device-memory accounting to gradient synchronization and sharding, worker rendezvous and gang admission, then durable checkpoint recovery and measurements that expose the remaining bottleneck.
 </figcaption>
 </figure>
 </div>
@@ -364,6 +364,7 @@ Figure&nbsp;2.1: How distributed training fits model state to coordinated hardwa
 <p><span id="eq-m3-c02-e01"><span class="math display">\[
 M_{\mathrm{train}} ≈ P\left(b_w + b_g + b_{\mathrm{master}} + b_{\mathrm{opt}}\right) + A
 \tag{2.1}\]</span></span></p>
+<p>Here <span class="math inline">\(M_{\mathrm{train}}\)</span> is the approximate training memory, <span class="math inline">\(P\)</span> is the parameter count, <span class="math inline">\(b_w\)</span>, <span class="math inline">\(b_g\)</span>, <span class="math inline">\(b_{\mathrm{master}}\)</span>, and <span class="math inline">\(b_{\mathrm{opt}}\)</span> are bytes per parameter for weights, gradients, master weights, and optimizer state, and <span class="math inline">\(A\)</span> is activation and temporary-buffer memory. Framework buffers and allocator reserve are not included in this first estimate.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation: memory for an 8-billion-parameter Adam run</strong></p>
 <p><strong>Weights:</strong> Eight billion BF16 weights at 2 bytes each require 16 GB.</p>
@@ -380,7 +381,7 @@ M_{\mathrm{train}} ≈ P\left(b_w + b_g + b_{\mathrm{master}} + b_{\mathrm{opt}}
 <img src="../assets/fig-m3-c02-f02.png" class="img-fluid figure-img" alt="Distributed-training memory includes weights, gradients, master weights, optimizer state, and activations.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2.2: Distributed-training memory includes weights, gradients, master weights, optimizer state, and activations.
+Figure&nbsp;2.2: Persistent weights, gradients, master weights, and Adam state can exceed one accelerator before activation and temporary-buffer memory are added.
 </figcaption>
 </figure>
 </div>
@@ -450,10 +451,11 @@ Table&nbsp;2.1: Fabric scope constrains the placement of communication-heavy par
 <h2 data-number="2.3" class="anchored" data-anchor-id="sec-m3-c02-s03"><span class="header-section-number">2.3</span> Gradient synchronization in distributed training</h2>
 <p>The communication stack now has distinct layers. The simplest scaling baseline is a full model replica on each device, with one consistent update shared across replicas. Data sharding, local backpropagation, all-reduce, and optimizer stepping form the update sequence.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Distributed Data Parallel (DDP).</strong></span> a replicated-model strategy in which each process trains on a distinct batch shard and synchronizes gradients before applying the same optimizer update.</p>
-<p>A DDP process owns one model replica and usually one GPU. A <code>DistributedSampler</code> gives each rank a different sample subset. During backpropagation, DDP groups parameter gradients into buckets and launches asynchronous all-reduce operations as soon as a bucket is ready. Overlap hides some communication behind the remaining backward computation.</p>
+<p>A DDP process holds one model replica and usually uses one GPU. A <code>DistributedSampler</code> gives each rank a different sample subset. During backpropagation, DDP groups parameter gradients into buckets and launches asynchronous all-reduce operations as soon as a bucket is ready. Overlap hides some communication behind the remaining backward computation.</p>
 <p><span id="eq-m3-c02-e02"><span class="math display">\[
 g_{\mathrm{global}} = \frac{\sum_{r=1}^{N} g_r}{N}
 \tag{2.2}\]</span></span></p>
+<p>Here <span class="math inline">\(g_r\)</span> is the gradient contributed by rank <span class="math inline">\(r\)</span>, <span class="math inline">\(N\)</span> is the world size, and <span class="math inline">\(g_{\mathrm{global}}\)</span> is the synchronized gradient used by every replica. The simple mean gives each rank equal weight. It matches a per-example mean when every local batch has the same size and each local loss is mean-reduced. Unequal local batch sizes require weighting by example count, while unequal iteration counts also need an explicit DDP join or termination policy.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation: one gradient component across four ranks</strong></p>
 <p><strong>Local values:</strong> The same bucket component is 0.8, 1.2, 1.0, and 1.4 on ranks 0 through 3.</p>
@@ -466,6 +468,7 @@ g_{\mathrm{global}} = \frac{\sum_{r=1}^{N} g_r}{N}
 <p><span id="eq-m3-c02-e03"><span class="math display">\[
 B_{\mathrm{ring}} ≈ \frac{2 \cdot \left(N-1\right)}{N} \cdot G
 \tag{2.3}\]</span></span></p>
+<p>Here <span class="math inline">\(G\)</span> is the bucket size and <span class="math inline">\(N\)</span> is the number of ranks. The expression estimates bytes sent by each rank across the reduce-scatter and all-gather phases of a ring; each rank receives a similar volume, so it should not be read as total cluster traffic.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation: ring all-reduce traffic for eight ranks</strong></p>
 <p><strong>Gradient bucket:</strong> The synchronized bucket is 1 GB.</p>
@@ -480,32 +483,34 @@ B_{\mathrm{ring}} ≈ \frac{2 \cdot \left(N-1\right)}{N} \cdot G
 <img src="../assets/fig-m3-c02-f03.png" class="img-fluid figure-img" alt="Data parallelism replicates the model while each process consumes a different data shard.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2.3: Data parallelism replicates the model while each process consumes a different data shard.
+Figure&nbsp;2.3: Each data-parallel process holds a full model replica while the sampler partitions examples across ranks; this increases throughput rather than storing the full dataset on one GPU.
 </figcaption>
 </figure>
 </div>
+<p>The figure uses dataset size as its motivation. The useful distinction is different: the sampler partitions examples so the replicas perform different work, while DDP improves throughput only when a complete model replica already fits on each device.</p>
+<p>This abbreviated example assumes that each batch contains <code>(inputs, targets)</code> and that the application supplies <code>build_model</code>, <code>dataset</code>, <code>loss_fn</code>, the optimizer, and the loop limits. It is not directly runnable without that setup.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> One DDP process: device binding, data partition, gradient synchronization, and optimizer update.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c02-c01-1"><a href="#lst-m3-c02-c01-1" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c02-c01-2"><a href="#lst-m3-c02-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
-<span id="lst-m3-c02-c01-3"><a href="#lst-m3-c02-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m3-c02-c01-4"><a href="#lst-m3-c02-c01-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.distributed <span class="im">as</span> dist</span>
-<span id="lst-m3-c02-c01-5"><a href="#lst-m3-c02-c01-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.nn.parallel <span class="im">import</span> DistributedDataParallel <span class="im">as</span> DDP</span>
-<span id="lst-m3-c02-c01-6"><a href="#lst-m3-c02-c01-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.utils.data <span class="im">import</span> DataLoader, DistributedSampler</span>
-<span id="lst-m3-c02-c01-7"><a href="#lst-m3-c02-c01-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c02-c01-8"><a href="#lst-m3-c02-c01-8" aria-hidden="true" tabindex="-1"></a>dist.init_process_group(backend<span class="op">=</span><span class="st">"nccl"</span>)</span>
-<span id="lst-m3-c02-c01-9"><a href="#lst-m3-c02-c01-9" aria-hidden="true" tabindex="-1"></a>local_rank <span class="op">=</span> <span class="bu">int</span>(os.environ[<span class="st">"LOCAL_RANK"</span>])</span>
-<span id="lst-m3-c02-c01-10"><a href="#lst-m3-c02-c01-10" aria-hidden="true" tabindex="-1"></a>torch.cuda.set_device(local_rank)</span>
-<span id="lst-m3-c02-c01-11"><a href="#lst-m3-c02-c01-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c02-c01-12"><a href="#lst-m3-c02-c01-12" aria-hidden="true" tabindex="-1"></a>model   <span class="op">=</span> DDP(build_model().cuda(local_rank), device_ids<span class="op">=</span>[local_rank])</span>
-<span id="lst-m3-c02-c01-13"><a href="#lst-m3-c02-c01-13" aria-hidden="true" tabindex="-1"></a>sampler <span class="op">=</span> DistributedSampler(dataset, shuffle<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m3-c02-c01-14"><a href="#lst-m3-c02-c01-14" aria-hidden="true" tabindex="-1"></a>loader  <span class="op">=</span> DataLoader(dataset, sampler<span class="op">=</span>sampler, batch_size<span class="op">=</span>micro_batch)</span>
-<span id="lst-m3-c02-c01-15"><a href="#lst-m3-c02-c01-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c02-c01-16"><a href="#lst-m3-c02-c01-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(epochs):</span>
-<span id="lst-m3-c02-c01-17"><a href="#lst-m3-c02-c01-17" aria-hidden="true" tabindex="-1"></a>    sampler.set_epoch(epoch)</span>
-<span id="lst-m3-c02-c01-18"><a href="#lst-m3-c02-c01-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> batch <span class="kw">in</span> loader:</span>
-<span id="lst-m3-c02-c01-19"><a href="#lst-m3-c02-c01-19" aria-hidden="true" tabindex="-1"></a>        loss <span class="op">=</span> model(batch.cuda(local_rank))</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c02-c01-1"><a href="#lst-m3-c02-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="lst-m3-c02-c01-2"><a href="#lst-m3-c02-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m3-c02-c01-3"><a href="#lst-m3-c02-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.distributed <span class="im">as</span> dist</span>
+<span id="lst-m3-c02-c01-4"><a href="#lst-m3-c02-c01-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.nn.parallel <span class="im">import</span> DistributedDataParallel <span class="im">as</span> DDP</span>
+<span id="lst-m3-c02-c01-5"><a href="#lst-m3-c02-c01-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.utils.data <span class="im">import</span> DataLoader, DistributedSampler</span>
+<span id="lst-m3-c02-c01-6"><a href="#lst-m3-c02-c01-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c01-7"><a href="#lst-m3-c02-c01-7" aria-hidden="true" tabindex="-1"></a>dist.init_process_group(backend<span class="op">=</span><span class="st">"nccl"</span>)</span>
+<span id="lst-m3-c02-c01-8"><a href="#lst-m3-c02-c01-8" aria-hidden="true" tabindex="-1"></a>local_rank <span class="op">=</span> <span class="bu">int</span>(os.environ[<span class="st">"LOCAL_RANK"</span>])</span>
+<span id="lst-m3-c02-c01-9"><a href="#lst-m3-c02-c01-9" aria-hidden="true" tabindex="-1"></a>torch.cuda.set_device(local_rank)</span>
+<span id="lst-m3-c02-c01-10"><a href="#lst-m3-c02-c01-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c01-11"><a href="#lst-m3-c02-c01-11" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DDP(build_model().cuda(local_rank), device_ids<span class="op">=</span>[local_rank])</span>
+<span id="lst-m3-c02-c01-12"><a href="#lst-m3-c02-c01-12" aria-hidden="true" tabindex="-1"></a>sampler <span class="op">=</span> DistributedSampler(dataset, shuffle<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m3-c02-c01-13"><a href="#lst-m3-c02-c01-13" aria-hidden="true" tabindex="-1"></a>loader <span class="op">=</span> DataLoader(dataset, sampler<span class="op">=</span>sampler, batch_size<span class="op">=</span>micro_batch)</span>
+<span id="lst-m3-c02-c01-14"><a href="#lst-m3-c02-c01-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c01-15"><a href="#lst-m3-c02-c01-15" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(epochs):</span>
+<span id="lst-m3-c02-c01-16"><a href="#lst-m3-c02-c01-16" aria-hidden="true" tabindex="-1"></a>    sampler.set_epoch(epoch)</span>
+<span id="lst-m3-c02-c01-17"><a href="#lst-m3-c02-c01-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> inputs, targets <span class="kw">in</span> loader:</span>
+<span id="lst-m3-c02-c01-18"><a href="#lst-m3-c02-c01-18" aria-hidden="true" tabindex="-1"></a>        predictions <span class="op">=</span> model(inputs.cuda(local_rank))</span>
+<span id="lst-m3-c02-c01-19"><a href="#lst-m3-c02-c01-19" aria-hidden="true" tabindex="-1"></a>        loss <span class="op">=</span> loss_fn(predictions, targets.cuda(local_rank))</span>
 <span id="lst-m3-c02-c01-20"><a href="#lst-m3-c02-c01-20" aria-hidden="true" tabindex="-1"></a>        loss.backward()</span>
 <span id="lst-m3-c02-c01-21"><a href="#lst-m3-c02-c01-21" aria-hidden="true" tabindex="-1"></a>        optimizer.step()</span>
 <span id="lst-m3-c02-c01-22"><a href="#lst-m3-c02-c01-22" aria-hidden="true" tabindex="-1"></a>        optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -513,9 +518,10 @@ Figure&nbsp;2.3: Data parallelism replicates the model while each process consum
 <p><strong>Code walkthrough</strong></p>
 <p>Process group: <code>init_process_group</code> joins the rank to the NCCL collective group created by the launcher.</p>
 <p>Device assignment: <code>LOCAL_RANK</code> binds this process and its model replica to one GPU on the node.</p>
-<p>Data partition: <code>DistributedSampler</code> gives the rank a non-overlapping slice; <code>set_epoch</code> changes the deterministic shuffle between epochs.</p>
+<p>Data partition: <code>DistributedSampler</code> assigns each rank a shard; with its default padding behavior, duplicated samples can appear when the dataset size is not divisible by the world size. <code>set_epoch</code> changes the deterministic shuffle between epochs.</p>
+<p>Forward and loss: The model produces predictions from the device batch, and the application compares them with targets to obtain one scalar loss. The omitted setup must construct an optimizer over the model parameters before the loop.</p>
 <p>Synchronization point: <code>loss.backward()</code> activates DDP bucket hooks, and <code>optimizer.step()</code> consumes the reduced gradients after the required collectives finish.</p>
-<p>Result: Every rank computes on different examples but applies the same synchronized update.</p>
+<p>Result: Every rank computes on its assigned examples and applies the same synchronized update.</p>
 <p>Limits: The compact loop omits mixed precision, gradient accumulation, checkpointing, validation, failure handling, and a sampler configuration for uneven dataset sizes.</p>
 </div>
 </section>
@@ -600,10 +606,11 @@ Table&nbsp;2.2: Parallelism selection begins with the resource that does not fit
 <img src="../assets/fig-m3-c02-f04.png" class="img-fluid figure-img" alt="Hybrid parallelism places communication-heavy strategies according to network topology.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2.4: Hybrid parallelism places communication-heavy strategies according to network topology.
+Figure&nbsp;2.4: This example keeps frequent tensor-parallel collectives on fast local links and spreads wider groups across nodes; context parallelism refers to long token contexts, and exact group placement depends on the cluster fabric.
 </figcaption>
 </figure>
 </div>
+<p>The placements shown are one topology-aware example, not fixed requirements. “Context” refers to token or context length, and communication-heavy groups are kept on the fastest links available for the selected cluster.</p>
 </section>
 <section id="sec-m3-c02-s05" class="level2" data-number="2.5">
 <h2 data-number="2.5" class="anchored" data-anchor-id="sec-m3-c02-s05"><span class="header-section-number">2.5</span> Coordinating workers through rendezvous</h2>
@@ -619,20 +626,21 @@ Figure&nbsp;2.4: Hybrid parallelism places communication-heavy strategies accord
 <img src="../assets/fig-m3-c02-f05.png" class="img-fluid figure-img" alt="Global rank, node rank, and local rank identify every distributed process.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2.5: Global rank, node rank, and local rank identify every distributed process.
+Figure&nbsp;2.5: Local, node, and global ranks identify each process. Peer discovery uses init_method, the process-group deadline uses a separate timeout, and NCCL selects among the transports available on the cluster.
 </figcaption>
 </figure>
 </div>
+<p>In the initialization call, <code>init_method</code> selects how peers discover one another and <code>timeout</code> is a separate argument. NCCL is the recommended backend for NVIDIA GPUs and selects among the transports available on the cluster; it is not itself an NVLink or InfiniBand connection.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Two-node <code>torchrun</code> launch definition for sixteen training processes.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c02-c02-1"><a href="#lst-m3-c02-c02-1" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c02-c02-2"><a href="#lst-m3-c02-c02-2" aria-hidden="true" tabindex="-1"></a>torchrun <span class="op">\</span></span>
-<span id="lst-m3-c02-c02-3"><a href="#lst-m3-c02-c02-3" aria-hidden="true" tabindex="-1"></a>  <span class="op">--</span>nnodes<span class="op">=</span><span class="dv">2</span> <span class="op">\</span></span>
-<span id="lst-m3-c02-c02-4"><a href="#lst-m3-c02-c02-4" aria-hidden="true" tabindex="-1"></a>  <span class="op">--</span>nproc<span class="op">-</span>per<span class="op">-</span>node<span class="op">=</span><span class="dv">8</span> <span class="op">\</span></span>
-<span id="lst-m3-c02-c02-5"><a href="#lst-m3-c02-c02-5" aria-hidden="true" tabindex="-1"></a>  <span class="op">--</span>node<span class="op">-</span>rank<span class="op">=</span><span class="st">"$</span><span class="sc">{NODE_RANK}</span><span class="st">"</span> <span class="op">\</span></span>
-<span id="lst-m3-c02-c02-6"><a href="#lst-m3-c02-c02-6" aria-hidden="true" tabindex="-1"></a>  <span class="op">--</span>master<span class="op">-</span>addr<span class="op">=</span><span class="st">"$</span><span class="sc">{MASTER_ADDR}</span><span class="st">"</span> <span class="op">\</span></span>
-<span id="lst-m3-c02-c02-7"><a href="#lst-m3-c02-c02-7" aria-hidden="true" tabindex="-1"></a>  <span class="op">--</span>master<span class="op">-</span>port<span class="op">=</span><span class="dv">29500</span> <span class="op">\</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c02"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="lst-m3-c02-c02-1"><a href="#lst-m3-c02-c02-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c02-2"><a href="#lst-m3-c02-c02-2" aria-hidden="true" tabindex="-1"></a><span class="ex">torchrun</span> <span class="dt">\</span></span>
+<span id="lst-m3-c02-c02-3"><a href="#lst-m3-c02-c02-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--nnodes</span><span class="op">=</span>2 <span class="dt">\</span></span>
+<span id="lst-m3-c02-c02-4"><a href="#lst-m3-c02-c02-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">--nproc-per-node</span><span class="op">=</span>8 <span class="dt">\</span></span>
+<span id="lst-m3-c02-c02-5"><a href="#lst-m3-c02-c02-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">--node-rank</span><span class="op">=</span><span class="st">"</span><span class="va">${NODE_RANK}</span><span class="st">"</span> <span class="dt">\</span></span>
+<span id="lst-m3-c02-c02-6"><a href="#lst-m3-c02-c02-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">--master-addr</span><span class="op">=</span><span class="st">"</span><span class="va">${MASTER_ADDR}</span><span class="st">"</span> <span class="dt">\</span></span>
+<span id="lst-m3-c02-c02-7"><a href="#lst-m3-c02-c02-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">--master-port</span><span class="op">=</span>29500 <span class="dt">\</span></span>
 <span id="lst-m3-c02-c02-8"><a href="#lst-m3-c02-c02-8" aria-hidden="true" tabindex="-1"></a>  train.py</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Code walkthrough</strong></p>
@@ -659,44 +667,45 @@ Figure&nbsp;2.5: Global rank, node rank, and local rank identify every distribut
 <img src="../assets/fig-m3-c02-f06.png" class="img-fluid figure-img" alt="Kubernetes exposes GPUs as schedulable resources and uses labels, taints, and tolerations to place workloads.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2.6: Kubernetes exposes GPUs as schedulable resources and uses labels, taints, and tolerations to place workloads.
+Figure&nbsp;2.6: Kubernetes exposes GPUs through a device plugin and places pods with labels, taints, and tolerations. A GPU may appear only under limits or under equal request and limit values.
 </figcaption>
 </figure>
 </div>
+<p>Kubernetes permits either a GPU limit by itself, which is also used as the request, or equal GPU request and limit values. A request without a limit is not valid. The example below uses the equal request-and-limit form.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Kubernetes GPU resource declaration for two distributed worker pods.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c02-c03-1"><a href="#lst-m3-c02-c03-1" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c02-c03-2"><a href="#lst-m3-c02-c03-2" aria-hidden="true" tabindex="-1"></a>apiVersion: batch<span class="op">/</span>v1</span>
-<span id="lst-m3-c02-c03-3"><a href="#lst-m3-c02-c03-3" aria-hidden="true" tabindex="-1"></a>kind: Job</span>
-<span id="lst-m3-c02-c03-4"><a href="#lst-m3-c02-c03-4" aria-hidden="true" tabindex="-1"></a>metadata:</span>
-<span id="lst-m3-c02-c03-5"><a href="#lst-m3-c02-c03-5" aria-hidden="true" tabindex="-1"></a>  name: ddp<span class="op">-</span>worker</span>
-<span id="lst-m3-c02-c03-6"><a href="#lst-m3-c02-c03-6" aria-hidden="true" tabindex="-1"></a>spec:</span>
-<span id="lst-m3-c02-c03-7"><a href="#lst-m3-c02-c03-7" aria-hidden="true" tabindex="-1"></a>  completions: <span class="dv">2</span></span>
-<span id="lst-m3-c02-c03-8"><a href="#lst-m3-c02-c03-8" aria-hidden="true" tabindex="-1"></a>  parallelism: <span class="dv">2</span></span>
-<span id="lst-m3-c02-c03-9"><a href="#lst-m3-c02-c03-9" aria-hidden="true" tabindex="-1"></a>  template:</span>
-<span id="lst-m3-c02-c03-10"><a href="#lst-m3-c02-c03-10" aria-hidden="true" tabindex="-1"></a>    spec:</span>
-<span id="lst-m3-c02-c03-11"><a href="#lst-m3-c02-c03-11" aria-hidden="true" tabindex="-1"></a>      restartPolicy: Never</span>
-<span id="lst-m3-c02-c03-12"><a href="#lst-m3-c02-c03-12" aria-hidden="true" tabindex="-1"></a>      tolerations:</span>
-<span id="lst-m3-c02-c03-13"><a href="#lst-m3-c02-c03-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span> key: nvidia.com<span class="op">/</span>gpu</span>
-<span id="lst-m3-c02-c03-14"><a href="#lst-m3-c02-c03-14" aria-hidden="true" tabindex="-1"></a>          operator: Exists</span>
-<span id="lst-m3-c02-c03-15"><a href="#lst-m3-c02-c03-15" aria-hidden="true" tabindex="-1"></a>          effect: NoSchedule</span>
-<span id="lst-m3-c02-c03-16"><a href="#lst-m3-c02-c03-16" aria-hidden="true" tabindex="-1"></a>      affinity:</span>
-<span id="lst-m3-c02-c03-17"><a href="#lst-m3-c02-c03-17" aria-hidden="true" tabindex="-1"></a>        nodeAffinity:</span>
-<span id="lst-m3-c02-c03-18"><a href="#lst-m3-c02-c03-18" aria-hidden="true" tabindex="-1"></a>          requiredDuringSchedulingIgnoredDuringExecution:</span>
-<span id="lst-m3-c02-c03-19"><a href="#lst-m3-c02-c03-19" aria-hidden="true" tabindex="-1"></a>            nodeSelectorTerms:</span>
-<span id="lst-m3-c02-c03-20"><a href="#lst-m3-c02-c03-20" aria-hidden="true" tabindex="-1"></a>              <span class="op">-</span> matchExpressions:</span>
-<span id="lst-m3-c02-c03-21"><a href="#lst-m3-c02-c03-21" aria-hidden="true" tabindex="-1"></a>                  <span class="op">-</span> key: accelerator.fabric</span>
-<span id="lst-m3-c02-c03-22"><a href="#lst-m3-c02-c03-22" aria-hidden="true" tabindex="-1"></a>                    operator: In</span>
-<span id="lst-m3-c02-c03-23"><a href="#lst-m3-c02-c03-23" aria-hidden="true" tabindex="-1"></a>                    values: [nvlink]</span>
-<span id="lst-m3-c02-c03-24"><a href="#lst-m3-c02-c03-24" aria-hidden="true" tabindex="-1"></a>      containers:</span>
-<span id="lst-m3-c02-c03-25"><a href="#lst-m3-c02-c03-25" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span> name: trainer</span>
-<span id="lst-m3-c02-c03-26"><a href="#lst-m3-c02-c03-26" aria-hidden="true" tabindex="-1"></a>          image: registry.example<span class="op">/</span>trainer<span class="op">@</span>sha256:...</span>
-<span id="lst-m3-c02-c03-27"><a href="#lst-m3-c02-c03-27" aria-hidden="true" tabindex="-1"></a>          resources:</span>
-<span id="lst-m3-c02-c03-28"><a href="#lst-m3-c02-c03-28" aria-hidden="true" tabindex="-1"></a>            requests:</span>
-<span id="lst-m3-c02-c03-29"><a href="#lst-m3-c02-c03-29" aria-hidden="true" tabindex="-1"></a>              nvidia.com<span class="op">/</span>gpu: <span class="dv">8</span></span>
-<span id="lst-m3-c02-c03-30"><a href="#lst-m3-c02-c03-30" aria-hidden="true" tabindex="-1"></a>            limits:</span>
-<span id="lst-m3-c02-c03-31"><a href="#lst-m3-c02-c03-31" aria-hidden="true" tabindex="-1"></a>              nvidia.com<span class="op">/</span>gpu: <span class="dv">8</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c03"><pre class="sourceCode yaml code-with-copy"><code class="sourceCode yaml"><span id="lst-m3-c02-c03-1"><a href="#lst-m3-c02-c03-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c03-2"><a href="#lst-m3-c02-c03-2" aria-hidden="true" tabindex="-1"></a><span class="fu">apiVersion</span><span class="kw">:</span><span class="at"> batch/v1</span></span>
+<span id="lst-m3-c02-c03-3"><a href="#lst-m3-c02-c03-3" aria-hidden="true" tabindex="-1"></a><span class="fu">kind</span><span class="kw">:</span><span class="at"> Job</span></span>
+<span id="lst-m3-c02-c03-4"><a href="#lst-m3-c02-c03-4" aria-hidden="true" tabindex="-1"></a><span class="fu">metadata</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-5"><a href="#lst-m3-c02-c03-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">name</span><span class="kw">:</span><span class="at"> ddp-worker</span></span>
+<span id="lst-m3-c02-c03-6"><a href="#lst-m3-c02-c03-6" aria-hidden="true" tabindex="-1"></a><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-7"><a href="#lst-m3-c02-c03-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">completions</span><span class="kw">:</span><span class="at"> </span><span class="dv">2</span></span>
+<span id="lst-m3-c02-c03-8"><a href="#lst-m3-c02-c03-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">parallelism</span><span class="kw">:</span><span class="at"> </span><span class="dv">2</span></span>
+<span id="lst-m3-c02-c03-9"><a href="#lst-m3-c02-c03-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">template</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-10"><a href="#lst-m3-c02-c03-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-11"><a href="#lst-m3-c02-c03-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">restartPolicy</span><span class="kw">:</span><span class="at"> Never</span></span>
+<span id="lst-m3-c02-c03-12"><a href="#lst-m3-c02-c03-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">tolerations</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-13"><a href="#lst-m3-c02-c03-13" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">key</span><span class="kw">:</span><span class="at"> nvidia.com/gpu</span></span>
+<span id="lst-m3-c02-c03-14"><a href="#lst-m3-c02-c03-14" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">operator</span><span class="kw">:</span><span class="at"> Exists</span></span>
+<span id="lst-m3-c02-c03-15"><a href="#lst-m3-c02-c03-15" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">effect</span><span class="kw">:</span><span class="at"> NoSchedule</span></span>
+<span id="lst-m3-c02-c03-16"><a href="#lst-m3-c02-c03-16" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">affinity</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-17"><a href="#lst-m3-c02-c03-17" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">nodeAffinity</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-18"><a href="#lst-m3-c02-c03-18" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">requiredDuringSchedulingIgnoredDuringExecution</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-19"><a href="#lst-m3-c02-c03-19" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">nodeSelectorTerms</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-20"><a href="#lst-m3-c02-c03-20" aria-hidden="true" tabindex="-1"></a><span class="at">              </span><span class="kw">-</span><span class="at"> </span><span class="fu">matchExpressions</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-21"><a href="#lst-m3-c02-c03-21" aria-hidden="true" tabindex="-1"></a><span class="at">                  </span><span class="kw">-</span><span class="at"> </span><span class="fu">key</span><span class="kw">:</span><span class="at"> accelerator.fabric</span></span>
+<span id="lst-m3-c02-c03-22"><a href="#lst-m3-c02-c03-22" aria-hidden="true" tabindex="-1"></a><span class="at">                    </span><span class="fu">operator</span><span class="kw">:</span><span class="at"> In</span></span>
+<span id="lst-m3-c02-c03-23"><a href="#lst-m3-c02-c03-23" aria-hidden="true" tabindex="-1"></a><span class="at">                    </span><span class="fu">values</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">nvlink</span><span class="kw">]</span></span>
+<span id="lst-m3-c02-c03-24"><a href="#lst-m3-c02-c03-24" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">containers</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-25"><a href="#lst-m3-c02-c03-25" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> trainer</span></span>
+<span id="lst-m3-c02-c03-26"><a href="#lst-m3-c02-c03-26" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">image</span><span class="kw">:</span><span class="at"> registry.example/trainer@sha256:...</span></span>
+<span id="lst-m3-c02-c03-27"><a href="#lst-m3-c02-c03-27" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">resources</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-28"><a href="#lst-m3-c02-c03-28" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">requests</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-29"><a href="#lst-m3-c02-c03-29" aria-hidden="true" tabindex="-1"></a><span class="at">              </span><span class="fu">nvidia.com/gpu</span><span class="kw">:</span><span class="at"> </span><span class="dv">8</span></span>
+<span id="lst-m3-c02-c03-30"><a href="#lst-m3-c02-c03-30" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">limits</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c03-31"><a href="#lst-m3-c02-c03-31" aria-hidden="true" tabindex="-1"></a><span class="at">              </span><span class="fu">nvidia.com/gpu</span><span class="kw">:</span><span class="at"> </span><span class="dv">8</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Code walkthrough</strong></p>
 <p>Replica state: <code>completions</code> and <code>parallelism</code> request two worker pods, but the base Job object does not give them distributed rank identities.</p>
@@ -710,25 +719,26 @@ Figure&nbsp;2.6: Kubernetes exposes GPUs as schedulable resources and uses label
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A gang-admission object declares that both workers and all sixteen GPUs form one scheduling unit.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c04"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c02-c04-1"><a href="#lst-m3-c02-c04-1" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c02-c04-2"><a href="#lst-m3-c02-c04-2" aria-hidden="true" tabindex="-1"></a>apiVersion: scheduling.volcano.sh<span class="op">/</span>v1beta1</span>
-<span id="lst-m3-c02-c04-3"><a href="#lst-m3-c02-c04-3" aria-hidden="true" tabindex="-1"></a>kind: PodGroup</span>
-<span id="lst-m3-c02-c04-4"><a href="#lst-m3-c02-c04-4" aria-hidden="true" tabindex="-1"></a>metadata:</span>
-<span id="lst-m3-c02-c04-5"><a href="#lst-m3-c02-c04-5" aria-hidden="true" tabindex="-1"></a>  name: ddp<span class="op">-</span>two<span class="op">-</span>node</span>
-<span id="lst-m3-c02-c04-6"><a href="#lst-m3-c02-c04-6" aria-hidden="true" tabindex="-1"></a>spec:</span>
-<span id="lst-m3-c02-c04-7"><a href="#lst-m3-c02-c04-7" aria-hidden="true" tabindex="-1"></a>  minMember: <span class="dv">2</span></span>
-<span id="lst-m3-c02-c04-8"><a href="#lst-m3-c02-c04-8" aria-hidden="true" tabindex="-1"></a>  minResources:</span>
-<span id="lst-m3-c02-c04-9"><a href="#lst-m3-c02-c04-9" aria-hidden="true" tabindex="-1"></a>    nvidia.com<span class="op">/</span>gpu: <span class="st">"16"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c02-c04"><pre class="sourceCode yaml code-with-copy"><code class="sourceCode yaml"><span id="lst-m3-c02-c04-1"><a href="#lst-m3-c02-c04-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c02-c04-2"><a href="#lst-m3-c02-c04-2" aria-hidden="true" tabindex="-1"></a><span class="fu">apiVersion</span><span class="kw">:</span><span class="at"> scheduling.volcano.sh/v1beta1</span></span>
+<span id="lst-m3-c02-c04-3"><a href="#lst-m3-c02-c04-3" aria-hidden="true" tabindex="-1"></a><span class="fu">kind</span><span class="kw">:</span><span class="at"> PodGroup</span></span>
+<span id="lst-m3-c02-c04-4"><a href="#lst-m3-c02-c04-4" aria-hidden="true" tabindex="-1"></a><span class="fu">metadata</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c04-5"><a href="#lst-m3-c02-c04-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">name</span><span class="kw">:</span><span class="at"> ddp-two-node</span></span>
+<span id="lst-m3-c02-c04-6"><a href="#lst-m3-c02-c04-6" aria-hidden="true" tabindex="-1"></a><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c04-7"><a href="#lst-m3-c02-c04-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">minMember</span><span class="kw">:</span><span class="at"> </span><span class="dv">2</span></span>
+<span id="lst-m3-c02-c04-8"><a href="#lst-m3-c02-c04-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">minResources</span><span class="kw">:</span></span>
+<span id="lst-m3-c02-c04-9"><a href="#lst-m3-c02-c04-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">nvidia.com/gpu</span><span class="kw">:</span><span class="at"> </span><span class="st">"16"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div id="fig-m3-c02-f07" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Gang scheduling prevents a distributed job from holding only part of its requested GPU set.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c02-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="../assets/fig-m3-c02-f07.png" class="img-fluid figure-img" alt="Gang scheduling prevents a distributed job from holding only part of its requested GPU set.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2.7: Gang scheduling prevents a distributed job from holding only part of its requested GPU set.
+Figure&nbsp;2.7: Gang admission prevents a partial worker start; without it, running workers can hold GPUs while waiting for peers until timeout, preemption, or cleanup releases the allocation.
 </figcaption>
 </figure>
 </div>
+<p>Partial admission can hold resources while the job makes no training progress. It is not an unavoidable deadlock: timeouts, preemption, queue policy, or cleanup can release the allocation. Gang scheduling prevents the partial-start condition by admitting the complete worker group together.</p>
 <p>Volcano provides HPC-style gang scheduling, while Kueue adds queue and quota management around the default Kubernetes scheduler. SkyPilot abstracts resource provisioning across clouds and clusters. Slurm provides mature queueing and accounting; Soperator runs the Slurm control plane on Kubernetes so Slurm manages jobs while Kubernetes manages pods and nodes.</p>
 </section>
 <section id="sec-m3-c02-s07" class="level2" data-number="2.7">
@@ -743,11 +753,11 @@ Figure&nbsp;2.7: Gang scheduling prevents a distributed job from holding only pa
 <img src="../assets/fig-m3-c02-f08.png" class="img-fluid figure-img" alt="Recovery objectives determine checkpoint frequency, layout, and asynchronous persistence.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f08-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2.8: Recovery objectives determine checkpoint frequency, layout, and asynchronous persistence.
+Figure&nbsp;2.8: Host-memory or local-disk staging shortens the training pause but does not survive node loss. Durable publication completes recovery protection, and compatible distributed formats can be reshaped when the restored world size changes.
 </figcaption>
 </figure>
 </div>
-<p>A fast path writes shards to host memory or local NVMe, returns GPU control quickly, and copies asynchronously to shared or object storage. Local media minimizes the pause but is not durable; the node-loss case is covered only after the background copy completes.</p>
+<p>A fast path writes shards to host memory or local NVMe, returns GPU control quickly, and copies asynchronously to shared or object storage. Host-memory staging can support process-only recovery while the node survives, but it is lost with that node. Local media minimizes the pause but is not a durable node-loss recovery point until the background copy commits a verified generation to shared or object storage. A distributed checkpoint loader may reshard a compatible format when the restored world size differs; identical topology is not a universal requirement.</p>
 <p>A checkpoint becomes restorable through an ordered publication path:</p>
 <ol type="1">
 <li><strong>Write a temporary generation.</strong> Every rank writes its shard under a generation-specific temporary prefix; the live restore pointer remains unchanged.</li>
@@ -758,11 +768,11 @@ Figure&nbsp;2.8: Recovery objectives determine checkpoint frequency, layout, and
 </ol>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation: checkpoint interval from expected lost work</strong></p>
-<p><strong>Run cost:</strong> A 64-GPU job costs $180 per GPU-hour, or $11,520 per wall-clock hour.</p>
+<p><strong>Assumed run cost:</strong> At an all-in rate of $180 per GPU-hour, a 64-GPU job costs $11,520 per wall-clock hour.</p>
 <p><strong>Allowed average lost work:</strong> The team accepts at most 15 minutes on average.</p>
 <p><strong>Periodic-failure assumption:</strong> A failure is equally likely within one checkpoint interval, so average lost work is approximately half the interval.</p>
 <p><strong>Interval:</strong> To keep the average at 15 minutes, checkpoint every 30 minutes.</p>
-<p><strong>I/O check:</strong> If a synchronous checkpoint pauses GPUs for 4 minutes, 13.3% of time is lost to checkpointing; asynchronous persistence is required.</p>
+<p><strong>I/O check:</strong> If 30 minutes is the start-to-start checkpoint period and includes a 4-minute synchronous pause, checkpointing consumes 4/30 = 13.3% of wall time. If 30 minutes instead means useful work between pauses, the fraction is 4/34 = 11.8%. The interval definition therefore changes the reported overhead.</p>
 <p><strong>Conclusion:</strong> Checkpoint frequency is an economic and recovery decision constrained by storage throughput.</p>
 </div>
 </section>
@@ -772,6 +782,7 @@ Figure&nbsp;2.8: Recovery objectives determine checkpoint frequency, layout, and
 <p><span id="eq-m3-c02-e04"><span class="math display">\[
 \mathrm{MFU} = \frac{F_{\mathrm{observed}}}{F_{\mathrm{peak}}}
 \tag{2.4}\]</span></span></p>
+<p>Here <span class="math inline">\(F_{\mathrm{observed}}\)</span> is the model arithmetic rate implied by measured token throughput and the workload’s arithmetic estimate, while <span class="math inline">\(F_{\mathrm{peak}}\)</span> is the combined device peak for the numerical precision used by the run.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation: MFU for an eight-GPU training run</strong></p>
 <p><strong>Observed work per token:</strong> For an illustrative model and training objective, the arithmetic estimate is 120 GFLOPs per processed token.</p>
@@ -794,7 +805,7 @@ Figure&nbsp;2.8: Recovery objectives determine checkpoint frequency, layout, and
 <img src="../assets/fig-m3-c02-f09.png" class="img-fluid figure-img" alt="Training efficiency combines throughput, utilization, recovery, and cost rather than one GPU-utilization number.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c02-f09-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2.9: Training efficiency combines throughput, utilization, recovery, and cost rather than one GPU-utilization number.
+Figure&nbsp;2.9: Throughput and Model FLOPs Utilization quantify useful model arithmetic; timelines, communication counters, and power or memory measurements identify why the remaining device capacity is unused.
 </figcaption>
 </figure>
 </div>
@@ -856,11 +867,9 @@ Table&nbsp;2.3: Distributed-training symptoms become useful when tied to specifi
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter 2 summary</strong></p>
-<p>Core mechanisms: PyTorch DDP ring all-reduce gradient synchronization; ZeRO-1/2/3 and FSDP model-state sharding; c10d rendezvous process groups; Kubernetes gang scheduling.</p>
-<p>Governing tradeoffs: All-reduce communication overhead vs.&nbsp;memory savings; sharding granularities vs.&nbsp;all-gather bandwidth saturation; MFU vs.&nbsp;cluster scale.</p>
-<p>Failure modes &amp; defenses: Atomic two-phase checkpoint validation; gang-scheduled pod coscheduling preventing partial-cluster deadlocks.</p>
+<p>DDP synchronizes gradients through a backend-selected collective when a full model replica fits on each device. FSDP, ZeRO-3, tensor, pipeline, context, and expert parallelism split different state or computation when memory or workload shape requires it. Rendezvous and gang admission form the complete worker group; a verified checkpoint publication path makes long runs recoverable. MFU measures the useful-arithmetic gap, while timelines and counters identify whether input, kernels, memory traffic, collectives, or imbalance caused it.</p>
 </div>
-<p>The healthy path is now complete: versioned inputs start as one allocation, each rank receives unique data, collectives produce consistent updates, checkpoints cross failure domains, and measurements show useful work. The next chapter changes the workload from synchronized training steps to independent user requests with persistent KV-cache state.</p>
+<p>The healthy path is now complete: versioned inputs start as one allocation, each rank processes its assigned sample stream, collectives produce consistent updates, checkpoints cross failure domains, and measurements show useful work. The next chapter changes the workload from synchronized training steps to independent user requests with persistent KV-cache state.</p>
 
 
 </section>
