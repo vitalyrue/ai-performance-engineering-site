@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>7&nbsp; Training and Precision – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../chapters/ch-m4-c08.html" rel="next">
+<link href="../parts/part-ii.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: Training and Inference Workloads</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c07.html"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Training and Precision</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Advanced LLM Performance Engineering</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Advanced LLM Performance Engineering</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m4-index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction and Learning Path</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-i.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: Fundamentals</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">LLM Workloads and Performance Limits</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">GPU Hardware and Memory</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Software to CUDA</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Triton and Custom Kernels</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Performance Models and Profiling</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c06.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Compilation and Runtime</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-ii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: Training and Inference Workloads</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c07.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Training and Precision</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Inference Workloads</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Decode and KV Cache</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Serving Engines</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Performance Experiments</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-iii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: Communication and Distributed Systems</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">GPU Communication</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Distributed Training and Serving</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-a.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Reference Material</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-b.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Lists of Figures and Tables</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m4-c07-s01" id="toc-sec-m4-c07-s01" class="nav-link active" data-scroll-target="#sec-m4-c07-s01"><span class="header-section-number">7.1</span> Training step time and throughput</a></li>
+  <li><a href="#sec-m4-c07-s02" id="toc-sec-m4-c07-s02" class="nav-link" data-scroll-target="#sec-m4-c07-s02"><span class="header-section-number">7.2</span> Training state and memory</a></li>
+  <li><a href="#sec-m4-c07-s03" id="toc-sec-m4-c07-s03" class="nav-link" data-scroll-target="#sec-m4-c07-s03"><span class="header-section-number">7.3</span> Feeding data and applying updates</a></li>
+  <li><a href="#sec-m4-c07-s04" id="toc-sec-m4-c07-s04" class="nav-link" data-scroll-target="#sec-m4-c07-s04"><span class="header-section-number">7.4</span> Precision formats and PyTorch backend controls</a></li>
+  <li><a href="#sec-m4-c07-s05" id="toc-sec-m4-c07-s05" class="nav-link" data-scroll-target="#sec-m4-c07-s05"><span class="header-section-number">7.5</span> Deployment quantization</a></li>
+  <li><a href="#sec-m4-c07-s06" id="toc-sec-m4-c07-s06" class="nav-link" data-scroll-target="#sec-m4-c07-s06"><span class="header-section-number">7.6</span> Quantization methods and libraries</a>
+  <ul class="collapse">
+  <li><a href="#sec-m4-c07-s07" id="toc-sec-m4-c07-s07" class="nav-link" data-scroll-target="#sec-m4-c07-s07"><span class="header-section-number">7.6.1</span> Quantization libraries and kernel support</a></li>
+  </ul></li>
+  <li><a href="#sec-m4-c07-s08" id="toc-sec-m4-c07-s08" class="nav-link" data-scroll-target="#sec-m4-c07-s08"><span class="header-section-number">7.7</span> Calibration and deployment</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: Training and Inference Workloads</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c07.html"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Training and Precision</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m4-c07" class="quarto-section-identifier"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Training and Precision</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Analyze training step time, memory scaling, mixed precision, and post-training quantization.</p>
+<p>The earlier chapters established how one GPU receives work, moves tensor data, and exposes compute, memory, and launch limits. Training applies those mechanisms to a repeated parameter-update step whose live state includes activations, gradients, optimizer buffers, and the parameters being changed.</p>
+<p>Two precision questions must remain separate. Training precision controls forward, backward, accumulation, and optimizer updates while the model is learning. Deployment quantization changes how a trained model stores or executes selected tensors during inference; quantization-aware training is a bridge because it trains against simulated deployment error.</p>
+<p>A complete training analysis follows step time, live state, input delivery, optimizer work, and numerical precision in execution order. Deployment analysis then adds post-training quantization, quantization-aware training, calibration, compact formats, and the kernel support required for a smaller representation to improve performance.</p>
+<p>A training step reads parameters and input data, saves selected activations for backward propagation, produces gradients, and updates parameters with optimizer state.</p>
+<div id="fig-m4-c07-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A training step connects input and parameters to forward activations and loss, backward gradients, optimizer state, and updated parameters, alongside mixed-precision choices and accuracy checks.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c07-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c07-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="A training step connects input and parameters to forward activations and loss, backward gradients, optimizer state, and updated parameters, alongside mixed-precision choices and accuracy checks.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c07-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;7.1: Training performance depends on the phase, live state, and numerical format used by each operation.
+</figcaption>
+</figure>
+</div>
+<p>The diagram ties each memory object to the phase that uses it instead of adding unrelated peak percentages. Mixed precision can reduce traffic or use faster hardware paths, but some values may require wider accumulation or master state. The result must preserve stable learning and acceptable model quality, not only reduce step time.</p>
+<section id="sec-m4-c07-s01" class="level2" data-number="7.1">
+<h2 data-number="7.1" class="anchored" data-anchor-id="sec-m4-c07-s01"><span class="header-section-number">7.1</span> Training step time and throughput</h2>
+<p>Training performance is the cost of repeating one parameter-update step. A batch is prepared and transferred, the model runs forward, backward propagation produces gradients, and the optimizer updates parameters. The slowest region or the uncovered gap between regions limits how many tokens can be trained per second.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Training step:</strong></span> One repeated cycle that consumes a batch, computes a loss, propagates gradients, and updates model parameters.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Step time:</strong></span> Elapsed time from the start of one training step to the start of the next comparable step after warmup. It includes data delivery, GPU work, optimizer work, and any communication that remains exposed.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Global batch:</strong></span> All examples consumed before one optimizer update. On one GPU it is the local micro-batch times gradient-accumulation steps; across ranks it also includes the number of data-parallel replicas.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Training throughput:</strong></span> Useful training tokens or examples completed per second. It must be reported with global batch, sequence length, precision, and the quality or convergence condition.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Exposed tail:</strong></span> Work that remains after useful overlapping work has finished. For a single GPU it can be an input, optimizer, or synchronization delay; in distributed training it often includes unfinished communication.</li>
+</ul>
+<p><span id="eq-m4-c07-e01"><span class="math display">\[
+\text{training step time} \approx \text{data pipeline} + \text{input transfer} + \text{forward} + \text{backward} + \text{optimizer} + \text{exposed communication}
+\tag{7.1}\]</span></span></p>
+<p>The terms are measured durations, not mandatory serial barriers. Input transfer can overlap with prior GPU work, and later distributed sections show how communication can overlap backward propagation. The useful diagnosis is the part that remains on the critical path after available overlap is accounted for.</p>
+<p>The table below maps visible step symptoms to the first measurement that separates likely causes. It is a starting diagnosis, not a claim that one symptom has only one explanation.</p>
+<div id="tbl-m4-c07-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;7.1: Training-step symptoms and first measurements.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Visible step symptom</th>
+<th>Likely live object or gap</th>
+<th>First measurement</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>GPU idle before forward</td>
+<td>CPU batch preparation, storage reads, tokenization, or host-to-device transfer</td>
+<td>Timeline with data-loader work, copy events, and the first GPU kernel</td>
+</tr>
+<tr class="even">
+<td>Peak memory rises through forward</td>
+<td>Saved activations and temporary attention or workspace tensors</td>
+<td>Peak allocated/reserved memory plus activation-lifetime inspection</td>
+</tr>
+<tr class="odd">
+<td>Backward dominates step time</td>
+<td>Gradient kernels, activation reads, or unfused reductions</td>
+<td>Kernel timeline and arithmetic-intensity or memory-traffic counters</td>
+</tr>
+<tr class="even">
+<td>Update is unexpectedly expensive</td>
+<td>Optimizer moments, parameter writes, or many small update kernels</td>
+<td>Optimizer-region timing and memory-traffic profiling</td>
+</tr>
+<tr class="odd">
+<td>Step ends with a long wait</td>
+<td>Uncovered input, synchronization, or distributed communication</td>
+<td>Timeline showing the final CPU/GPU or rank-to-rank dependency</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The symptom table identifies where to measure first, but the limiting term is the work or gap that remains on the critical path after overlap. The next question is which parameters, activations, gradients, and optimizer buffers are live together and set the memory ceiling.</p>
+</section>
+<section id="sec-m4-c07-s02" class="level2" data-number="7.2">
+<h2 data-number="7.2" class="anchored" data-anchor-id="sec-m4-c07-s02"><span class="header-section-number">7.2</span> Training state and memory</h2>
+<p>Training usually keeps more live state than a weight-only inference baseline because a step holds gradients, optimizer buffers, and saved activations in addition to parameters. A serving process can still exceed that baseline when long-lived KV cache, request state, and workspaces consume substantial memory.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Parameters:</strong></span> Persistent learned model values read during forward and updated after backward propagation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradients:</strong></span> Derivatives of the loss with respect to parameters. They are produced by backward propagation and consumed by the optimizer.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Optimizer state:</strong></span> Extra update buffers such as Adam first and second moments. These often add more persistent bytes than the parameter tensor alone.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Saved activations:</strong></span> Forward intermediates retained because backward kernels need them to compute gradients. Their lifetime makes batch size and sequence length central training-memory controls.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Activation checkpointing:</strong></span> A memory technique that saves fewer forward intermediates and recomputes selected regions during backward. It reduces peak memory by trading it for extra computation and step time.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Low-Rank Adaptation (LoRA):</strong></span> A parameter-efficient fine-tuning method that freezes the base model and trains small low-rank adapter matrices. It reduces trainable parameter, gradient, and optimizer-state memory, but it does not remove activation or workspace memory.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Quantized Low-Rank Adaptation (QLoRA):</strong></span> A LoRA training path that stores the frozen base model in a quantized representation while training adapters through higher-precision compute where needed. It reduces frozen-weight storage, but depends on compatible dequantization kernels and still retains training activations.</li>
+</ul>
+<p>LoRA and QLoRA change which parameter tensors receive gradients; activation checkpointing changes which forward tensors remain live. They solve different parts of the memory budget and can be combined when both trainable state and saved activations are limiting the step.</p>
+<p>The first-order activation estimate separates linear saved tensors from a quadratic attention term. The coefficient 16 summarizes several projection, feed-forward, normalization, and activation tensors in this GPT-style approximation. The attention-storage coefficient records whether score-like tensors are materialized by a specific implementation:</p>
+<p><span id="eq-m4-c07-e02"><span class="math display">\[
+\text{activation elements per layer} \approx 16 B T d + k_{\text{attn}} B h T^2
+\tag{7.2}\]</span></span></p>
+<p><span id="eq-m4-c07-e03"><span class="math display">\[
+\text{activation bytes} \approx b L (16 B T d + k_{\text{attn}} B h T^2)
+\tag{7.3}\]</span></span></p>
+<p>Here B is the micro-batch size, T the sequence length, d the hidden dimension, h the attention-head count, b the bytes stored per element, L the layer count, and k_attn the implementation-dependent count of retained attention-score-like tensors. The formula exposes scaling; measure the actual retained tensors to determine the runtime’s peak memory.</p>
+<p>For a GPT-2 Large-style example, set <code>k_attn = 1</code> and use 36 layers, hidden dimension 1,280, 20 heads, sequence length 1,024, batch one, and two-byte activation storage. The linear and quadratic terms are then each about 21 million elements. Together they require about 84 MB decimal per layer and about 3.0 GB decimal across 36 layers in this first-order model. Increasing the batch to 32 raises the same estimate to about 96 GB decimal before optimizer state, workspaces, and allocator headroom.</p>
+<p>The following choices reduce different live objects. They should be selected from the memory account, not treated as interchangeable capacity fixes.</p>
+<div id="tbl-m4-c07-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;7.2: Training memory levers by the state object they reduce.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Memory lever</th>
+<th>Object reduced</th>
+<th>Main cost or condition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Activation checkpointing</td>
+<td>Saved activations</td>
+<td>Recomputes selected forward regions during backward and increases step compute</td>
+</tr>
+<tr class="even">
+<td>Smaller micro-batch with accumulation</td>
+<td>Per-step activations</td>
+<td>Needs more accumulation steps to preserve global batch; can change optimizer and scheduling behavior</td>
+</tr>
+<tr class="odd">
+<td>BF16/FP16 or supported FP8 path</td>
+<td>Stored activations, gradients, and selected state</td>
+<td>Requires stable numerical behavior, compatible kernels, and correct accumulation or scaling policy</td>
+</tr>
+<tr class="even">
+<td>FlashAttention-style attention</td>
+<td>Materialized attention-score-like tensors</td>
+<td>Applies only when the selected attention kernel and dimensions are supported</td>
+</tr>
+<tr class="odd">
+<td>State sharding</td>
+<td>Per-rank parameters, gradients, or optimizer state</td>
+<td>Introduces collectives and is developed after the communication foundations in Chapters 12 and 13</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Activation memory and model-state memory are separate constraints. A sharding strategy can make a model fit while activations still exceed capacity; checkpointing can lower activations while optimizer buffers remain the limiting state. A useful memory report names the largest live object at peak, not only total allocated bytes.</p>
+</section>
+<section id="sec-m4-c07-s03" class="level2" data-number="7.3">
+<h2 data-number="7.3" class="anchored" data-anchor-id="sec-m4-c07-s03"><span class="header-section-number">7.3</span> Feeding data and applying updates</h2>
+<p>Training-step speed depends on the complete path: the host prepares the next batch, copies move it to the GPU, forward and backward kernels execute, and the optimizer reads gradients and persistent state before the next step begins.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Data pipeline:</strong></span> The CPU- and storage-side path that reads examples, tokenizes or transforms them, assembles batches, and makes them available for GPU transfer.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Micro-batch:</strong></span> The examples processed by one forward/backward pass before optional gradient accumulation. Its tensor dimensions determine activation memory and kernel shape.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient accumulation:</strong></span> Runs several micro-batches, adds their gradients, and performs one optimizer update afterward. It raises the effective global batch while keeping per-micro-batch activation memory lower.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Fused optimizer:</strong></span> An optimizer implementation that combines update operations so parameters, gradients, and moment buffers are read and written with fewer launches or less intermediate traffic.</li>
+</ul>
+<p><span id="eq-m4-c07-e04"><span class="math display">\[
+\text{training tokens/s} = \frac{\text{global batch} \times \text{sequence length}}{\text{training step time}}
+\tag{7.4}\]</span></span></p>
+<p>This throughput measure is meaningful only after warmup and alongside the global batch, sequence length, precision, and convergence behavior. A change that also changes optimizer update frequency, the loss curve, or model quality creates a different training setup and must be evaluated separately.</p>
+<p>Follow the training step in execution order and check each stage before tuning the next one:</p>
+<ol type="1">
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prepare the batch:</strong></span> CPU workers, storage reads, tokenization, and collation should make the next batch ready before the current GPU step finishes.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Transfer to the GPU:</strong></span> Pinned host buffers, copy streams, and dependencies should permit overlap without serializing the step.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Run forward and backward:</strong></span> Use profiler evidence to separate compute throughput, HBM traffic, launch overhead, activation memory, and gradient work.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Update the parameters:</strong></span> Measure parameter, gradient, and optimizer-moment traffic separately from backward, and use fused update kernels where the runtime supports them.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Apply gradient accumulation:</strong></span> Preserve the intended effective batch while tracking gradient lifetime, memory use, update frequency, and synchronization.</li>
+</ol>
+<p>These are single-worker training controls. Once the full step is understood locally, Chapters 12 and 13 add the communication and state-placement costs of scaling the same step across GPUs and nodes.</p>
+</section>
+<section id="sec-m4-c07-s04" class="level2" data-number="7.4">
+<h2 data-number="7.4" class="anchored" data-anchor-id="sec-m4-c07-s04"><span class="header-section-number">7.4</span> Precision formats and PyTorch backend controls</h2>
+<p>A numeric format determines how values use their available bits. In training, the format must preserve a stable update while reducing memory traffic and using efficient matrix hardware. In deployment, the same format choice can instead target model footprint or inference bandwidth.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>FP32:</strong></span> 32-bit floating point. It is broadly supported and useful for numerically sensitive accumulation or reference results. The same tensor uses twice the storage of FP16/BF16; operation speed depends on the GPU, TensorFloat-32 policy, dimensions, and selected library kernel.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>TF32:</strong></span> TensorFloat-32, an NVIDIA tensor-core mode for many FP32 matrix operations. It keeps FP32-like exponent range but uses a reduced mantissa, so it can be much faster than strict FP32 while being less precise.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>FP16:</strong></span> 16-bit floating point with smaller range than FP32. It is common for training and inference on tensor cores, but training may require loss scaling or mixed-precision practices to avoid overflow/underflow problems.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>BF16:</strong></span> 16-bit Brain Floating Point. It has FP32-like exponent range with fewer mantissa bits, which often makes training more stable than FP16 while still reducing memory traffic relative to FP32.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>FP8:</strong></span> 8-bit floating-point families used on newer accelerators with scaling metadata and compatible kernels. Runtime support must handle scaling, accumulation, and selected operations.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>FP4 and block-scaled FP4:</strong></span> 4-bit floating formats often paired with one scale for a small block of values. Block scaling can preserve local dynamic range, but it adds scale loads, packing constraints, and hardware-specific kernel requirements.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>INT8:</strong></span> 8-bit integer representation commonly used for quantized inference weights and sometimes activations. It requires a mapping between integer codes and approximate real values, plus kernels that efficiently consume the representation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>INT4:</strong></span> 4-bit integer representation often used for weight-only inference compression. Quality and speed depend strongly on grouping, scales, dequantization cost, and kernel support.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Ternary weights:</strong></span> A specialized low-bit design whose weights take three values, such as negative, zero, and positive. It requires a model representation and kernel path designed for ternary values; an ordinary FP16 checkpoint needs conversion plus compatible kernels.</li>
+</ul>
+<p>PyTorch precision settings permit framework-owned backend choices for supported operations. The selected path still depends on the PyTorch version, GPU, dimensions, dtype, and operation-specific eligibility.</p>
+<div id="tbl-m4-c07-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;7.3: PyTorch precision controls and the conditions that determine their effect.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>PyTorch control</th>
+<th>Owner and scope</th>
+<th>Performance meaning</th>
+<th>Condition to verify</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>torch.backends.cuda.matmul.fp32_precision</code></td>
+<td>PyTorch CUDA matrix policy in newer releases</td>
+<td>Can permit reduced internal precision for supported FP32 matrix multiplication</td>
+<td>Version, GPU support, output accuracy, and actual dispatched kernel</td>
+</tr>
+<tr class="even">
+<td><code>torch.backends.cudnn.fp32_precision</code></td>
+<td>PyTorch cuDNN policy in newer releases</td>
+<td>Can permit reduced internal precision for supported cuDNN operations</td>
+<td>The operation is covered by cuDNN and the setting exists in the installed version</td>
+</tr>
+<tr class="odd">
+<td><code>torch.backends.cuda.matmul.allow_tf32</code></td>
+<td>Older PyTorch CUDA matrix flag</td>
+<td>Allows TensorFloat-32 for supported matrix multiplication</td>
+<td>Version-specific guidance and whether a newer control supersedes it</td>
+</tr>
+<tr class="even">
+<td><code>torch.set_float32_matmul_precision(...)</code></td>
+<td>PyTorch matrix-multiplication API</td>
+<td>Selects internal precision policy for float32 matrix multiplication</td>
+<td>It does not control convolution precision or model-quality requirements</td>
+</tr>
+<tr class="odd">
+<td>Scaled-dot-product attention backend policy</td>
+<td>PyTorch attention dispatch</td>
+<td>Permits flash, memory-efficient, or math attention paths</td>
+<td>Device, dtype, mask, head dimension, sequence dimensions, and backend availability</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The formats above describe available representations. The following update mechanisms keep reduced-precision compute paths numerically stable during training.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Mixed-precision training:</strong></span> Runs selected tensor operations and storage in reduced precision while retaining higher-precision accumulation or selected state where numerical range matters. The objective is lower traffic and faster matrix paths without destabilizing parameter updates.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>FP32 master weights:</strong></span> One common FP16 mixed-precision design keeps persistent FP32 parameters for optimizer updates and casts a reduced-precision compute copy for forward and backward kernels. BF16, fused optimizers, sharded state, and newer low-precision recipes can use different layouts.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient underflow:</strong></span> A gradient becomes too small for the selected format and rounds to zero. FP16 is especially susceptible because its representable range is narrower than FP32 or BF16.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Loss scaling:</strong></span> Multiplies the loss before backward propagation so small FP16 gradients are less likely to underflow, then divides the gradients by the same scale before the optimizer update. Dynamic loss scaling lowers the scale after overflow is detected.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Higher-precision accumulation:</strong></span> Accumulates reductions, dot products, or optimizer updates in a wider format than the input operands when the hardware and kernel path support it. This preserves numerical headroom while retaining much of the throughput benefit of reduced-precision inputs.</li>
+</ul>
+<p>The mixed-precision state path separates the representation used by fast matrix kernels from the representation that receives the parameter update. A common FP16 path keeps FP32 master weights, uses loss scaling, then unscales and checks gradients before the FP32 update. BF16 has a wider exponent range and often does not need loss scaling, although the optimizer and accumulation layout still depend on the selected training stack.</p>
+<p><span id="eq-m4-c07-e05"><span class="math display">\[
+\text{scaled loss} = S \times \text{loss}; \quad \text{unscaled gradient} = \frac{\text{scaled gradient}}{S}
+\tag{7.5}\]</span></span></p>
+<p>Here S is a positive loss scale. Scaling keeps small FP16 gradients representable during backward propagation; unscaling restores their intended magnitude before the optimizer updates the FP32 master weights. A finite-value check detects overflow before an invalid update is applied.</p>
+<p>FP8 is a family, not one format. The two common FP8 encodings trade exponent range against mantissa precision, and practical systems add scaling metadata so tensors with wider dynamic range can still be represented.</p>
+<div id="tbl-m4-c07-t04" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;7.4: FP8 format and scaling choices.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Format or scaling choice</th>
+<th>What it changes</th>
+<th>Performance effect</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>E4M3</td>
+<td>Four exponent bits and three mantissa bits</td>
+<td>More precision within a narrower range; often useful for values whose range can be controlled by scaling</td>
+</tr>
+<tr class="even">
+<td>E5M2</td>
+<td>Five exponent bits and two mantissa bits</td>
+<td>Wider dynamic range with less mantissa precision; useful when overflow risk is more important than small relative error</td>
+</tr>
+<tr class="odd">
+<td>Per-tensor scale</td>
+<td>One scale for a whole tensor</td>
+<td>Low metadata overhead but poor fit when channels or blocks have different ranges</td>
+</tr>
+<tr class="even">
+<td>Per-channel or per-block scale</td>
+<td>Separate scales for smaller groups</td>
+<td>Better local fit and fewer saturated values, but extra metadata and more complex kernels</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The same block-scaling idea appears in emerging FP4 paths. One implementation family can use a coarse power-of-two scale for each small block, while another uses a finer floating scale; the local trade-off is scale precision against scale storage and conversion cost. These formats are platform- and kernel-specific. Treat a reported FP4 throughput gain as a measured result for a named model, accelerator, and runtime path, not as a universal property of four-bit storage.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Performance condition</strong></p>
+<p>A smaller representation improves latency or throughput only when the runtime avoids moving the original wider values and uses an efficient hardware path for the selected format.</p>
+</div>
+<p>A format choice is therefore not accepted from bit width alone. Training must preserve stable updates and convergence, while deployment must preserve task quality and show that the compact representation remains on the measured kernel path.</p>
+</section>
+<section id="sec-m4-c07-s05" class="level2" data-number="7.5">
+<h2 data-number="7.5" class="anchored" data-anchor-id="sec-m4-c07-s05"><span class="header-section-number">7.5</span> Deployment quantization</h2>
+<p>Deployment quantization starts with an already-trained model and changes how selected tensors are represented at inference time. It is useful when the measured bottleneck is weight or cache bytes, memory capacity, or a hardware path that efficiently consumes the compact representation.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Weight quantization:</strong></span> Stores model parameters in fewer bits. It mainly targets persistent weight memory and repeated weight reads during inference.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Activation quantization:</strong></span> Stores or computes intermediate tensors in lower precision. It can reduce traffic between operations, but it is more sensitive to calibration because activation distributions vary with data.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>KV-cache quantization:</strong></span> Stores attention keys and values in fewer bits during serving. It targets the dynamic memory object that grows with active requests and context length.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Dequantization:</strong></span> Conversion from a compact representation back to a wider representation for computation. If dequantization is expensive or happens too early, the latency benefit can disappear.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Scale metadata:</strong></span> Extra values that map low-precision integers or floating formats back to approximate real values. Group size and scale placement affect both quality and kernel cost.</li>
+</ul>
+<p>Affine integer quantization stores an integer code q for a real value x. The scale s sets the size of a quantization step and the zero point z makes code zero represent a chosen real zero. The runtime later reconstructs an approximate wider value when a kernel needs it:</p>
+<p><span id="eq-m4-c07-e06"><span class="math display">\[
+q = \text{clip}\left(\text{round}\left(\frac{x}{s}\right) + z\right)
+\tag{7.6}\]</span></span></p>
+<p><span id="eq-m4-c07-e07"><span class="math display">\[
+\text{dequantized } x = s \times (q - z)
+\tag{7.7}\]</span></span></p>
+<p>The stored code is smaller, but the end-to-end gain depends on where the second mapping occurs. A fused low-bit matrix kernel can unpack codes, apply scales, and accumulate without first materializing a full FP16 or BF16 tensor. A separate early dequantization pass can give back much of the saved memory traffic.</p>
+<p>When a workload is memory-bound, reducing bytes moved can be more valuable than reducing arithmetic. Evaluate whether the hot path avoids reading, writing, or transferring the wider representation.</p>
+</section>
+<section id="sec-m4-c07-s06" class="level2" data-number="7.6">
+<h2 data-number="7.6" class="anchored" data-anchor-id="sec-m4-c07-s06"><span class="header-section-number">7.6</span> Quantization methods and libraries</h2>
+<p>Quantization can target three different tensor families, and each family belongs to a different part of the execution path. Weights are persistent model parameters read by linear layers. Activations are intermediate values produced while executing a request or training step. The key-value cache is serving-time attention state stored across decode steps. Each family requires compatible formats, kernels, scaling metadata, and quality validation.</p>
+<p>Weight-only quantization is usually the simplest inference path: it shrinks parameters while leaving activations in a higher precision. Activation quantization is more intrusive because activation distributions vary by layer, token, and workload. Key-value cache quantization targets long-context serving capacity and decode bandwidth, but it can affect attention quality and needs engine support.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>GPTQ:</strong></span> A post-training weight quantization method that uses approximate second-order information to choose quantized weights with lower reconstruction error than naive rounding. It is commonly used for low-bit inference checkpoints when compatible kernels exist.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>AWQ:</strong></span> Activation-aware Weight Quantization. It protects weight channels that are important for activations drawn from the expected workload, reducing quality loss for low-bit weight-only inference.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>FP8 and KV-cache quantization:</strong></span> FP8 targets lower-precision tensor and cache storage with hardware/runtime support. KV-cache quantization reduces long-context memory pressure but can introduce dequantization cost and attention-quality risk.</li>
+</ul>
+<p>AWQ and GPTQ are checkpoint and method families, not magic runtime guarantees. They reduce weight bandwidth and footprint only when the serving stack uses kernels that consume the quantized representation efficiently. If the runtime dequantizes into wider tensors too early or launches separate conversion kernels on every step, the latency gain can disappear even though the checkpoint is smaller.</p>
+<div id="tbl-m4-c07-t05" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;7.5: Quantization methods as performance techniques.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Mechanism</th>
+<th>What it helps</th>
+<th>What still must be checked</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>GPTQ</td>
+<td>Uses calibration data and approximate second-order reconstruction to choose low-bit weights with lower layer-output error than naive rounding</td>
+<td>Weight-only low-bit inference when parameter reads or model fit are the bottleneck</td>
+<td>Quantization time, compatible kernels, quality on prompts from the expected workload, and whether dequantization stays fused</td>
+</tr>
+<tr class="even">
+<td>AWQ</td>
+<td>Uses calibration activations from the expected workload to find important channels and protects them through activation-aware scaling before low-bit weight quantization</td>
+<td>Hardware-friendly weight-only inference where a small set of important channels drives error</td>
+<td>Calibration domain, packed-weight layout, kernel support, and whether activation outliers shift in production</td>
+</tr>
+<tr class="odd">
+<td>FP8 path</td>
+<td>Stores or computes selected tensors in FP8 with scaling factors and wider accumulation where required</td>
+<td>Bandwidth, tensor-core throughput, activation or KV-cache footprint on supported accelerators</td>
+<td>Scaling granularity, amax handling, supported operations, and numerical quality</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<section id="sec-m4-c07-s07" class="level3" data-number="7.6.1">
+<h3 data-number="7.6.1" class="anchored" data-anchor-id="sec-m4-c07-s07"><span class="header-section-number">7.6.1</span> Quantization libraries and kernel support</h3>
+<p>A quantization method becomes a runnable performance path through a library and compatible kernels. The implementation owns packing, scale metadata, conversion, supported devices, and the operations that can consume the compact representation.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>bitsandbytes:</strong></span> A low-precision training and inference library with quantized optimizer and weight paths. Its benefit depends on the selected model, format, GPU, and kernel support.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>torchao:</strong></span> PyTorch-native quantization and sparsity tooling that integrates supported low-precision representations with PyTorch models and execution paths.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Implementation support:</strong></span> The concrete combination of packed layout, scale granularity, dequantization strategy, matrix kernel, GPU architecture, and runtime version that turns a small checkpoint into a fast execution path.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measurement boundary:</strong></span> Checkpoint size demonstrates storage compression. End-to-end latency, throughput, peak memory, and quality demonstrate whether the implementation helps the workload.</li>
+</ul>
+<p>Use a library name as an implementation example rather than as the definition of quantization. GPTQ, AWQ, FP8, INT8, and INT4 describe methods or formats; bitsandbytes and torchao provide selected software paths for them.</p>
+</section>
+</section>
+<section id="sec-m4-c07-s08" class="level2" data-number="7.7">
+<h2 data-number="7.7" class="anchored" data-anchor-id="sec-m4-c07-s08"><span class="header-section-number">7.7</span> Calibration and deployment</h2>
+<p>Calibration chooses quantization parameters from tensors drawn from the expected workload. Hardware support determines whether the GPU and runtime have fast kernels for the chosen format. Both are required for a useful quantized deployment.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Calibration set:</strong></span> Prompts, activations, or layer inputs drawn from the expected workload and used to estimate value ranges.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Scale:</strong></span> A multiplier that maps low-precision stored values back to approximate real values. Scales can be per tensor, per channel, per group, or more specialized depending on the method.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Clipping range:</strong></span> A selected numeric range that limits outliers before quantization. Aggressive clipping can improve average reconstruction but harm rare important values.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-channel or per-group quantization:</strong></span> Uses separate scales for smaller tensor groups. This usually improves quality relative to one global scale, but increases metadata and kernel complexity.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Weight-only calibration:</strong></span> Focuses on parameter tensors and workload-derived activations used by methods such as GPTQ or AWQ.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Activation and KV-cache calibration:</strong></span> Targets runtime tensors whose distributions depend on prompts, sequence length, layer, and model behavior. Mistakes here can produce quality loss that a simple file-size check will not reveal.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Kernel support:</strong></span> The runtime must have kernels that consume the quantized representation efficiently. Otherwise it may dequantize to FP16/BF16 early and lose most of the expected speedup.</li>
+</ul>
+<p>Two deployment paths differ in when low-precision behavior enters the model lifecycle:</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Post-Training Quantization (PTQ):</strong></span> Converts an already-trained model for lower-precision deployment. A calibration run records weight or activation ranges from the expected workload, derives scales and zero points, packs the selected tensors, then checks quality and runtime behavior.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Quantization-Aware Training (QAT):</strong></span> Trains with fake quantization and dequantization operations in the forward pass, so model updates see an approximation of the error introduced by the deployed representation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Straight-Through Estimator (STE):</strong></span> A backward-pass approximation used for a rounding-like fake-quantization operation. It substitutes a usable derivative estimate so gradient-based optimization can continue.</li>
+</ul>
+<p>During QAT, the forward pass applies fake_quant(x), a simulation of the chosen deployment quantization. The true derivative of rounding is not useful for gradient descent, so the STE assigns the following backward rule in the supported range:</p>
+<p><span id="eq-m4-c07-e08"><span class="math display">\[
+\text{STE backward rule: } \frac{\partial \text{fake-quant}(x)}{\partial x} = 1
+\tag{7.8}\]</span></span></p>
+<p>Here ∂ fake_quant(x) / ∂x means the rate of change assigned to the fake-quantization operator with respect to its input x. The equality defines the surrogate gradient used by backward propagation; it does not claim that the true derivative of rounding is one.</p>
+<p>PTQ uses a short offline calibration step and may lose quality at low bit widths. QAT spends training compute to adapt the model to the deployed representation. Compare quality on requests drawn from the expected workload, then measure whether the selected engine uses the packed format in its hot kernels.</p>
+<p>Group size is the local granularity of a quantization scale. It is one of the clearest examples of a performance-quality trade-off: the smaller the group, the better the scale can fit local values, but the more scale metadata and indexing work the kernel must carry.</p>
+<p>Training-precision changes pass only when the update remains numerically stable and convergence is preserved. Deployment quantization passes only when task quality remains acceptable and the measured engine uses the compact representation to improve memory, latency, or throughput under the intended workload.</p>
+<div id="tbl-m4-c07-t06" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;7.6: Group quantization trade-offs.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Group-size choice</th>
+<th>Quality effect</th>
+<th>Runtime effect</th>
+<th>When it is attractive</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Small groups</td>
+<td>Better local reconstruction because fewer unrelated values share one scale</td>
+<td>More scale reads, more metadata, and more complex packing or dequantization</td>
+<td>Accuracy is fragile and kernels are designed for that grouping</td>
+</tr>
+<tr class="even">
+<td>Large groups</td>
+<td>More values share a scale, so outliers can waste quantization range</td>
+<td>Less metadata and simpler memory access</td>
+<td>Bandwidth or metadata overhead dominates and quality remains acceptable</td>
+</tr>
+<tr class="odd">
+<td>Per-channel groups</td>
+<td>Fits channel-level activation or weight ranges</td>
+<td>Works well when kernels can load scales along the channel dimension efficiently</td>
+<td>Linear layers where channel statistics are stable enough under calibration</td>
+</tr>
+<tr class="even">
+<td>Per-block groups</td>
+<td>Fits local blocks rather than whole tensors</td>
+<td>Can align with tile layouts, but only if the backend expects that layout</td>
+<td>FP8 or INT4 paths with block-scaled kernels</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Poor calibration can preserve speed while harming quality. Poor hardware or kernel support can preserve quality while failing to improve latency. A low-bit checkpoint without matching kernels is a storage optimization first, and only a latency optimization if the execution path actually uses the compact format on the hot path.</p>
+<p>Training changes parameters and therefore keeps gradients, saved activations, and optimizer state live. Inference fixes the parameters but introduces request state, prompt prefill, repeated token decode, and a growing KV cache. Chapter 8 builds that different workload and its user-visible metrics from the request path onward.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../parts/part-ii.html" class="pagination-link" aria-label="Part II: Training and Inference Workloads">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part II: Training and Inference Workloads</span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../chapters/ch-m4-c08.html" class="pagination-link" aria-label="Inference Workloads">
+        <span class="nav-page-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Inference Workloads</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

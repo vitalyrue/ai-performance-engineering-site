@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>6&nbsp; Compilation and Runtime – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../parts/part-ii.html" rel="next">
+<link href="../chapters/ch-m4-c05.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+
+<link rel="stylesheet" href="../styles.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-i.html">Part I: Fundamentals</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c06.html"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Compilation and Runtime</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Advanced LLM Performance Engineering</a> 
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Advanced LLM Performance Engineering</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m4-index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction and Learning Path</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-i.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part I: Fundamentals</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c01.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">LLM Workloads and Performance Limits</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c02.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">GPU Hardware and Memory</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c03.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Software to CUDA</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c04.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Triton and Custom Kernels</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c05.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Performance Models and Profiling</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c06.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Compilation and Runtime</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-ii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part II: Training and Inference Workloads</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c07.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">Training and Precision</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c08.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">Inference Workloads</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c09.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">Decode and KV Cache</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c10.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Serving Engines</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c11.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Performance Experiments</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a href="../parts/part-iii.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Part III: Communication and Distributed Systems</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c12.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">GPU Communication</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/ch-m4-c13.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Distributed Training and Serving</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-a.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Reference Material</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m4-app-b.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Lists of Figures and Tables</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m4-c06-s01" id="toc-sec-m4-c06-s01" class="nav-link active" data-scroll-target="#sec-m4-c06-s01"><span class="header-section-number">6.1</span> Sources of local runtime overhead</a></li>
+  <li><a href="#sec-m4-c06-s02" id="toc-sec-m4-c06-s02" class="nav-link" data-scroll-target="#sec-m4-c06-s02"><span class="header-section-number">6.2</span> torch.compile mental model</a></li>
+  <li><a href="#sec-m4-c06-s03" id="toc-sec-m4-c06-s03" class="nav-link" data-scroll-target="#sec-m4-c06-s03"><span class="header-section-number">6.3</span> Graph breaks</a></li>
+  <li><a href="#sec-m4-c06-s04" id="toc-sec-m4-c06-s04" class="nav-link" data-scroll-target="#sec-m4-c06-s04"><span class="header-section-number">6.4</span> TorchInductor and generated kernels</a></li>
+  <li><a href="#sec-m4-c06-s05" id="toc-sec-m4-c06-s05" class="nav-link" data-scroll-target="#sec-m4-c06-s05"><span class="header-section-number">6.5</span> CUDA Graph lifecycle</a></li>
+  <li><a href="#sec-m4-c06-s06" id="toc-sec-m4-c06-s06" class="nav-link" data-scroll-target="#sec-m4-c06-s06"><span class="header-section-number">6.6</span> Compile versus graph replay</a></li>
+  <li><a href="#sec-m4-c06-s07" id="toc-sec-m4-c06-s07" class="nav-link" data-scroll-target="#sec-m4-c06-s07"><span class="header-section-number">6.7</span> Graph break and CUDA Graph worked patterns</a>
+  <ul class="collapse">
+  <li><a href="#sec-m4-c06-s08" id="toc-sec-m4-c06-s08" class="nav-link" data-scroll-target="#sec-m4-c06-s08"><span class="header-section-number">6.7.1</span> Resolving graph breaks in RMS-normalization</a></li>
+  <li><a href="#sec-m4-c06-s09" id="toc-sec-m4-c06-s09" class="nav-link" data-scroll-target="#sec-m4-c06-s09"><span class="header-section-number">6.7.2</span> Manual CUDA Graph capture and replay recipe</a></li>
+  </ul></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-i.html">Part I: Fundamentals</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-c06.html"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Compilation and Runtime</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span id="sec-ch-m4-c06" class="quarto-section-identifier"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Compilation and Runtime</span></span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>Teach torch.compile, TorchInductor kernel fusion, and CUDA Graph capture and replay.</p>
+<p>Chapter 5 separated long device kernels from gaps created by Python dispatch, synchronization, and repeated launches. When those host-side gaps occupy a meaningful fraction of a stable step, changing the kernel arithmetic alone cannot recover the lost time.</p>
+<p>Compilation and graph replay address different parts of that delay. PyTorch compilation captures compatible tensor operations and may transform or fuse them; a CUDA Graph records a selected sequence of GPU operations and relaunches it with less host work. Neither mechanism makes an inefficient algorithm, memory access pattern, or collective communication path disappear.</p>
+<p>Eager execution provides the baseline. TorchDynamo then captures compatible tensor work under guards, while graph breaks leave other work eager. AOTAutograd and TorchInductor process captured regions. CUDA Graph warmup, fixed-address capture, and replay form a separate path whose benefit must be measured against compilation, replay, both, or neither.</p>
+<p>The compiler captures compatible tensor work, checks guards, handles graph breaks, and lowers captured regions into generated kernels or library calls. CUDA Graphs record and replay a stable sequence of already selected GPU operations.</p>
+<div id="fig-m4-c06-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Separate paths show PyTorch graph capture, guards, breaks, AOTAutograd, TorchInductor, and generated work versus CUDA Graph warmup, stable-buffer capture, one host launch, and repeated replay.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c06-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c06-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="Separate paths show PyTorch graph capture, guards, breaks, AOTAutograd, TorchInductor, and generated work versus CUDA Graph warmup, stable-buffer capture, one host launch, and repeated replay.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c06-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6.1: PyTorch compilation and CUDA Graph replay change different parts of repeated execution.
+</figcaption>
+</figure>
+</div>
+<p>The compiler path shows TorchDynamo, optional AOTAutograd handling, TorchInductor, and mixed compiled or eager output. The CUDA Graph path requires warmup, stable shapes, control flow, buffers, and memory addresses before capture. Compiled work may later be captured, but a compiler graph and a CUDA Graph are not the same object.</p>
+<section id="sec-m4-c06-s01" class="level2" data-number="6.1">
+<h2 data-number="6.1" class="anchored" data-anchor-id="sec-m4-c06-s01"><span class="header-section-number">6.1</span> Sources of local runtime overhead</h2>
+<p>Single-worker runtime overhead is the cost paid inside one model-worker process while it executes a repeated model step. It includes Python dispatch through the PyTorch operator stack, compiler fallback to eager execution, kernel launch overhead, allocator churn, host-device synchronization, and small unfused GPU kernels.</p>
+<p>A decode loop with many tiny kernels can remain slow even under a strong batching policy. The scheduler can admit more requests, but every admitted request still pays the single-worker cost of launching and running the model step. Later compiler and runtime techniques are useful when profiling shows that this cost, rather than request admission or KV-cache capacity, is the limiting factor.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Python dispatch overhead:</strong></span> Time spent entering Python and the PyTorch dispatcher for many small operations. It is most visible when GPU kernels are short and repeated.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Eager fallback regions:</strong></span> When compiler capture cannot cover a hot operation, that region runs through ordinary eager dispatch. Repeated fallback reduces fusion and can reintroduce Python overhead between compiled regions.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Launch overhead:</strong></span> Fixed CPU-side cost of launching GPU work. It matters when each kernel does little work, such as small-batch decode or many elementwise operations.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Allocator and copy overhead:</strong></span> Repeated temporary allocations or host-device transfers can dominate before the kernel math becomes the bottleneck.</li>
+</ul>
+<p>Engine knobs cannot fully compensate for a local worker that launches too many tiny kernels, synchronizes with the host on every step, or recompiles constantly. Once the local model step is stable, batching, paging, and scheduling policies can be evaluated without confusing scheduler effects with per-worker runtime overhead.</p>
+</section>
+<section id="sec-m4-c06-s02" class="level2" data-number="6.2">
+<h2 data-number="6.2" class="anchored" data-anchor-id="sec-m4-c06-s02"><span class="header-section-number">6.2</span> torch.compile mental model</h2>
+<p><code>torch.compile</code> is the PyTorch entry point for turning suitable eager PyTorch code into captured graph regions that can be optimized and lowered. The optimized object is the traceable runtime region of tensor operations reached from the Python program.</p>
+<p>A CUDA Graph is a recorded sequence of GPU operations that can be replayed with lower CPU launch overhead when its shapes, control flow, and memory addresses remain stable. This is different from a compiler graph: a compiler graph can transform computation, while a CUDA Graph replays the selected GPU work.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Eager execution:</strong></span> Default PyTorch mode where operations run one after another through the dispatcher. It is flexible, but many small operations can create CPU dispatch overhead and extra intermediate tensors in HBM.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Graph capture:</strong></span> The compiler records a region of tensor operations when Python control flow, operators, and shapes are traceable enough.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Graph optimization:</strong></span> The compiler can fuse compatible operations, remove unnecessary intermediates, and choose generated kernels for a captured region.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Lowering:</strong></span> The optimized graph is translated into executable code. In many PyTorch paths, TorchInductor emits Triton or other backend code for fused regions.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Guard:</strong></span> A condition recorded for a compiled region, such as an input type, shape property, or Python value. When a guard no longer holds, PyTorch may compile another variant or run a different path.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Graph break:</strong></span> A boundary where TorchDynamo cannot keep execution in one captured region. PyTorch can run eager code at the boundary and may resume capture later, so one break can split a function into several compiled and eager pieces.</li>
+</ul>
+<p>The PyTorch compiler path begins at Python execution rather than at Triton. TorchDynamo captures compatible Python frames, graph breaks delimit what remains together, AOTAutograd stages forward and backward graphs when gradients are involved, and TorchInductor lowers captured graphs to optimized code. Chapter 4’s Triton pipeline is one possible generated-kernel path, not a diagram of this complete stack.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Definition - Compiler stack terms</strong></p>
+<p><strong>TorchDynamo:</strong> Captures Python-level PyTorch execution into graph regions when control flow and operators are traceable.</p>
+<p><strong>AOTAutograd:</strong> Stages forward and backward graphs for differentiable computation when gradients are involved.</p>
+<p><strong>TorchInductor:</strong> Lowers captured graphs into executable optimized code, often emitting Triton kernels for fused regions.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Common torch.compile settings</strong></p>
+<p><strong><code>mode='default'</code>:</strong> Balanced compile behavior. Use it first when you want compiler benefits without aggressively changing overhead or autotuning behavior.</p>
+<p><strong><code>mode='reduce-overhead'</code>:</strong> Targets Python and launch overhead, often by using CUDA Graphs where the graph is safe. It can increase memory use because reusable workspaces or graph state may be cached.</p>
+<p><strong><code>mode='max-autotune'</code>:</strong> Allows more autotuning and can use Triton or template-based matrix multiplication paths on supported devices. It may improve steady-state speed at the cost of compilation/autotuning time.</p>
+<p><strong><code>dynamic=True</code> or <code>dynamic=False</code>:</strong> Controls dynamic-shape tracing policy. Dynamic kernels can reduce recompilation for varying shapes, but some operations still force specialization.</p>
+</div>
+<p><code>torch.compile</code> and <code>@triton.jit</code> are different entry points. <code>torch.compile</code> starts from PyTorch model code and tries to capture graph regions before lowering them. <code>@triton.jit</code> starts from an explicitly written Triton kernel function and compiles that tile program. A <code>torch.compile</code> path may generate Triton kernels internally, but that does not make hand-written Triton code the same object as a compiled PyTorch graph.</p>
+</section>
+<section id="sec-m4-c06-s03" class="level2" data-number="6.3">
+<h2 data-number="6.3" class="anchored" data-anchor-id="sec-m4-c06-s03"><span class="header-section-number">6.3</span> Graph breaks</h2>
+<p>A graph break belongs to the compiler-capture layer. It occurs when PyTorch cannot keep a region inside the traceable graph and must fall back to ordinary eager execution for part of the program.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Definition - Graph break</strong></p>
+<p>A graph break splits a Python function around code that TorchDynamo cannot represent in the current graph. The unsupported boundary runs eagerly and capture may resume afterward. Repeated breaks reduce fusion opportunities and reintroduce dispatch between regions.</p>
+</div>
+<p>Breaks usually arise when tensor execution crosses into Python values, unsupported effects, or unstable specialization. The following cases separate those causes so diagnostics can target the actual boundary.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Scalar extraction:</strong></span> Calls such as <code>.item()</code> move a tensor value into Python and commonly force GPU-to-CPU synchronization or a graph break. Some releases and configurations can capture scalar outputs, so diagnostics must confirm the observed path.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Data-dependent Python branches:</strong></span> Python <code>if</code> or loop decisions based on tensor values cannot usually be traced as a single static graph.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Unsupported operations:</strong></span> An operator, mutation pattern, or side effect may not have a compiler lowering, so execution falls back to eager mode.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Dynamic shape churn:</strong></span> Frequent shape changes can cause recompilation or guards that prevent a stable compiled path.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Host I/O in hot paths:</strong></span> Printing, logging tensor values, or debugging inside a repeated GPU path can force synchronization and graph breaks.</li>
+</ul>
+<p>The practical diagnostic is to ask whether the break is in cold setup code or hot repeated code. A graph break during one-time preprocessing may not matter. A graph break inside every decode step can dominate latency.</p>
+<p>A graph break matters when it repeatedly splits hot work and restores Python dispatch or synchronization; a break confined to cold setup may be harmless. The next question is what kernels, fusion choices, and memory traffic TorchInductor produces for the regions that remain captured.</p>
+</section>
+<section id="sec-m4-c06-s04" class="level2" data-number="6.4">
+<h2 data-number="6.4" class="anchored" data-anchor-id="sec-m4-c06-s04"><span class="header-section-number">6.4</span> TorchInductor and generated kernels</h2>
+<p>TorchInductor is the PyTorch compiler backend that lowers captured graph regions into executable code. In many CUDA paths it emits generated Triton kernels for fused regions and calls vendor libraries or existing kernels for operations that are better handled by those libraries.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Captured graph:</strong></span> The traceable tensor program handed to the backend after TorchDynamo and, when needed, AOTAutograd have staged the computation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Fusion:</strong></span> Combining compatible operations so an intermediate may remain in registers or shared memory, be recomputed cheaply, or avoid a separate HBM write and read. Exact placement depends on compiler decisions and resource limits.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Generated kernel:</strong></span> Kernel code emitted by the compiler for a specific graph region, dtype, layout, and shape family. Generated does not mean universally optimal; it means specialized to the compiler’s view of the program.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Scheduler and lowering:</strong></span> Compiler decisions that choose loop structure, tiling, vectorization, memory access order, and which operations remain separate calls.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Limits:</strong></span> Poor algorithmic structure, unsupported operators, dynamic control flow, request scheduling, cache paging, and cross-rank communication are outside what TorchInductor can fix by itself.</li>
+</ul>
+<p>The main performance win is reducing unnecessary HBM traffic and launch count. For example, a chain of elementwise operations may become one generated kernel that reads input once, keeps temporary values in registers, and writes the final result once. That is a different kind of win from CUDA Graph replay, which keeps the same kernels but launches them with less CPU overhead.</p>
+<p>When generated kernels are slow, first inspect the source graph and shape assumptions. A compiler backend can generate reasonable code for the graph it sees, but it cannot recover locality that the source program has already destroyed or turn highly dynamic request control flow into a static batch policy.</p>
+<p>The number of generated Triton kernels is not fixed. It is a property of one compiled run: graph regions, shapes, dtypes, layouts, dynamic-shape guards, and autotuning choices determine how many kernels are emitted. Count them from compiler logs, profiler traces, or the TorchInductor/Triton cache for the specific workload, not from a static catalog.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Generated-kernel caveat</strong></p>
+<p>Generated Triton is often the right outcome for fused elementwise and reduction regions, but vendor libraries can still be better for standard GEMMs, convolutions, and collectives. The compiler backend chooses among generated kernels, templates, and library calls; performance work should inspect the chosen path before replacing it by hand.</p>
+</div>
+<p>Generated code is useful only when the selected kernel path reduces measured launch count or memory traffic for the actual shapes; generation alone does not make it faster than a vendor kernel. The next question is whether the remaining delay comes from kernel execution or from repeatedly launching an otherwise stable sequence.</p>
+</section>
+<section id="sec-m4-c06-s05" class="level2" data-number="6.5">
+<h2 data-number="6.5" class="anchored" data-anchor-id="sec-m4-c06-s05"><span class="header-section-number">6.5</span> CUDA Graph lifecycle</h2>
+<p>A CUDA Graph is a recorded sequence of GPU operations that can be replayed with much lower CPU launch overhead than issuing each kernel separately. It does not make kernels faster; it reduces repeated host-side launch and dispatch cost for a stable sequence of work.</p>
+<p>The mechanism has three phases. Warmup runs first so kernels, autotuning, and allocator state are initialized. Capture records the steady sequence of operations and their memory addresses. Replay launches that captured sequence again after new inputs have been copied into the same static buffers.</p>
+<p>The CUDA Graph visual is a runtime timeline. It compares the one-time warmup and capture region with the repeated replay region that removes most per-iteration CPU launch work.</p>
+<p>The timeline separates the one-time setup work from the repeated replay path.</p>
+<div id="fig-m4-c06-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The timeline separates the one-time setup work from the repeated replay path. Warmup completes lazy initialization, autotuning, and allocations. Capture records supported operations and dependencies against stable virtual addresses and stream-capture rules. One replay is one graph-launch submission containing the recorded device operations, not one fused device kernel.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c06-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m4-c06-f02.jpg" class="img-fluid figure-img" style="width:6.1in" alt="The timeline separates the one-time setup work from the repeated replay path. Warmup completes lazy initialization, autotuning, and allocations. Capture records supported operations and dependencies against stable virtual addresses and stream-capture rules. One replay is one graph-launch submission containing the recorded device operations, not one fused device kernel.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c06-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6.2: CUDA Graph warmup, capture, and replay
+</figcaption>
+</figure>
+</div>
+<p>Warmup completes lazy initialization, autotuning, and allocations. Capture records supported operations and dependencies against stable virtual addresses and stream-capture rules. One replay is one graph-launch submission containing the recorded device operations, not one fused device kernel.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chart note</strong></p>
+<p><strong>Measured or compared:</strong> Lifecycle of a CUDA Graph path: warmup, capture, then repeated replay.</p>
+<p><strong>Axes, units, and series:</strong> The visual is a timeline schematic. The horizontal direction is execution order; boxes represent setup, captured GPU work, and replayed work rather than a measured duration scale.</p>
+<p><strong>Read for:</strong> Read for where overhead moves: warmup and capture happen outside the steady-state timing path, while replay reduces repeated CPU launch overhead without changing the kernels.</p>
+<p><strong>Source status:</strong> Exact source timeline screenshot used schematically; no timing values are extracted from the visual.</p>
+</div>
+<p>The main constraint is stability. Shapes, control flow, and memory addresses must remain compatible with the captured graph. If every request changes tensor shape or allocates new buffers, CUDA Graph replay either fails or loses most of its value.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Dynamic-shape failure:</strong></span> If each replay-sized region sees new sequence lengths, batch sizes, or tensor layouts, the compiler may recompile and CUDA Graph capture may no longer match the new execution path.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Address stability:</strong></span> A captured graph reuses the same pointer arguments. Copy new request data into the static buffers whose addresses were recorded during capture.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Control-flow failure:</strong></span> Data-dependent Python branches or request-dependent operator sequences can make the captured graph represent only one path while production takes many paths.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Allocation failure:</strong></span> Allocations during capture can bake allocator behavior into the graph or cause capture errors. Warmup and pre-allocation keep steady-state memory addresses predictable.</li>
+</ul>
+<p>This is why serving systems often bucket shapes or pre-allocate decode buffers before using graph replay. Shape bucketing preserves enough regularity for compilation and replay, while the scheduler still handles variable request lengths at a coarser level.</p>
+</section>
+<section id="sec-m4-c06-s06" class="level2" data-number="6.6">
+<h2 data-number="6.6" class="anchored" data-anchor-id="sec-m4-c06-s06"><span class="header-section-number">6.6</span> Compile versus graph replay</h2>
+<p>Compilation and graph replay are different runtime changes. Compilation transforms captured computation and may generate new fused kernels. CUDA Graph replay records an already-selected sequence of GPU work and relaunches it with lower CPU overhead.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Use compilation when:</strong></span> The hot path contains many traceable tensor operations that can be fused, simplified, or lowered into better kernels.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Use CUDA Graph replay when:</strong></span> The hot path already has acceptable kernels but repeated launches and Python dispatch dominate wall time.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Use both when:</strong></span> A compiled steady-state region can be captured with stable shapes and stable memory addresses.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Use eager execution when:</strong></span> Shapes, control flow, memory addresses, or request membership change too frequently for stable capture, or profiling shows that capture overhead is outside the limiting path.</li>
+</ul>
+<p>The comparison below separates compiler graphs, which can transform computation, from CUDA Graph replay, which relaunches an already selected sequence.</p>
+<p>The structured comparison below turns that distinction into a selection rule: transformation changes the computation, replay changes how an existing operation sequence is submitted, and the combined path requires both capture compatibility and worthwhile compiler output.</p>
+<div id="tbl-m4-c06-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c06-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;6.1: torch.compile versus CUDA Graphs.
+</figcaption>
+<div aria-describedby="tbl-m4-c06-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Mechanism</th>
+<th>Changes computation?</th>
+<th>Primary benefit</th>
+<th>Main constraint</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>torch.compile</td>
+<td>Yes, can fuse and generate kernels</td>
+<td>May reduce Python overhead, launch count, and intermediate memory traffic</td>
+<td>Graph breaks, unsupported ops, recompilation</td>
+</tr>
+<tr class="even">
+<td>CUDA Graphs</td>
+<td>No, replays captured work</td>
+<td>Reduces CPU launch overhead</td>
+<td>Static shapes and stable memory addresses</td>
+</tr>
+<tr class="odd">
+<td>Combined</td>
+<td>Compile first, then replay stable work</td>
+<td>Single-worker execution with low launch overhead</td>
+<td>Harder debugging and stricter shape discipline</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The operational sequence is usually compile first, then capture only the stable steady-state path. Capturing before compilation can preserve too many small kernels; compiling without checking graph breaks can leave eager gaps that still dominate the loop.</p>
+</section>
+<section id="sec-m4-c06-s07" class="level2" data-number="6.7">
+<h2 data-number="6.7" class="anchored" data-anchor-id="sec-m4-c06-s07"><span class="header-section-number">6.7</span> Graph break and CUDA Graph worked patterns</h2>
+<p>A common local-runtime repair sequence has three stages. First, make the hot function traceable enough that <code>torch.compile</code> can capture it. Second, stabilize input shapes and memory addresses enough that CUDA Graph replay can remove repeated launch overhead. Third, measure the steady-state path separately from warmup, compilation, and allocation.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Trace repair:</strong></span> Remove Python-side scalar extraction, host I/O, and data-dependent branches from the hot tensor path.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Static buffers:</strong></span> Pre-allocated tensors whose memory addresses are reused across CUDA Graph replays.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Warmup isolation:</strong></span> Run compilation, kernel autotuning, and allocator initialization before capture so the captured sequence represents steady-state work.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Replay validation:</strong></span> Check that new inputs are copied into the captured buffers and that outputs are copied or cloned before the next replay overwrites them.</li>
+</ul>
+<section id="sec-m4-c06-s08" class="level3" data-number="6.7.1">
+<h3 data-number="6.7.1" class="anchored" data-anchor-id="sec-m4-c06-s08"><span class="header-section-number">6.7.1</span> Resolving graph breaks in RMS-normalization</h3>
+<p>Graph breaks are one of the most common compilation issues when using torch.compile in real-world LLM serving code. The RMS-normalization example below is a toy hot loop, not a claim that RMSNorm itself is the only problem. It is useful because it combines four common failure modes in a small piece of code: scalar extraction, Python branching on tensor values, logging in the hot path, and GPU-to-CPU synchronization.</p>
+<p>The optimization principle is to keep decisions in tensor space when they belong on the GPU and to keep host-side diagnostics out of the repeated compiled region. The naive implementation contains typical compilation anti-patterns; the revised implementation shows the same computation expressed in a compiler-friendly form.</p>
+<p><strong>Example: Resolving graph breaks in RMS-normalization.</strong> The first function contains patterns that commonly create synchronization and graph breaks. The second keeps the decision in tensor operations so the current compiler has a better chance of capturing the hot region; graph-break diagnostics must confirm the result for the installed PyTorch release.</p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Resolving graph breaks in RMS-normalization</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c06-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c06-c01-1"><a href="#lst-m4-c06-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c06-c01-2"><a href="#lst-m4-c06-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - Calling .item() extracts a tensor value as a Python scalar, forcing a GPU-to-CPU</span></span>
+<span id="lst-m4-c06-c01-3"><a href="#lst-m4-c06-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co">#   synchronization (host sync) that stalls execution.</span></span>
+<span id="lst-m4-c06-c01-4"><a href="#lst-m4-c06-c01-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - Python if conditions on tensor values break compilation because the tracer cannot resolve</span></span>
+<span id="lst-m4-c06-c01-5"><a href="#lst-m4-c06-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co">#   dynamic/symbolic control flow branches.</span></span>
+<span id="lst-m4-c06-c01-6"><a href="#lst-m4-c06-c01-6" aria-hidden="true" tabindex="-1"></a><span class="co"># - torch.where expresses selection in tensor form, but both candidate tensors may be evaluated.</span></span>
+<span id="lst-m4-c06-c01-7"><a href="#lst-m4-c06-c01-7" aria-hidden="true" tabindex="-1"></a><span class="co">#   Clamping the denominator prevents a zero-scale input from creating invalid values or gradients</span></span>
+<span id="lst-m4-c06-c01-8"><a href="#lst-m4-c06-c01-8" aria-hidden="true" tabindex="-1"></a><span class="co">#   in the unselected division branch.</span></span>
+<span id="lst-m4-c06-c01-9"><a href="#lst-m4-c06-c01-9" aria-hidden="true" tabindex="-1"></a><span class="co"># - Printing tensor values in a hot loop can synchronize or break capture. Move diagnostics</span></span>
+<span id="lst-m4-c06-c01-10"><a href="#lst-m4-c06-c01-10" aria-hidden="true" tabindex="-1"></a><span class="co">#   outside the timed region or use supported compiler logging rather than assuming that all</span></span>
+<span id="lst-m4-c06-c01-11"><a href="#lst-m4-c06-c01-11" aria-hidden="true" tabindex="-1"></a><span class="co">#   logging must be removed.</span></span>
+<span id="lst-m4-c06-c01-12"><a href="#lst-m4-c06-c01-12" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c06-c01-13"><a href="#lst-m4-c06-c01-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c06-c01-14"><a href="#lst-m4-c06-c01-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c01-15"><a href="#lst-m4-c06-c01-15" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. BROKEN: Forces CPU-GPU syncs and graph breaks</span></span>
+<span id="lst-m4-c06-c01-16"><a href="#lst-m4-c06-c01-16" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> broken_decode_step(h: torch.Tensor, state: torch.Tensor):</span>
+<span id="lst-m4-c06-c01-17"><a href="#lst-m4-c06-c01-17" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Normalization</span></span>
+<span id="lst-m4-c06-c01-18"><a href="#lst-m4-c06-c01-18" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> h <span class="op">*</span> torch.rsqrt(h.<span class="bu">pow</span>(<span class="dv">2</span>).mean(dim<span class="op">=-</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>) <span class="op">+</span> <span class="fl">1e-6</span>)</span>
+<span id="lst-m4-c06-c01-19"><a href="#lst-m4-c06-c01-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Host-device sync via .item()</span></span>
+<span id="lst-m4-c06-c01-20"><a href="#lst-m4-c06-c01-20" aria-hidden="true" tabindex="-1"></a>    scale <span class="op">=</span> h.<span class="bu">abs</span>().<span class="bu">max</span>().item() <span class="co"># Graph break + CPU stall</span></span>
+<span id="lst-m4-c06-c01-21"><a href="#lst-m4-c06-c01-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> scale <span class="op">&gt;</span> <span class="fl">3.0</span>: <span class="co"># Python branch on tensor value</span></span>
+<span id="lst-m4-c06-c01-22"><a href="#lst-m4-c06-c01-22" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> h <span class="op">/</span> scale</span>
+<span id="lst-m4-c06-c01-23"><a href="#lst-m4-c06-c01-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"max|h| = </span><span class="sc">{</span>scale<span class="sc">:.3f}</span><span class="ss">"</span>) <span class="co"># Graph break (host IO)</span></span>
+<span id="lst-m4-c06-c01-24"><a href="#lst-m4-c06-c01-24" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> <span class="fl">0.9</span> <span class="op">*</span> state <span class="op">+</span> <span class="fl">0.1</span> <span class="op">*</span> h</span>
+<span id="lst-m4-c06-c01-25"><a href="#lst-m4-c06-c01-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> h, state</span>
+<span id="lst-m4-c06-c01-26"><a href="#lst-m4-c06-c01-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c01-27"><a href="#lst-m4-c06-c01-27" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. REVISED: Keeps the data-dependent choice in tensor operations</span></span>
+<span id="lst-m4-c06-c01-28"><a href="#lst-m4-c06-c01-28" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fixed_decode_step(h: torch.Tensor, state: torch.Tensor):</span>
+<span id="lst-m4-c06-c01-29"><a href="#lst-m4-c06-c01-29" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Normalization</span></span>
+<span id="lst-m4-c06-c01-30"><a href="#lst-m4-c06-c01-30" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> h <span class="op">*</span> torch.rsqrt(h.<span class="bu">pow</span>(<span class="dv">2</span>).mean(dim<span class="op">=-</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>) <span class="op">+</span> <span class="fl">1e-6</span>)</span>
+<span id="lst-m4-c06-c01-31"><a href="#lst-m4-c06-c01-31" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Keep as a 0-dimensional GPU tensor (no .item() sync)</span></span>
+<span id="lst-m4-c06-c01-32"><a href="#lst-m4-c06-c01-32" aria-hidden="true" tabindex="-1"></a>    scale <span class="op">=</span> h.<span class="bu">abs</span>().<span class="bu">max</span>()</span>
+<span id="lst-m4-c06-c01-33"><a href="#lst-m4-c06-c01-33" aria-hidden="true" tabindex="-1"></a>    <span class="co"># torch.where may evaluate both inputs, so keep the denominator finite</span></span>
+<span id="lst-m4-c06-c01-34"><a href="#lst-m4-c06-c01-34" aria-hidden="true" tabindex="-1"></a>    safe_scale <span class="op">=</span> scale.clamp_min(torch.finfo(h.dtype).tiny)</span>
+<span id="lst-m4-c06-c01-35"><a href="#lst-m4-c06-c01-35" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Branch in tensor space using torch.where</span></span>
+<span id="lst-m4-c06-c01-36"><a href="#lst-m4-c06-c01-36" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> torch.where(scale <span class="op">&gt;</span> <span class="fl">3.0</span>, h <span class="op">/</span> safe_scale, h)</span>
+<span id="lst-m4-c06-c01-37"><a href="#lst-m4-c06-c01-37" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Remove print/logging statements on hot paths</span></span>
+<span id="lst-m4-c06-c01-38"><a href="#lst-m4-c06-c01-38" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> <span class="fl">0.9</span> <span class="op">*</span> state <span class="op">+</span> <span class="fl">0.1</span> <span class="op">*</span> h</span>
+<span id="lst-m4-c06-c01-39"><a href="#lst-m4-c06-c01-39" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> h, state</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Replacing the host-side condition with <code>torch.where</code> keeps the selection in tensor form and avoids extracting <code>scale</code> into Python. That change can preserve a captured region, but it does not guarantee one fused kernel: compiler diagnostics and a profiler trace must show which regions and kernels were produced.</p>
+</section>
+<section id="sec-m4-c06-s09" class="level3" data-number="6.7.2">
+<h3 data-number="6.7.2" class="anchored" data-anchor-id="sec-m4-c06-s09"><span class="header-section-number">6.7.2</span> Manual CUDA Graph capture and replay recipe</h3>
+<p><code>torch.compile(mode='reduce-overhead')</code> can use CUDA Graphs for eligible regions, but it does not promise that every workload will be captured. Manual capture is useful when an engineer needs direct control over buffers and stream dependencies. Inputs and outputs use stable addresses, and warmup must complete lazy initialization, autotuning, and allocations before capture. A side-stream warmup is a robust pattern when its dependencies are synchronized correctly.</p>
+<p><strong>Example: Manual CUDA Graph capture and replay recipe.</strong> This recipe shows the manual capture of a module using static buffers, a side-stream warmup to isolate pending events, and replay with output cloning.</p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Manual CUDA Graph capture and replay recipe</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c06-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c06-c02-1"><a href="#lst-m4-c06-c02-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c06-c02-2"><a href="#lst-m4-c06-c02-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - CUDA Graphs capture operations bound to exact memory addresses, requiring fixed, static</span></span>
+<span id="lst-m4-c06-c02-3"><a href="#lst-m4-c06-c02-3" aria-hidden="true" tabindex="-1"></a><span class="co">#   input/output buffers.</span></span>
+<span id="lst-m4-c06-c02-4"><a href="#lst-m4-c06-c02-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - model.eval() selects evaluation behavior, while torch.inference_mode() disables autograd</span></span>
+<span id="lst-m4-c06-c02-5"><a href="#lst-m4-c06-c02-5" aria-hidden="true" tabindex="-1"></a><span class="co">#   bookkeeping for warmup, capture, and replay. Both are needed for this inference example.</span></span>
+<span id="lst-m4-c06-c02-6"><a href="#lst-m4-c06-c02-6" aria-hidden="true" tabindex="-1"></a><span class="co"># - A synchronized side-stream warmup is a robust way to isolate initialization and allocations</span></span>
+<span id="lst-m4-c06-c02-7"><a href="#lst-m4-c06-c02-7" aria-hidden="true" tabindex="-1"></a><span class="co">#   before capture; the exact stream arrangement must satisfy CUDA capture rules.</span></span>
+<span id="lst-m4-c06-c02-8"><a href="#lst-m4-c06-c02-8" aria-hidden="true" tabindex="-1"></a><span class="co"># - Calling graph.replay() submits the recorded sequence without repeating Python dispatch for</span></span>
+<span id="lst-m4-c06-c02-9"><a href="#lst-m4-c06-c02-9" aria-hidden="true" tabindex="-1"></a><span class="co">#   every captured operation.</span></span>
+<span id="lst-m4-c06-c02-10"><a href="#lst-m4-c06-c02-10" aria-hidden="true" tabindex="-1"></a><span class="co"># - Clone static_out only when the caller must preserve that result across a later replay; cloning</span></span>
+<span id="lst-m4-c06-c02-11"><a href="#lst-m4-c06-c02-11" aria-hidden="true" tabindex="-1"></a><span class="co">#   adds an allocation and copy outside the graph.</span></span>
+<span id="lst-m4-c06-c02-12"><a href="#lst-m4-c06-c02-12" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c06-c02-13"><a href="#lst-m4-c06-c02-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c06-c02-14"><a href="#lst-m4-c06-c02-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c02-15"><a href="#lst-m4-c06-c02-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Target module to graph (e.g. a small MLP layer)</span></span>
+<span id="lst-m4-c06-c02-16"><a href="#lst-m4-c06-c02-16" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> torch.nn.Linear(<span class="dv">256</span>, <span class="dv">256</span>).cuda().<span class="bu">eval</span>()</span>
+<span id="lst-m4-c06-c02-17"><a href="#lst-m4-c06-c02-17" aria-hidden="true" tabindex="-1"></a>example_input <span class="op">=</span> torch.randn(<span class="dv">1</span>, <span class="dv">256</span>, device<span class="op">=</span><span class="st">"cuda"</span>)</span>
+<span id="lst-m4-c06-c02-18"><a href="#lst-m4-c06-c02-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c02-19"><a href="#lst-m4-c06-c02-19" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 1: Create static input/output buffers</span></span>
+<span id="lst-m4-c06-c02-20"><a href="#lst-m4-c06-c02-20" aria-hidden="true" tabindex="-1"></a>static_in <span class="op">=</span> example_input.clone()</span>
+<span id="lst-m4-c06-c02-21"><a href="#lst-m4-c06-c02-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c02-22"><a href="#lst-m4-c06-c02-22" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.inference_mode():</span>
+<span id="lst-m4-c06-c02-23"><a href="#lst-m4-c06-c02-23" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 2: Warmup on a dedicated CUDA stream</span></span>
+<span id="lst-m4-c06-c02-24"><a href="#lst-m4-c06-c02-24" aria-hidden="true" tabindex="-1"></a>    <span class="co"># This isolates compilation/allocations from the default stream</span></span>
+<span id="lst-m4-c06-c02-25"><a href="#lst-m4-c06-c02-25" aria-hidden="true" tabindex="-1"></a>    warmup_stream <span class="op">=</span> torch.cuda.Stream()</span>
+<span id="lst-m4-c06-c02-26"><a href="#lst-m4-c06-c02-26" aria-hidden="true" tabindex="-1"></a>    warmup_stream.wait_stream(torch.cuda.current_stream())</span>
+<span id="lst-m4-c06-c02-27"><a href="#lst-m4-c06-c02-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.cuda.stream(warmup_stream):</span>
+<span id="lst-m4-c06-c02-28"><a href="#lst-m4-c06-c02-28" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>):</span>
+<span id="lst-m4-c06-c02-29"><a href="#lst-m4-c06-c02-29" aria-hidden="true" tabindex="-1"></a>            static_out <span class="op">=</span> model(static_in)</span>
+<span id="lst-m4-c06-c02-30"><a href="#lst-m4-c06-c02-30" aria-hidden="true" tabindex="-1"></a>    torch.cuda.current_stream().wait_stream(warmup_stream)</span>
+<span id="lst-m4-c06-c02-31"><a href="#lst-m4-c06-c02-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c02-32"><a href="#lst-m4-c06-c02-32" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 3: Record the graph on PyTorch's capture stream</span></span>
+<span id="lst-m4-c06-c02-33"><a href="#lst-m4-c06-c02-33" aria-hidden="true" tabindex="-1"></a>    graph <span class="op">=</span> torch.cuda.CUDAGraph()</span>
+<span id="lst-m4-c06-c02-34"><a href="#lst-m4-c06-c02-34" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.cuda.graph(graph):</span>
+<span id="lst-m4-c06-c02-35"><a href="#lst-m4-c06-c02-35" aria-hidden="true" tabindex="-1"></a>        static_out <span class="op">=</span> model(static_in)</span>
+<span id="lst-m4-c06-c02-36"><a href="#lst-m4-c06-c02-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c02-37"><a href="#lst-m4-c06-c02-37" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 4: Replay function for new inputs</span></span>
+<span id="lst-m4-c06-c02-38"><a href="#lst-m4-c06-c02-38" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.inference_mode</span>()</span>
+<span id="lst-m4-c06-c02-39"><a href="#lst-m4-c06-c02-39" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> run_graphed_inference(x):</span>
+<span id="lst-m4-c06-c02-40"><a href="#lst-m4-c06-c02-40" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Copy new data into the captured memory address</span></span>
+<span id="lst-m4-c06-c02-41"><a href="#lst-m4-c06-c02-41" aria-hidden="true" tabindex="-1"></a>    static_in.copy_(x)</span>
+<span id="lst-m4-c06-c02-42"><a href="#lst-m4-c06-c02-42" aria-hidden="true" tabindex="-1"></a>    graph.replay()</span>
+<span id="lst-m4-c06-c02-43"><a href="#lst-m4-c06-c02-43" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Clone output to prevent subsequent runs from overwriting it</span></span>
+<span id="lst-m4-c06-c02-44"><a href="#lst-m4-c06-c02-44" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> static_out.clone()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>During capture, PyTorch records supported CUDA operations and their dependencies against the graph’s memory addresses. Each call copies new values into <code>static_in</code> and submits the recorded graph through one graph launch, while the recorded kernels remain separate device operations unless compilation fused them earlier. <code>static_out</code> is reused, so cloning is conditional on whether a result must survive the next replay.</p>
+<p>Compilation is justified when captured operations can be simplified, fused, or lowered more effectively. CUDA Graph replay is justified when a stable sequence already has suitable kernels but host launch work remains visible. Measure compile and warmup cost separately, compare eager and optimized outputs, and accept the change only when steady-state end-to-end time improves.</p>
+<p>These runtime methods apply to both training and inference, but the useful capture boundary depends on which state changes during the workload. Chapter 7 makes those lifetimes concrete by following parameters, activations, gradients, optimizer state, input delivery, and precision through one training step.</p>
+
+
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../chapters/ch-m4-c05.html" class="pagination-link" aria-label="Performance Models and Profiling">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Performance Models and Profiling</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../parts/part-ii.html" class="pagination-link" aria-label="Part II: Training and Inference Workloads">
+        <span class="nav-page-text">Part II: Training and Inference Workloads</span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
