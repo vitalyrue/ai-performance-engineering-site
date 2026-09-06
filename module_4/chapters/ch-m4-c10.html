@@ -47,7 +47,7 @@ ul.task-list li input[type="checkbox"] {
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -351,6 +351,7 @@ window.Quarto = {
 </header>
 
 
+<p>Teach continuous batching, chunked prefill, prefix caching, speculative decoding, and serving observability.</p>
 <p>Chapter 9 described one worker’s decode loop and the KV-cache state it reads and extends. Production service adds many concurrent requests, so a serving engine must decide which requests enter memory, which ones advance together, and where their cache blocks remain. <code>Inference engine</code> is a broader deployment term that can include model runtimes, compilers, and hardware-specific executors; here, <code>serving engine</code> means the request scheduler and memory manager around model execution.</p>
 <p>Engine optimizations operate above individual kernels. They decide which requests run together, which cached prefixes can be reused, how long prompts are interleaved with decode work, and whether a smaller draft model can reduce the number of expensive target-model steps.</p>
 <p>The serving-engine layer is where throughput and latency trade-offs become explicit. More aggressive batching can improve utilization but increase waiting. Prefix caching can reduce work but needs exact token-prefix matching and cache validity. Speculative decoding can reduce serial target steps but depends on draft quality and acceptance rate.</p>
@@ -381,14 +382,14 @@ Figure&nbsp;10.1: A serving engine shares GPU time across requests while enforci
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode-step scheduling:</strong></span> Choose which active requests advance on the next GPU step and which prefill chunks can be interleaved.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Scheduler contention:</strong></span> A state where CPU scheduling, tokenization, or block bookkeeping becomes slow enough that GPU kernels are separated by idle gaps.</li>
 </ul>
-<p>vLLM is an open-source serving engine built around continuous batching and paged KV-cache management. Its scheduler architecture, split-scheduling patterns, and multi-step GPU execution aim to move enough bookkeeping off the per-token hot path so the GPU sees fewer idle gaps.</p>
-<p>The following settings are vLLM configuration examples. Hyphenated names are usually command-line flags; underscore names may appear as Python/config fields depending on the implementation.</p>
+<p>vLLM is an open-source serving engine built around continuous batching and paged KV-cache management. Here, <code>vLLM-style</code> means serving engines with similar request-scheduler and KV-cache-manager responsibilities. Each serving engine exposes its own flags and internals. Modern vLLM-style engines attack scheduler contention with designs such as split scheduling and multi-step scheduling. The exact implementation changes over time, but the principle is stable: move enough decisions out of the per-token critical path so the GPU sees fewer idle gaps.</p>
+<p>The following settings are vLLM-style configuration examples. Hyphenated names are usually command-line flags; underscore names may appear as Python/config fields depending on the implementation.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--gpu-memory-utilization</code>:</strong></span> Memory-budget flag controlling how much GPU memory the engine may reserve for weights, workspaces, and KV cache.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--max-model-len</code>:</strong></span> Context-length flag that bounds worst-case KV-cache growth.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--kv-cache-dtype</code>:</strong></span> Cache-precision flag, effective only when the engine and attention kernels support the chosen format.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--quantization</code>:</strong></span> Model-loading flag selecting a supported weight-quantization backend.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Batching limits:</strong></span> Controls such as <code>max_num_batched_tokens</code> and <code>max_num_seqs</code> that limit how much work enters the scheduler at once.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--gpu-memory-utilization</code>:</strong></span> vLLM-style memory-budget flag controlling how much GPU memory the engine may reserve for weights, workspaces, and KV cache.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--max-model-len</code>:</strong></span> vLLM-style context-length flag that bounds worst-case KV-cache growth.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--kv-cache-dtype</code>:</strong></span> vLLM-style cache-precision flag, effective only when the engine and attention kernels support the chosen format.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--quantization</code>:</strong></span> vLLM-style model-loading flag selecting a supported weight-quantization backend.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Batching limits:</strong></span> vLLM-style controls such as <code>max_num_batched_tokens</code> and <code>max_num_seqs</code> that limit how much work enters the scheduler at once.</li>
 </ul>
 <p>A serving configuration is accepted only when admission, cache use, and kernel execution follow the intended path and request-level latency or goodput improves without violating quality or memory limits. Higher GPU utilization alone is not a substitute for the service metric.</p>
 <p>These settings control admission and memory budgets; they do not repair a slow attention kernel or an inefficient compiled graph. The next section isolates the batching policy so its effect on request waiting and GPU occupancy can be measured separately.</p>
@@ -465,23 +466,31 @@ Table&nbsp;10.1: Static batching versus continuous batching.
 <section id="sec-m4-c10-s03" class="level3" data-number="10.2.1">
 <h3 data-number="10.2.1" class="anchored" data-anchor-id="sec-m4-c10-s03"><span class="header-section-number">10.2.1</span> Batching policies</h3>
 <p>This subsection separates three scheduling policies that are often conflated. The difference is when the scheduler is allowed to form, update, or refill a batch.</p>
-<p>Consider three requests that need 2, 5, and 8 decode steps. A static batch reserves the launched group until the eighth step, so the first two requests leave unused slots after they finish. Dynamic batching can wait briefly before launch to form that group, but it still cannot refill those slots during the run. Continuous batching checks the active set after each decode step: it removes completed requests, admits waiting ones whose KV state fits, and forms the next token-step batch. This recovers slots, but every refill requires scheduler work and KV-block bookkeeping, so the gain must be checked against queue time and TPOT.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Static batching:</strong></span> Forms a group and keeps that group together until the launched work completes.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Dynamic batching:</strong></span> Waits briefly to collect compatible requests before launch, then runs the launched unit mostly as a fixed group.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Continuous batching:</strong></span> Updates the active request set at decode-step boundaries, removing completed sequences and admitting new ones during generation.</li>
+</ul>
+<p>Static batching forms a group and keeps that group together until completion. It is simple, but in autoregressive generation the longest request determines how long the batch occupies capacity. Finished requests leave holes that cannot be reused until the batch completes.</p>
+<p>Dynamic batching adds a short queueing window before launch. The scheduler waits briefly so more compatible requests can be grouped, improving GPU utilization. Once the batch is launched, however, it is still effectively fixed for that launched unit, so dynamic batching cannot reclaim finished decode slots mid-generation.</p>
+<p>Continuous batching is the iteration-level version. After each decode step, the scheduler can remove completed sequences, admit new sequences, and interleave prefill or decode work according to policy. This is why continuous batching requires more sophisticated KV-cache bookkeeping than static or ordinary dynamic batching.</p>
 </section>
 <section id="sec-m4-c10-s04" class="level3" data-number="10.2.2">
 <h3 data-number="10.2.2" class="anchored" data-anchor-id="sec-m4-c10-s04"><span class="header-section-number">10.2.2</span> CPU-side scheduler architecture and vLLM-style optimizations</h3>
-<p>A fast GPU worker can still underperform if the CPU control plane cannot feed it. The engine reduces idle gaps between decode steps by moving avoidable CPU work off the per-token hot path and by scheduling several GPU steps with less round-trip overhead. The examples below show common scheduler goals and the configuration mechanisms used to tune them.</p>
+<p>A fast GPU worker can still underperform if the CPU control plane cannot feed it. vLLM-style systems are serving engines that emphasize continuous batching, KV-cache block management, and scheduler hot-path reduction. They reduce gaps between decode steps by moving avoidable CPU work off the per-token hot path and by scheduling several GPU steps with less round-trip overhead.</p>
+<p>The next list mixes two kinds of items: scheduler-design responsibilities and vLLM-style configuration examples. The flags and field names are examples from this implementation family, not guaranteed names across every serving stack.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Separated API server:</strong></span> Keeps HTTP/gRPC parsing, authentication, request validation, and streaming protocol work away from the engine’s critical scheduling loop.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Tokenization off the hot path:</strong></span> Moves CPU tokenization and deterministic request serialization before admission whenever possible, reducing TTFT variance for short prompts.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Multi-step scheduling:</strong></span> Schedules several decode iterations ahead so the GPU worker can replay or advance work with fewer CPU scheduler round trips.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Async output processing:</strong></span> Lets detokenization, sampling post-processing, and streaming callbacks proceed without blocking the next GPU decode step.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Request formatting discipline:</strong></span> Normalizes sampling settings, adapters, constraints, and prompt fields once, rather than rebuilding them on every iteration.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>max_num_batched_tokens</code>:</strong></span> Scheduler-budget field that caps how many total prompt and decode tokens can enter one scheduling step.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>max_num_seqs</code>:</strong></span> Scheduler-budget field that limits the number of active sequences kept in flight.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--gpu-memory-utilization</code>:</strong></span> Memory-budget flag controlling how aggressively the engine budgets GPU memory for weights, workspaces, and KV cache.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--max-model-len</code>:</strong></span> Context-length flag that constrains worst-case KV-cache growth.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--kv-cache-dtype</code>:</strong></span> Cache-precision flag, effective only when supported by the engine and kernels.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--enable-prefix-caching</code>:</strong></span> Prefix-cache flag enabling exact-prefix KV reuse when the engine can safely match cached prefixes.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>max_num_batched_tokens</code>:</strong></span> vLLM-style scheduler-budget field that caps how many total prompt and decode tokens can enter one scheduling step.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>max_num_seqs</code>:</strong></span> vLLM-style scheduler-budget field that limits the number of active sequences kept in flight.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--gpu-memory-utilization</code>:</strong></span> vLLM-style memory-budget flag controlling how aggressively the engine budgets GPU memory for weights, workspaces, and KV cache.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--max-model-len</code>:</strong></span> vLLM-style context-length flag that constrains worst-case KV-cache growth.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--kv-cache-dtype</code>:</strong></span> vLLM-style cache-precision flag, effective only when supported by the engine and kernels.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong><code>--enable-prefix-caching</code>:</strong></span> vLLM-style prefix-cache flag enabling exact-prefix KV reuse when the engine can safely match cached prefixes.</li>
 </ul>
 <p>These mechanisms do not make the model kernels faster. They reduce idle gaps between useful GPU work. The evidence should therefore appear in a timeline as shorter host-side scheduling regions, fewer CUDA launch gaps, and more regular decode-step cadence.</p>
 <p>Continuous batching is beneficial only when the extra scheduler and cache bookkeeping costs less than the capacity recovered from completed or stalled requests. Confirm that trade-off with request-level TTFT, TPOT, throughput, and queue-time distributions rather than GPU utilization alone.</p>
@@ -495,7 +504,24 @@ Table&nbsp;10.1: Static batching versus continuous batching.
 </section>
 <section id="sec-m4-c10-s06" class="level2" data-number="10.4">
 <h2 data-number="10.4" class="anchored" data-anchor-id="sec-m4-c10-s06"><span class="header-section-number">10.4</span> Separate prefill and decode workers</h2>
-<p>Prefill and decode compete for the same GPU when they share a worker pool. A long, compute-heavy prefill can then delay the short decode steps that control streaming smoothness. Disaggregation sends the prompt to a prefill worker, which builds the initial KV cache, then transfers that cache plus compatible request state to a decode worker.</p>
+<p>Disaggregated prefill/decode is a serving architecture that separates prompt processing from token-by-token generation. The point is latency isolation: long prefill work should not repeatedly interrupt active decode streams.</p>
+<p>Continuous batching and chunked prefill attempt to schedule mixed workloads on a single GPU, but prefill and decode still compete for the same execution units. Prefill is highly parallel and compute-heavy, while decode is more sequential and memory-bandwidth-sensitive. When a long prefill task monopolizes the GPU, active decode sequences can stall and produce latency spikes.</p>
+<p>A disaggregated architecture splits these stages across worker roles:</p>
+<ul>
+<li>Prefill nodes are dedicated to prompt ingestion and initial KV-cache construction. They run compute-heavy kernels optimized for prompt batches.</li>
+<li>KV-cache transfer moves the completed prompt state from prefill workers to decode workers over the available local or network fabric.</li>
+<li>Decode nodes are dedicated to one-token generation. They avoid repeated prefill interruptions and can maintain steadier inter-token latency.</li>
+</ul>
+<p>The request flow has two specialized worker roles, a state-transfer boundary, and control/output paths that keep the request attached to the serving system:</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill worker:</strong></span> Processes the prompt and builds the initial KV cache.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Request and control state:</strong></span> Carries request identity, token position, model and adapter identity, sampling and stopping settings, and routing information needed by both worker roles.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>KV-transfer boundary:</strong></span> Moves the produced cache state to the worker that will continue generation, while the model weights are commonly already resident in both pools.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode worker:</strong></span> Runs the latency-sensitive one-token loop after the initial cache exists.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Output path:</strong></span> Returns generated token IDs or text fragments from the decode worker to the streaming or response layer.</li>
+</ul>
+<p>Read the source figure as a simplified left-to-right control path: router, prefill, KV handoff, and decode. The visible KV edge is only the largest model-state transfer; request metadata crosses the control boundary and decoded outputs return to the serving path.</p>
+<p>Disaggregated prefill/decode separates prompt processing from token generation. A router sends the prompt to a prefill worker, transfers the resulting KV state, and then a decode worker generates tokens.</p>
 <div id="fig-m4-c10-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Disaggregated prefill/decode separates prompt processing from token generation. A router sends the prompt to a prefill worker, transfers the resulting KV state, and then a decode worker generates tokens. The point is latency isolation, not free throughput. Request and control metadata reach both roles, KV state crosses the handoff boundary, decoded outputs return to the serving path, and model weights are commonly resident in both pools. The design helps only when isolation outweighs transfer and coordination cost.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c10-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -506,7 +532,9 @@ Figure&nbsp;10.3: Disaggregated prefill/decode request flow
 </figcaption>
 </figure>
 </div>
-<p>The decode pool can run steadier token steps, but the handoff adds routing, KV-transfer, and coordination delay. Use chunked prefill when scheduling within one pool protects decode latency; separate the pools only when the measured reduction in decode interference is greater than the added handoff time. Evaluate duplicated model weights separately: they consume memory and hardware capacity in both pools and can make the design too costly or infeasible even when transfer latency is acceptable.</p>
+<p>The point is latency isolation, not free throughput. Request and control metadata reach both roles, KV state crosses the handoff boundary, decoded outputs return to the serving path, and model weights are commonly resident in both pools. The design helps only when isolation outweighs transfer and coordination cost.</p>
+<p>Disaggregated prefill/decode should be read as a latency-isolation architecture. A router receives a request, chooses a prefill worker, and the prefill worker processes the prompt to build the initial KV cache. The cache and compatible request state are handed to a decode worker, which starts the repeated one-token generation loop and returns generated outputs through the serving path.</p>
+<p>Disaggregated prefill/decode is a latency-isolation design. It often duplicates model weights across prefill and decode pools and adds KV-transfer cost. Its benefit is that long compute-heavy prefill stops interrupting latency-sensitive decode workers. Use chunked prefill first when it solves the interference problem inside one pool. Use disaggregation when decode isolation is the actual bottleneck and the fabric can move KV state cheaply enough.</p>
 </section>
 <section id="sec-m4-c10-s07" class="level2" data-number="10.5">
 <h2 data-number="10.5" class="anchored" data-anchor-id="sec-m4-c10-s07"><span class="header-section-number">10.5</span> Prefix caching and radix-style reuse</h2>
@@ -549,7 +577,9 @@ Figure&nbsp;10.4: Prefix-addressed key-value blocks
 </section>
 <section id="sec-m4-c10-s09" class="level3" data-number="10.5.2">
 <h3 data-number="10.5.2" class="anchored" data-anchor-id="sec-m4-c10-s09"><span class="header-section-number">10.5.2</span> RadixAttention and SGLang-style reuse</h3>
-<p>A radix tree stores a shared token prefix once as a trunk and attaches each different continuation as a branch. When a request arrives, the engine follows matching token spans to find the longest execution-compatible prefix, reuses the KV state on that path, and inserts only the new suffix.</p>
+<p>RadixAttention is a prefix-cache organization strategy. It represents shared token prefixes as tree trunks and different continuations as branches, so branchy language-model programs can reuse common KV state instead of storing or recomputing it repeatedly.</p>
+<p>RadixAttention organizes cached token sequences as a radix tree. Shared trunks are stored once, and branch points represent different continuations. This is a natural fit for language-model programs that fork prompts, explore tool calls, reuse long system prefixes, or run multiple retrieval-conditioned branches.</p>
+<p>RadixAttention represents reusable prefixes as a tree rather than only as independent cached blocks.</p>
 <div id="fig-m4-c10-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="RadixAttention represents reusable prefixes as a tree rather than only as independent cached blocks. Read from root to leaf: edges represent cached token spans, while requests follow matching paths. Reuse requires an exact execution-compatible prefix. Eviction marks in the source visual are examples rather than a universal RadixAttention eviction policy.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c10-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -560,7 +590,14 @@ Figure&nbsp;10.5: RadixAttention prefix cache as a tree
 </figcaption>
 </figure>
 </div>
-<p>This layout is useful when chat sessions, retrieval flows, or language-model programs repeatedly fork from the same prompt. The engine must still decide which cold branches to evict and whether routing a request toward a worker with a hot trunk is worth extra load-balancing complexity.</p>
+<p>Read from root to leaf: edges represent cached token spans, while requests follow matching paths. Reuse requires an exact execution-compatible prefix. Eviction marks in the source visual are examples rather than a universal RadixAttention eviction policy.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Radix tree:</strong></span> A compact prefix tree where each edge can represent a multi-token span.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Shared trunk:</strong></span> The common prefix path reused by many requests or branches.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Branch insertion:</strong></span> New continuations attach below the longest matching prefix, avoiding duplicate storage of the trunk.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Eviction:</strong></span> Can reason about subtrees and shared prefixes rather than isolated blocks only, but it must avoid retaining cold branches indefinitely.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Scheduling implication:</strong></span> The scheduler can prefer requests whose prefixes are already hot or whose branches share a trunk.</li>
+</ul>
 <p>Block-hashing systems such as vLLM-style prefix caching are simple and effective for exact complete-block reuse. RadixAttention-style systems expose more sequence structure, which helps branchy agents, chat sessions with common trunks, retrieval-augmented generation (RAG), and structured LM programs. The cost is more complex cache metadata and scheduler logic.</p>
 </section>
 <section id="sec-m4-c10-s10" class="level3" data-number="10.5.3">

@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -442,7 +442,7 @@ window.Quarto = {
   <li><a href="#sec-m2-c05-s01" id="toc-sec-m2-c05-s01" class="nav-link active" data-scroll-target="#sec-m2-c05-s01"><span class="header-section-number">5.1</span> Estimating Numeric Values with Linear Regression</a></li>
   <li><a href="#sec-m2-c05-s02" id="toc-sec-m2-c05-s02" class="nav-link" data-scroll-target="#sec-m2-c05-s02"><span class="header-section-number">5.2</span> Separating Classes with Linear Decision Boundaries</a></li>
   <li><a href="#sec-m2-c05-s03" id="toc-sec-m2-c05-s03" class="nav-link" data-scroll-target="#sec-m2-c05-s03"><span class="header-section-number">5.3</span> Batching Forward Passes via Matrix Multiplication</a></li>
-  <li><a href="#sec-m2-c05-s04" id="toc-sec-m2-c05-s04" class="nav-link" data-scroll-target="#sec-m2-c05-s04"><span class="header-section-number">5.4</span> Tracing One Logistic-Regression Update</a></li>
+  <li><a href="#sec-m2-c05-s04" id="toc-sec-m2-c05-s04" class="nav-link" data-scroll-target="#sec-m2-c05-s04"><span class="header-section-number">5.4</span> Logistic-regression update trace</a></li>
   </ul>
 </nav>
     </div>
@@ -471,6 +471,7 @@ window.Quarto = {
 <p>A linear model starts by combining input features with learned weights and a bias. That single calculation produces either a numeric prediction or a score for a later classifier.</p>
 <p>Linear regression and classification use the same affine calculation: multiply features by learned weights, then add a bias. The meaning of the result changes with the task, from a numeric estimate to class evidence.</p>
 <p>In code, NumPy supports small array calculations, while <code>torch.matmul</code> and <code>torch.nn.Linear</code> implement the affine score on differentiable tensors.</p>
+<p>Chapter 5 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c05-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 5 opener for Linear models and decision boundaries, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c05-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -481,6 +482,7 @@ Figure&nbsp;5.1: One affine rule supports regression, class scoring, and batched
 </figcaption>
 </figure>
 </div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c05-s01" class="level2" data-number="5.1">
 <h2 data-number="5.1" class="anchored" data-anchor-id="sec-m2-c05-s01"><span class="header-section-number">5.1</span> Estimating Numeric Values with Linear Regression</h2>
 <p>Linear regression predicts a numeric target with the affine score <span class="math inline">\(w^\top x+b\)</span> and measures the remaining discrepancy with a regression loss.</p>
@@ -611,7 +613,6 @@ z=Xw+b
 <p>y: 3</p>
 <p>One matrix-vector product now supplies the logits used by probability, loss, and gradient calculations.</p>
 </div>
-<p>The following runnable PyTorch example receives three two-feature rows, one label per row, a weight vector, and a scalar bias. The matrix-vector product prints one logit for each input row; no probability or parameter update is performed yet.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> The running batch from features to logits</p>
 </div>
@@ -629,8 +630,8 @@ z=Xw+b
 <p>Matrix multiplication applies the same learned rule to every example in the batch. The output scores become probabilities only after a suitable binary or multi-class transformation.</p>
 </section>
 <section id="sec-m2-c05-s04" class="level2" data-number="5.4">
-<h2 data-number="5.4" class="anchored" data-anchor-id="sec-m2-c05-s04"><span class="header-section-number">5.4</span> Tracing One Logistic-Regression Update</h2>
-<p>Logistic regression is the first complete trainable model in the course. Its decision boundary is the line or hyperplane where <span class="math inline">\(w^\top x+b=0\)</span>. Points on one side have positive logits and points on the other side have negative logits. The sigmoid turns the signed score into a probability, while training changes <span class="math inline">\(w\)</span> and <span class="math inline">\(b\)</span> and therefore moves the boundary.</p>
+<h2 data-number="5.4" class="anchored" data-anchor-id="sec-m2-c05-s04"><span class="header-section-number">5.4</span> Logistic-regression update trace</h2>
+<p>Logistic regression is the first complete trainable model in the course. The model begins with a geometric object: a line or hyperplane where x @ w + <span class="math inline">\(b = 0\)</span>. Points on one side have positive logits and points on the other side have negative logits. The sigmoid then turns the signed score into a probability, but the trainable object is still the affine score.</p>
 <p>The important derivative is <span class="math inline">\(\partial L/\partial z=p-y\)</span>. If the model assigns <span class="math inline">\(p=0.95\)</span> to an example whose label is <span class="math inline">\(y=0\)</span>, the error signal is large and positive, so the update pushes the logit down. If <span class="math inline">\(p\)</span> is already close to <span class="math inline">\(y\)</span>, the signal is small. This is the first place where probability, loss, and gradient become one computation.</p>
 <p>Logistic regression begins as geometry: a learned affine score divides feature space into two decision regions.</p>
 <div id="fig-m2-c05-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Native logistic-regression decision-boundary diagram in feature space.">
@@ -656,7 +657,7 @@ Figure&nbsp;5.3: One matrix multiplication applies the same learned weights to e
 </figure>
 </div>
 <p>The slide anchors the dimension trace: features become columns, weights align with those columns, and the dot product produces a score.</p>
-<p>Logistic regression composes the batch score <span class="math inline">\(Xw+b\)</span>, sigmoid probability, binary cross-entropy loss, and gradient update. In the runnable example, <span class="math inline">\(X\)</span> has shape <span class="math inline">\([B,D]\)</span>, <span class="math inline">\(w\)</span> has shape <span class="math inline">\([D]\)</span>, and the broadcast scalar <span class="math inline">\(b\)</span> produces logits and labels of shape <span class="math inline">\([B]\)</span>. Matrix multiplication creates logits, sigmoid gives probabilities, the loss compares those probabilities with labels, and backpropagation returns gradients to <span class="math inline">\(w\)</span> and <span class="math inline">\(b\)</span>.</p>
+<p>Logistic regression composes the batch score <span class="math inline">\(Xw+b\)</span>, sigmoid probability, cross-entropy loss, and gradient update. For binary batches, X is <code>[B,D]</code>, weights are <code>[D,1]</code>, logits and labels are <code>[B,1]</code>, and loss is scalar. Matrix multiplication creates logits, sigmoid gives probabilities, BCE compares labels, and gradients return to weights and bias.</p>
 <p>In PyTorch, <code>nn.Linear(D,1)</code> and <code>binary_cross_entropy_with_logits</code> implement the stable forward path; <code>loss.backward()</code> fills gradients.</p>
 <p><strong>Performance note:</strong> For small models the bottleneck is usually Python overhead and data movement; for large batches it is matrix multiplication throughput.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
@@ -678,7 +679,7 @@ Figure&nbsp;5.3: One matrix multiplication applies the same learned weights to e
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Binary logit:</strong></span></p>
 <p><span id="eq-m2-c05-e08"><span class="math display">\[
-z=w^\top x+b
+z=x\mathbin{@}w+b
 \tag{5.8}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Sigmoid:</strong></span></p>
 <p><span id="eq-m2-c05-e09"><span class="math display">\[
@@ -691,11 +692,11 @@ L=-y\log(p)-(1-y)\log(1-p)
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
 <p>These dimensions appear in the computation in order.</p>
 <ul>
-<li><span class="math inline">\(X\)</span>: <span class="math inline">\([B,D]\)</span>, a batch of <span class="math inline">\(B\)</span> examples with <span class="math inline">\(D\)</span> features.</li>
-<li><span class="math inline">\(w\)</span>: <span class="math inline">\([D]\)</span>, one learned coefficient per feature.</li>
-<li><span class="math inline">\(b\)</span>: scalar, broadcast across the batch.</li>
-<li><span class="math inline">\(z\)</span>: <span class="math inline">\([B]\)</span>, one logit per example.</li>
-<li><span class="math inline">\(p\)</span>: <span class="math inline">\([B]\)</span>, one probability per example after sigmoid.</li>
+<li>X: [B, D], a batch of B examples with D features.</li>
+<li>w: [D, 1], one learned coefficient per feature.</li>
+<li>b: [1], broadcast across the batch.</li>
+<li>z: [B, 1], one logit per example.</li>
+<li>p: [B, 1], one probability per example after sigmoid.</li>
 </ul>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
 <ul>
@@ -703,6 +704,9 @@ L=-y\log(p)-(1-y)\log(1-p)
 <li>BCEWithLogitsLoss should receive raw logits, not sigmoid probabilities.</li>
 <li>The decision rule logits &gt; 0 is equivalent to sigmoid(logits) &gt; 0.5.</li>
 </ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>It should now be clear how to calculate one logit, one sigmoid value, one BCE value, and the sign of the gradient update.</strong></p>
+</div>
 <p>Linear models teach the affine score that later becomes the logit used by classifiers and language models.</p>
 <p>Probability transforms make scores usable by losses and decoding rules.</p>
 

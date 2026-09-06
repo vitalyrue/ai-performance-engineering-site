@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -341,9 +341,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </header>
 
 
+<p>Teach torch.compile, TorchInductor kernel fusion, and CUDA Graph capture and replay.</p>
 <p>Chapter 5 separated long device kernels from gaps created by Python dispatch, synchronization, and repeated launches. When those host-side gaps occupy a meaningful fraction of a stable step, changing the kernel arithmetic alone cannot recover the lost time.</p>
 <p>Compilation and graph replay address different parts of that delay. PyTorch compilation captures compatible tensor operations and may transform or fuse them; a CUDA Graph records a selected sequence of GPU operations and relaunches it with less host work. Neither mechanism makes an inefficient algorithm, memory access pattern, or collective communication path disappear.</p>
-<p>Eager execution is the baseline. During compilation, TorchDynamo records compatible tensor operations and the conditions under which that recording can be reused. If training needs gradients, AOTAutograd prepares forward and backward graphs; TorchInductor then turns captured regions into generated kernels or library calls. Operations that cannot be captured continue through eager PyTorch. CUDA Graph warmup, fixed-address capture, and replay form a separate path whose benefit must be measured against compilation, replay, both, or neither.</p>
+<p>Eager execution provides the baseline. TorchDynamo then captures compatible tensor work under guards, while graph breaks leave other work eager. AOTAutograd and TorchInductor process captured regions. CUDA Graph warmup, fixed-address capture, and replay form a separate path whose benefit must be measured against compilation, replay, both, or neither.</p>
 <p>The compiler captures compatible tensor work, checks guards, handles graph breaks, and lowers captured regions into generated kernels or library calls. CUDA Graphs record and replay a stable sequence of already selected GPU operations.</p>
 <div id="fig-m4-c06-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Separate paths show PyTorch graph capture, guards, breaks, AOTAutograd, TorchInductor, and generated work versus CUDA Graph warmup, stable-buffer capture, one host launch, and repeated replay.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -398,7 +399,7 @@ Figure&nbsp;6.1: PyTorch compilation and CUDA Graph replay change different part
 </section>
 <section id="sec-m4-c06-s03" class="level2" data-number="6.3">
 <h2 data-number="6.3" class="anchored" data-anchor-id="sec-m4-c06-s03"><span class="header-section-number">6.3</span> Graph breaks</h2>
-<p>A graph break makes TorchDynamo end one captured region, run unsupported code eagerly, and possibly resume capture afterward. The performance cost depends on where and how often this happens: a break during one-time setup may not matter, while a break in every decode step can restore Python dispatch, block fusion across the boundary, or synchronize a tensor value with the host.</p>
+<p>A graph break belongs to the compiler-capture layer. It occurs when PyTorch cannot keep a region inside the traceable graph and must fall back to ordinary eager execution for part of the program.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Definition - Graph break</strong></p>
 <p>A graph break splits a Python function around code that TorchDynamo cannot represent in the current graph. The unsupported boundary runs eagerly and capture may resume afterward. Repeated breaks reduce fusion opportunities and reintroduce dispatch between regions.</p>
@@ -411,7 +412,8 @@ Figure&nbsp;6.1: PyTorch compilation and CUDA Graph replay change different part
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Dynamic shape churn:</strong></span> Frequent shape changes can cause recompilation or guards that prevent a stable compiled path.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Host I/O in hot paths:</strong></span> Printing, logging tensor values, or debugging inside a repeated GPU path can force synchronization and graph breaks.</li>
 </ul>
-<p>After locating the breaks, inspect the captured regions to see which kernels TorchInductor generated, what it fused, and how much memory traffic remains.</p>
+<p>The practical diagnostic is to ask whether the break is in cold setup code or hot repeated code. A graph break during one-time preprocessing may not matter. A graph break inside every decode step can dominate latency.</p>
+<p>A graph break matters when it repeatedly splits hot work and restores Python dispatch or synchronization; a break confined to cold setup may be harmless. The next question is what kernels, fusion choices, and memory traffic TorchInductor produces for the regions that remain captured.</p>
 </section>
 <section id="sec-m4-c06-s04" class="level2" data-number="6.4">
 <h2 data-number="6.4" class="anchored" data-anchor-id="sec-m4-c06-s04"><span class="header-section-number">6.4</span> TorchInductor and generated kernels</h2>
@@ -534,83 +536,104 @@ Table&nbsp;6.1: torch.compile versus CUDA Graphs.
 </ul>
 <section id="sec-m4-c06-s08" class="level3" data-number="6.7.1">
 <h3 data-number="6.7.1" class="anchored" data-anchor-id="sec-m4-c06-s08"><span class="header-section-number">6.7.1</span> Resolving graph breaks in RMS-normalization</h3>
-<p>This toy normalization loop places four capture problems in one short example: scalar extraction that can synchronize a GPU value with the CPU, a Python branch on that extracted value, host logging in the repeated path, and tensor operations that must remain traceable. The same patterns can occur in many model operations, not only normalization.</p>
+<p>Graph breaks are one of the most common compilation issues when using torch.compile in real-world LLM serving code. The RMS-normalization example below is a toy hot loop, not a claim that RMSNorm itself is the only problem. It is useful because it combines four common failure modes in a small piece of code: scalar extraction, Python branching on tensor values, logging in the hot path, and GPU-to-CPU synchronization.</p>
 <p>The optimization principle is to keep decisions in tensor space when they belong on the GPU and to keep host-side diagnostics out of the repeated compiled region. The naive implementation contains typical compilation anti-patterns; the revised implementation shows the same computation expressed in a compiler-friendly form.</p>
-<p><strong>Example: Resolving graph breaks in RMS-normalization.</strong> The first function contains patterns that commonly create synchronization and graph breaks. The second keeps the decision in tensor operations so the current compiler has a better chance of capturing the hot region; graph-break diagnostics must confirm the result for the installed PyTorch release. Calling <code>.item()</code> extracts a tensor value as a Python scalar, forcing a GPU-to-CPU synchronization that stalls execution. Python <code>if</code> conditions on tensor values break compilation. <code>torch.where</code> expresses selection in tensor form. Clamping the denominator prevents a zero-scale input from creating invalid values or gradients in the unselected division branch. Printing tensor values in a hot loop can synchronize or break capture.</p>
+<p><strong>Example: Resolving graph breaks in RMS-normalization.</strong> The first function contains patterns that commonly create synchronization and graph breaks. The second keeps the decision in tensor operations so the current compiler has a better chance of capturing the hot region; graph-break diagnostics must confirm the result for the installed PyTorch release.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Resolving graph breaks in RMS-normalization</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c06-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c06-c01-1"><a href="#lst-m4-c06-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c06-c01-2"><a href="#lst-m4-c06-c01-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c06-c01-3"><a href="#lst-m4-c06-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. BROKEN: Forces CPU-GPU syncs and graph breaks</span></span>
-<span id="lst-m4-c06-c01-4"><a href="#lst-m4-c06-c01-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> broken_decode_step(h: torch.Tensor, state: torch.Tensor):</span>
-<span id="lst-m4-c06-c01-5"><a href="#lst-m4-c06-c01-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Normalization</span></span>
-<span id="lst-m4-c06-c01-6"><a href="#lst-m4-c06-c01-6" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> h <span class="op">*</span> torch.rsqrt(h.<span class="bu">pow</span>(<span class="dv">2</span>).mean(dim<span class="op">=-</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>) <span class="op">+</span> <span class="fl">1e-6</span>)</span>
-<span id="lst-m4-c06-c01-7"><a href="#lst-m4-c06-c01-7" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Host-device sync via .item()</span></span>
-<span id="lst-m4-c06-c01-8"><a href="#lst-m4-c06-c01-8" aria-hidden="true" tabindex="-1"></a>    scale <span class="op">=</span> h.<span class="bu">abs</span>().<span class="bu">max</span>().item() <span class="co"># Graph break + CPU stall</span></span>
-<span id="lst-m4-c06-c01-9"><a href="#lst-m4-c06-c01-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> scale <span class="op">&gt;</span> <span class="fl">3.0</span>: <span class="co"># Python branch on tensor value</span></span>
-<span id="lst-m4-c06-c01-10"><a href="#lst-m4-c06-c01-10" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> h <span class="op">/</span> scale</span>
-<span id="lst-m4-c06-c01-11"><a href="#lst-m4-c06-c01-11" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"max|h| = </span><span class="sc">{</span>scale<span class="sc">:.3f}</span><span class="ss">"</span>) <span class="co"># Graph break (host IO)</span></span>
-<span id="lst-m4-c06-c01-12"><a href="#lst-m4-c06-c01-12" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> <span class="fl">0.9</span> <span class="op">*</span> state <span class="op">+</span> <span class="fl">0.1</span> <span class="op">*</span> h</span>
-<span id="lst-m4-c06-c01-13"><a href="#lst-m4-c06-c01-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> h, state</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c06-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c06-c01-1"><a href="#lst-m4-c06-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c06-c01-2"><a href="#lst-m4-c06-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - Calling .item() extracts a tensor value as a Python scalar, forcing a GPU-to-CPU</span></span>
+<span id="lst-m4-c06-c01-3"><a href="#lst-m4-c06-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co">#   synchronization (host sync) that stalls execution.</span></span>
+<span id="lst-m4-c06-c01-4"><a href="#lst-m4-c06-c01-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - Python if conditions on tensor values break compilation because the tracer cannot resolve</span></span>
+<span id="lst-m4-c06-c01-5"><a href="#lst-m4-c06-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co">#   dynamic/symbolic control flow branches.</span></span>
+<span id="lst-m4-c06-c01-6"><a href="#lst-m4-c06-c01-6" aria-hidden="true" tabindex="-1"></a><span class="co"># - torch.where expresses selection in tensor form, but both candidate tensors may be evaluated.</span></span>
+<span id="lst-m4-c06-c01-7"><a href="#lst-m4-c06-c01-7" aria-hidden="true" tabindex="-1"></a><span class="co">#   Clamping the denominator prevents a zero-scale input from creating invalid values or gradients</span></span>
+<span id="lst-m4-c06-c01-8"><a href="#lst-m4-c06-c01-8" aria-hidden="true" tabindex="-1"></a><span class="co">#   in the unselected division branch.</span></span>
+<span id="lst-m4-c06-c01-9"><a href="#lst-m4-c06-c01-9" aria-hidden="true" tabindex="-1"></a><span class="co"># - Printing tensor values in a hot loop can synchronize or break capture. Move diagnostics</span></span>
+<span id="lst-m4-c06-c01-10"><a href="#lst-m4-c06-c01-10" aria-hidden="true" tabindex="-1"></a><span class="co">#   outside the timed region or use supported compiler logging rather than assuming that all</span></span>
+<span id="lst-m4-c06-c01-11"><a href="#lst-m4-c06-c01-11" aria-hidden="true" tabindex="-1"></a><span class="co">#   logging must be removed.</span></span>
+<span id="lst-m4-c06-c01-12"><a href="#lst-m4-c06-c01-12" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c06-c01-13"><a href="#lst-m4-c06-c01-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
 <span id="lst-m4-c06-c01-14"><a href="#lst-m4-c06-c01-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c06-c01-15"><a href="#lst-m4-c06-c01-15" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. REVISED: Keeps the data-dependent choice in tensor operations</span></span>
-<span id="lst-m4-c06-c01-16"><a href="#lst-m4-c06-c01-16" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fixed_decode_step(h: torch.Tensor, state: torch.Tensor):</span>
+<span id="lst-m4-c06-c01-15"><a href="#lst-m4-c06-c01-15" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. BROKEN: Forces CPU-GPU syncs and graph breaks</span></span>
+<span id="lst-m4-c06-c01-16"><a href="#lst-m4-c06-c01-16" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> broken_decode_step(h: torch.Tensor, state: torch.Tensor):</span>
 <span id="lst-m4-c06-c01-17"><a href="#lst-m4-c06-c01-17" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Normalization</span></span>
 <span id="lst-m4-c06-c01-18"><a href="#lst-m4-c06-c01-18" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> h <span class="op">*</span> torch.rsqrt(h.<span class="bu">pow</span>(<span class="dv">2</span>).mean(dim<span class="op">=-</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>) <span class="op">+</span> <span class="fl">1e-6</span>)</span>
-<span id="lst-m4-c06-c01-19"><a href="#lst-m4-c06-c01-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Keep as a 0-dimensional GPU tensor (no .item() sync)</span></span>
-<span id="lst-m4-c06-c01-20"><a href="#lst-m4-c06-c01-20" aria-hidden="true" tabindex="-1"></a>    scale <span class="op">=</span> h.<span class="bu">abs</span>().<span class="bu">max</span>()</span>
-<span id="lst-m4-c06-c01-21"><a href="#lst-m4-c06-c01-21" aria-hidden="true" tabindex="-1"></a>    <span class="co"># torch.where may evaluate both inputs, so keep the denominator finite</span></span>
-<span id="lst-m4-c06-c01-22"><a href="#lst-m4-c06-c01-22" aria-hidden="true" tabindex="-1"></a>    safe_scale <span class="op">=</span> scale.clamp_min(torch.finfo(h.dtype).tiny)</span>
-<span id="lst-m4-c06-c01-23"><a href="#lst-m4-c06-c01-23" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Branch in tensor space using torch.where</span></span>
-<span id="lst-m4-c06-c01-24"><a href="#lst-m4-c06-c01-24" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> torch.where(scale <span class="op">&gt;</span> <span class="fl">3.0</span>, h <span class="op">/</span> safe_scale, h)</span>
-<span id="lst-m4-c06-c01-25"><a href="#lst-m4-c06-c01-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Remove print/logging statements on hot paths</span></span>
-<span id="lst-m4-c06-c01-26"><a href="#lst-m4-c06-c01-26" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> <span class="fl">0.9</span> <span class="op">*</span> state <span class="op">+</span> <span class="fl">0.1</span> <span class="op">*</span> h</span>
-<span id="lst-m4-c06-c01-27"><a href="#lst-m4-c06-c01-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> h, state</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m4-c06-c01-19"><a href="#lst-m4-c06-c01-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Host-device sync via .item()</span></span>
+<span id="lst-m4-c06-c01-20"><a href="#lst-m4-c06-c01-20" aria-hidden="true" tabindex="-1"></a>    scale <span class="op">=</span> h.<span class="bu">abs</span>().<span class="bu">max</span>().item() <span class="co"># Graph break + CPU stall</span></span>
+<span id="lst-m4-c06-c01-21"><a href="#lst-m4-c06-c01-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> scale <span class="op">&gt;</span> <span class="fl">3.0</span>: <span class="co"># Python branch on tensor value</span></span>
+<span id="lst-m4-c06-c01-22"><a href="#lst-m4-c06-c01-22" aria-hidden="true" tabindex="-1"></a>        h <span class="op">=</span> h <span class="op">/</span> scale</span>
+<span id="lst-m4-c06-c01-23"><a href="#lst-m4-c06-c01-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"max|h| = </span><span class="sc">{</span>scale<span class="sc">:.3f}</span><span class="ss">"</span>) <span class="co"># Graph break (host IO)</span></span>
+<span id="lst-m4-c06-c01-24"><a href="#lst-m4-c06-c01-24" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> <span class="fl">0.9</span> <span class="op">*</span> state <span class="op">+</span> <span class="fl">0.1</span> <span class="op">*</span> h</span>
+<span id="lst-m4-c06-c01-25"><a href="#lst-m4-c06-c01-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> h, state</span>
+<span id="lst-m4-c06-c01-26"><a href="#lst-m4-c06-c01-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c01-27"><a href="#lst-m4-c06-c01-27" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. REVISED: Keeps the data-dependent choice in tensor operations</span></span>
+<span id="lst-m4-c06-c01-28"><a href="#lst-m4-c06-c01-28" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fixed_decode_step(h: torch.Tensor, state: torch.Tensor):</span>
+<span id="lst-m4-c06-c01-29"><a href="#lst-m4-c06-c01-29" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Normalization</span></span>
+<span id="lst-m4-c06-c01-30"><a href="#lst-m4-c06-c01-30" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> h <span class="op">*</span> torch.rsqrt(h.<span class="bu">pow</span>(<span class="dv">2</span>).mean(dim<span class="op">=-</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>) <span class="op">+</span> <span class="fl">1e-6</span>)</span>
+<span id="lst-m4-c06-c01-31"><a href="#lst-m4-c06-c01-31" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Keep as a 0-dimensional GPU tensor (no .item() sync)</span></span>
+<span id="lst-m4-c06-c01-32"><a href="#lst-m4-c06-c01-32" aria-hidden="true" tabindex="-1"></a>    scale <span class="op">=</span> h.<span class="bu">abs</span>().<span class="bu">max</span>()</span>
+<span id="lst-m4-c06-c01-33"><a href="#lst-m4-c06-c01-33" aria-hidden="true" tabindex="-1"></a>    <span class="co"># torch.where may evaluate both inputs, so keep the denominator finite</span></span>
+<span id="lst-m4-c06-c01-34"><a href="#lst-m4-c06-c01-34" aria-hidden="true" tabindex="-1"></a>    safe_scale <span class="op">=</span> scale.clamp_min(torch.finfo(h.dtype).tiny)</span>
+<span id="lst-m4-c06-c01-35"><a href="#lst-m4-c06-c01-35" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Branch in tensor space using torch.where</span></span>
+<span id="lst-m4-c06-c01-36"><a href="#lst-m4-c06-c01-36" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> torch.where(scale <span class="op">&gt;</span> <span class="fl">3.0</span>, h <span class="op">/</span> safe_scale, h)</span>
+<span id="lst-m4-c06-c01-37"><a href="#lst-m4-c06-c01-37" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Remove print/logging statements on hot paths</span></span>
+<span id="lst-m4-c06-c01-38"><a href="#lst-m4-c06-c01-38" aria-hidden="true" tabindex="-1"></a>    state <span class="op">=</span> <span class="fl">0.9</span> <span class="op">*</span> state <span class="op">+</span> <span class="fl">0.1</span> <span class="op">*</span> h</span>
+<span id="lst-m4-c06-c01-39"><a href="#lst-m4-c06-c01-39" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> h, state</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Replacing the host-side condition with <code>torch.where</code> keeps the selection in tensor form and avoids extracting <code>scale</code> into Python. That change can preserve a captured region, but it does not guarantee one fused kernel: compiler diagnostics and a profiler trace must show which regions and kernels were produced.</p>
 </section>
 <section id="sec-m4-c06-s09" class="level3" data-number="6.7.2">
 <h3 data-number="6.7.2" class="anchored" data-anchor-id="sec-m4-c06-s09"><span class="header-section-number">6.7.2</span> Manual CUDA Graph capture and replay recipe</h3>
 <p><code>torch.compile(mode='reduce-overhead')</code> can use CUDA Graphs for eligible regions, but it does not promise that every workload will be captured. Manual capture is useful when an engineer needs direct control over buffers and stream dependencies. Inputs and outputs use stable addresses, and warmup must complete lazy initialization, autotuning, and allocations before capture. A side-stream warmup is a robust pattern when its dependencies are synchronized correctly.</p>
-<p><strong>Example: Manual CUDA Graph capture and replay recipe.</strong> This recipe shows the manual capture of a module using static buffers, a side-stream warmup to isolate pending events, and replay with output cloning. CUDA Graphs capture operations bound to exact memory addresses, requiring fixed, static input/output buffers. <code>model.eval()</code> selects evaluation behavior and <code>torch.inference_mode()</code> disables autograd bookkeeping. These are recommended settings for inference, but not actual CUDA Graph capture requirements, as capture can also be used for training steps. A synchronized side-stream warmup is a robust way to isolate initialization and allocations before capture. Calling <code>graph.replay()</code> submits the recorded sequence without repeating Python dispatch for every captured operation. The replay helper must document its intended input shape, device, and dtype, and explicitly reject unintended broadcasting before copying. Clone <code>static_out</code> only when the caller must preserve that result across a later replay; cloning adds an allocation and copy outside the graph.</p>
+<p><strong>Example: Manual CUDA Graph capture and replay recipe.</strong> This recipe shows the manual capture of a module using static buffers, a side-stream warmup to isolate pending events, and replay with output cloning.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Manual CUDA Graph capture and replay recipe</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c06-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c06-c02-1"><a href="#lst-m4-c06-c02-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c06-c02-2"><a href="#lst-m4-c06-c02-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c06-c02-3"><a href="#lst-m4-c06-c02-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Target module to graph (e.g. a small MLP layer)</span></span>
-<span id="lst-m4-c06-c02-4"><a href="#lst-m4-c06-c02-4" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> torch.nn.Linear(<span class="dv">256</span>, <span class="dv">256</span>).cuda().<span class="bu">eval</span>()</span>
-<span id="lst-m4-c06-c02-5"><a href="#lst-m4-c06-c02-5" aria-hidden="true" tabindex="-1"></a>example_input <span class="op">=</span> torch.randn(<span class="dv">1</span>, <span class="dv">256</span>, device<span class="op">=</span><span class="st">"cuda"</span>)</span>
-<span id="lst-m4-c06-c02-6"><a href="#lst-m4-c06-c02-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c06-c02-7"><a href="#lst-m4-c06-c02-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 1: Create static input/output buffers</span></span>
-<span id="lst-m4-c06-c02-8"><a href="#lst-m4-c06-c02-8" aria-hidden="true" tabindex="-1"></a>static_in <span class="op">=</span> example_input.clone()</span>
-<span id="lst-m4-c06-c02-9"><a href="#lst-m4-c06-c02-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c06-c02-10"><a href="#lst-m4-c06-c02-10" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.inference_mode():</span>
-<span id="lst-m4-c06-c02-11"><a href="#lst-m4-c06-c02-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 2: Warmup on a dedicated CUDA stream</span></span>
-<span id="lst-m4-c06-c02-12"><a href="#lst-m4-c06-c02-12" aria-hidden="true" tabindex="-1"></a>    <span class="co"># This isolates compilation/allocations from the default stream</span></span>
-<span id="lst-m4-c06-c02-13"><a href="#lst-m4-c06-c02-13" aria-hidden="true" tabindex="-1"></a>    warmup_stream <span class="op">=</span> torch.cuda.Stream()</span>
-<span id="lst-m4-c06-c02-14"><a href="#lst-m4-c06-c02-14" aria-hidden="true" tabindex="-1"></a>    warmup_stream.wait_stream(torch.cuda.current_stream())</span>
-<span id="lst-m4-c06-c02-15"><a href="#lst-m4-c06-c02-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.cuda.stream(warmup_stream):</span>
-<span id="lst-m4-c06-c02-16"><a href="#lst-m4-c06-c02-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>):</span>
-<span id="lst-m4-c06-c02-17"><a href="#lst-m4-c06-c02-17" aria-hidden="true" tabindex="-1"></a>            static_out <span class="op">=</span> model(static_in)</span>
-<span id="lst-m4-c06-c02-18"><a href="#lst-m4-c06-c02-18" aria-hidden="true" tabindex="-1"></a>    torch.cuda.current_stream().wait_stream(warmup_stream)</span>
-<span id="lst-m4-c06-c02-19"><a href="#lst-m4-c06-c02-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c06-c02-20"><a href="#lst-m4-c06-c02-20" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 3: Record the graph on PyTorch's capture stream</span></span>
-<span id="lst-m4-c06-c02-21"><a href="#lst-m4-c06-c02-21" aria-hidden="true" tabindex="-1"></a>    graph <span class="op">=</span> torch.cuda.CUDAGraph()</span>
-<span id="lst-m4-c06-c02-22"><a href="#lst-m4-c06-c02-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.cuda.graph(graph):</span>
-<span id="lst-m4-c06-c02-23"><a href="#lst-m4-c06-c02-23" aria-hidden="true" tabindex="-1"></a>        static_out <span class="op">=</span> model(static_in)</span>
-<span id="lst-m4-c06-c02-24"><a href="#lst-m4-c06-c02-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c06-c02-25"><a href="#lst-m4-c06-c02-25" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 4: Replay function for new inputs</span></span>
-<span id="lst-m4-c06-c02-26"><a href="#lst-m4-c06-c02-26" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.inference_mode</span>()</span>
-<span id="lst-m4-c06-c02-27"><a href="#lst-m4-c06-c02-27" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> run_graphed_inference(x):</span>
-<span id="lst-m4-c06-c02-28"><a href="#lst-m4-c06-c02-28" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Reject unintended broadcasting or shape/device/dtype mismatches</span></span>
-<span id="lst-m4-c06-c02-29"><a href="#lst-m4-c06-c02-29" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> x.shape <span class="op">!=</span> static_in.shape <span class="kw">or</span> x.dtype <span class="op">!=</span> static_in.dtype <span class="kw">or</span> x.device <span class="op">!=</span> static_in.device:</span>
-<span id="lst-m4-c06-c02-30"><a href="#lst-m4-c06-c02-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"Input must match the captured static_in shape, dtype, and device."</span>)</span>
-<span id="lst-m4-c06-c02-31"><a href="#lst-m4-c06-c02-31" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Copy new data into the captured memory address</span></span>
-<span id="lst-m4-c06-c02-32"><a href="#lst-m4-c06-c02-32" aria-hidden="true" tabindex="-1"></a>    static_in.copy_(x)</span>
-<span id="lst-m4-c06-c02-33"><a href="#lst-m4-c06-c02-33" aria-hidden="true" tabindex="-1"></a>    graph.replay()</span>
-<span id="lst-m4-c06-c02-34"><a href="#lst-m4-c06-c02-34" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Clone output to prevent subsequent runs from overwriting it</span></span>
-<span id="lst-m4-c06-c02-35"><a href="#lst-m4-c06-c02-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> static_out.clone()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c06-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c06-c02-1"><a href="#lst-m4-c06-c02-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c06-c02-2"><a href="#lst-m4-c06-c02-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - CUDA Graphs capture operations bound to exact memory addresses, requiring fixed, static</span></span>
+<span id="lst-m4-c06-c02-3"><a href="#lst-m4-c06-c02-3" aria-hidden="true" tabindex="-1"></a><span class="co">#   input/output buffers.</span></span>
+<span id="lst-m4-c06-c02-4"><a href="#lst-m4-c06-c02-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - model.eval() selects evaluation behavior, while torch.inference_mode() disables autograd</span></span>
+<span id="lst-m4-c06-c02-5"><a href="#lst-m4-c06-c02-5" aria-hidden="true" tabindex="-1"></a><span class="co">#   bookkeeping for warmup, capture, and replay. Both are needed for this inference example.</span></span>
+<span id="lst-m4-c06-c02-6"><a href="#lst-m4-c06-c02-6" aria-hidden="true" tabindex="-1"></a><span class="co"># - A synchronized side-stream warmup is a robust way to isolate initialization and allocations</span></span>
+<span id="lst-m4-c06-c02-7"><a href="#lst-m4-c06-c02-7" aria-hidden="true" tabindex="-1"></a><span class="co">#   before capture; the exact stream arrangement must satisfy CUDA capture rules.</span></span>
+<span id="lst-m4-c06-c02-8"><a href="#lst-m4-c06-c02-8" aria-hidden="true" tabindex="-1"></a><span class="co"># - Calling graph.replay() submits the recorded sequence without repeating Python dispatch for</span></span>
+<span id="lst-m4-c06-c02-9"><a href="#lst-m4-c06-c02-9" aria-hidden="true" tabindex="-1"></a><span class="co">#   every captured operation.</span></span>
+<span id="lst-m4-c06-c02-10"><a href="#lst-m4-c06-c02-10" aria-hidden="true" tabindex="-1"></a><span class="co"># - Clone static_out only when the caller must preserve that result across a later replay; cloning</span></span>
+<span id="lst-m4-c06-c02-11"><a href="#lst-m4-c06-c02-11" aria-hidden="true" tabindex="-1"></a><span class="co">#   adds an allocation and copy outside the graph.</span></span>
+<span id="lst-m4-c06-c02-12"><a href="#lst-m4-c06-c02-12" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c06-c02-13"><a href="#lst-m4-c06-c02-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c06-c02-14"><a href="#lst-m4-c06-c02-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c02-15"><a href="#lst-m4-c06-c02-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Target module to graph (e.g. a small MLP layer)</span></span>
+<span id="lst-m4-c06-c02-16"><a href="#lst-m4-c06-c02-16" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> torch.nn.Linear(<span class="dv">256</span>, <span class="dv">256</span>).cuda().<span class="bu">eval</span>()</span>
+<span id="lst-m4-c06-c02-17"><a href="#lst-m4-c06-c02-17" aria-hidden="true" tabindex="-1"></a>example_input <span class="op">=</span> torch.randn(<span class="dv">1</span>, <span class="dv">256</span>, device<span class="op">=</span><span class="st">"cuda"</span>)</span>
+<span id="lst-m4-c06-c02-18"><a href="#lst-m4-c06-c02-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c02-19"><a href="#lst-m4-c06-c02-19" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 1: Create static input/output buffers</span></span>
+<span id="lst-m4-c06-c02-20"><a href="#lst-m4-c06-c02-20" aria-hidden="true" tabindex="-1"></a>static_in <span class="op">=</span> example_input.clone()</span>
+<span id="lst-m4-c06-c02-21"><a href="#lst-m4-c06-c02-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c02-22"><a href="#lst-m4-c06-c02-22" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.inference_mode():</span>
+<span id="lst-m4-c06-c02-23"><a href="#lst-m4-c06-c02-23" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 2: Warmup on a dedicated CUDA stream</span></span>
+<span id="lst-m4-c06-c02-24"><a href="#lst-m4-c06-c02-24" aria-hidden="true" tabindex="-1"></a>    <span class="co"># This isolates compilation/allocations from the default stream</span></span>
+<span id="lst-m4-c06-c02-25"><a href="#lst-m4-c06-c02-25" aria-hidden="true" tabindex="-1"></a>    warmup_stream <span class="op">=</span> torch.cuda.Stream()</span>
+<span id="lst-m4-c06-c02-26"><a href="#lst-m4-c06-c02-26" aria-hidden="true" tabindex="-1"></a>    warmup_stream.wait_stream(torch.cuda.current_stream())</span>
+<span id="lst-m4-c06-c02-27"><a href="#lst-m4-c06-c02-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.cuda.stream(warmup_stream):</span>
+<span id="lst-m4-c06-c02-28"><a href="#lst-m4-c06-c02-28" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>):</span>
+<span id="lst-m4-c06-c02-29"><a href="#lst-m4-c06-c02-29" aria-hidden="true" tabindex="-1"></a>            static_out <span class="op">=</span> model(static_in)</span>
+<span id="lst-m4-c06-c02-30"><a href="#lst-m4-c06-c02-30" aria-hidden="true" tabindex="-1"></a>    torch.cuda.current_stream().wait_stream(warmup_stream)</span>
+<span id="lst-m4-c06-c02-31"><a href="#lst-m4-c06-c02-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c02-32"><a href="#lst-m4-c06-c02-32" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 3: Record the graph on PyTorch's capture stream</span></span>
+<span id="lst-m4-c06-c02-33"><a href="#lst-m4-c06-c02-33" aria-hidden="true" tabindex="-1"></a>    graph <span class="op">=</span> torch.cuda.CUDAGraph()</span>
+<span id="lst-m4-c06-c02-34"><a href="#lst-m4-c06-c02-34" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> torch.cuda.graph(graph):</span>
+<span id="lst-m4-c06-c02-35"><a href="#lst-m4-c06-c02-35" aria-hidden="true" tabindex="-1"></a>        static_out <span class="op">=</span> model(static_in)</span>
+<span id="lst-m4-c06-c02-36"><a href="#lst-m4-c06-c02-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c06-c02-37"><a href="#lst-m4-c06-c02-37" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 4: Replay function for new inputs</span></span>
+<span id="lst-m4-c06-c02-38"><a href="#lst-m4-c06-c02-38" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.inference_mode</span>()</span>
+<span id="lst-m4-c06-c02-39"><a href="#lst-m4-c06-c02-39" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> run_graphed_inference(x):</span>
+<span id="lst-m4-c06-c02-40"><a href="#lst-m4-c06-c02-40" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Copy new data into the captured memory address</span></span>
+<span id="lst-m4-c06-c02-41"><a href="#lst-m4-c06-c02-41" aria-hidden="true" tabindex="-1"></a>    static_in.copy_(x)</span>
+<span id="lst-m4-c06-c02-42"><a href="#lst-m4-c06-c02-42" aria-hidden="true" tabindex="-1"></a>    graph.replay()</span>
+<span id="lst-m4-c06-c02-43"><a href="#lst-m4-c06-c02-43" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Clone output to prevent subsequent runs from overwriting it</span></span>
+<span id="lst-m4-c06-c02-44"><a href="#lst-m4-c06-c02-44" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> static_out.clone()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>During capture, PyTorch records supported CUDA operations and their dependencies against the graph’s memory addresses. Each call copies new values into <code>static_in</code> and submits the recorded graph through one graph launch, while the recorded kernels remain separate device operations unless compilation fused them earlier. <code>static_out</code> is reused, so cloning is conditional on whether a result must survive the next replay.</p>
 <p>Compilation is justified when captured operations can be simplified, fused, or lowered more effectively. CUDA Graph replay is justified when a stable sequence already has suitable kernels but host launch work remains visible. Measure compile and warmup cost separately, compare eager and optimized outputs, and accept the change only when steady-state end-to-end time improves.</p>
 <p>These runtime methods apply to both training and inference, but the useful capture boundary depends on which state changes during the workload. Chapter 7 makes those lifetimes concrete by following parameters, activations, gradients, optimizer state, input delivery, and precision through one training step.</p>

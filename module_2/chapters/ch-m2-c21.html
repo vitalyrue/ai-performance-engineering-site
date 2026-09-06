@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -473,6 +473,7 @@ window.Quarto = {
 <p>Autoregressive generation revisits the prompt and growing continuation for every new token. Storing prior attention keys and values avoids repeating that old work, at the cost of growing memory use.</p>
 <p>Generation repeatedly extends one sequence by one token. The KV cache stores attention state from earlier tokens, while batching and cache management determine latency, throughput, and memory use in a serving system.</p>
 <p>In code, <code>model.generate</code> exposes token generation and <code>past_key_values</code>; vLLM, SGLang, and TensorRT-LLM are supplementary engines for cache layout, batching, and scheduling.</p>
+<p>Chapter 21 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c21-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 21 opener for Decoding, KV cache, batching, and latency, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c21-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -483,6 +484,7 @@ Figure&nbsp;21.1: Prefill creates reusable attention state; decode appends one t
 </figcaption>
 </figure>
 </div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c21-s01" class="level2" data-number="21.1">
 <h2 data-number="21.1" class="anchored" data-anchor-id="sec-m2-c21-s01"><span class="header-section-number">21.1</span> Eliminating Redundant Attention Recomputations with the KV Cache</h2>
 <p>Transformer inference has two phases. Prefill processes the prompt and builds attention state; decode generates one new token at a time while reusing cached keys and values.</p>
@@ -497,7 +499,8 @@ Figure&nbsp;21.1: Prefill creates reusable attention state; decode appends one t
 <p><strong>Origin note:</strong> KV caching is a systems memoization idea applied to transformer attention: store reusable keys and values so future decode steps do not repeat the same computation.</p>
 <p>A KV cache is a collection of key and value tensors stored for every completed token, layer, and key/value head. It is not a cache of logits or complete hidden states. A new decode step still computes a new query, key, and value for the newly generated token.</p>
 <p>During prefill, the model processes all prompt tokens and stores their keys and values. During decode, the new query compares with the stored keys and the newly appended key; the resulting attention weights mix the stored values and the new value. Earlier prompt keys and values are reused because they do not change after the prompt has been processed.</p>
-<p>During autoregressive generation, the KV cache avoids recomputing keys and values for the <span class="math inline">\(T\)</span> earlier positions at every step. The new query still attends to <span class="math inline">\(T\)</span> stored keys, so one decode step remains linear in current context length along that axis. Whether decode is limited by arithmetic, memory bandwidth, or scheduling depends on model dimensions, batch size, context length, numerical format, and hardware.</p>
+<p>During autoregressive token generation, previous token keys and values are stored in GPU memory (the KV cache), avoiding the O(<span class="math inline">\(T^{2}\)</span>) recomputation of past attention states.</p>
+<p>This reduces the per-step generation cost to O(T) FLOPs, transforming the computational bottleneck from compute-bound FLOPs to memory-bandwidth-bound tensor transfers.</p>
 <p>Each layer stores keys and values by batch, KV head, sequence position, and head dimension.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>KV cache dimensions:</strong></span></p>
 <p><span id="eq-m2-c21-e01"><span class="math display">\[
@@ -510,13 +513,13 @@ K,V\in\mathbb{R}^{B\times H_{\mathrm{KV}}\times T\times d_h}
 \tag{21.2}\]</span></span></p>
 <p>where 2 is keys plus values; layers, <span class="math inline">\(H_{KV}\)</span>, <span class="math inline">\(d_{h}\)</span> is transformer depth, KV-head count, and head width; T is cached sequence length; s is bytes per stored scalar.</p>
 <p>Each layer stores one key and one value vector for every batch item, KV head, token position, and head dimension. In grouped-query or multi-query attention, the number of KV heads can be smaller than the number of query heads.</p>
-<p>Each added token increases cache storage by one key and one value vector per layer, batch item, and KV head.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Per-token KV-cache growth:</strong></span></p>
+<p>KV cache speeds decoding by spending memory proportional to context length.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>KV cache size sketch:</strong></span></p>
 <p><span id="eq-m2-c21-e03"><span class="math display">\[
-\Delta\mathrm{bytes}_{\mathrm{per\ token}}=2LBH_{\mathrm{KV}}d_hs
+\mathrm{bytes}\approx2\cdot\mathrm{layers}\cdot\mathrm{batch}\cdot\mathrm{kv\,heads}\cdot\mathrm{sequence\,length}\cdot\mathrm{head\,dim}\cdot\mathrm{bytes\,per\,value}
 \tag{21.3}\]</span></span></p>
-<p>where <span class="math inline">\(L\)</span> is the number of layers, <span class="math inline">\(B\)</span> is batch size, <span class="math inline">\(H_{\mathrm{KV}}\)</span> is the number of key/value heads, <span class="math inline">\(d_h\)</span> is head width, and <span class="math inline">\(s\)</span> is bytes per stored scalar.</p>
-<p>Multiplying this increment by cached sequence length <span class="math inline">\(T\)</span> recovers the total byte estimate above.</p>
+<p>where L is number of layers; B is batch size; <span class="math inline">\(H_{KV}\)</span> is key/value heads; T is cached positions; <span class="math inline">\(d_{h}\)</span> is head width.</p>
+<p>Each position stores both a key and a value for every layer, batch item, head, and head coordinate.</p>
 <p>Cache memory grows linearly with context length and can dominate inference memory.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Appending one token to a small key-value cache</strong></p>
@@ -535,7 +538,6 @@ K,V\in\mathbb{R}^{B\times H_{\mathrm{KV}}\times T\times d_h}
 <p>After one decoded token, the cache uses 2(1)(1)(4)(2)(2) = 32 bytes.</p>
 <p>Each generated token adds one position to the cache, which saves repeated computation but increases memory use linearly with sequence length.</p>
 </div>
-<p>The following runnable Python function receives layer count, batch size, KV-head count, sequence length, head width, and bytes per stored value. It returns the idealized key-plus-value storage in GiB. The printed 1.0 GiB excludes allocator overhead, block fragmentation, model weights, and temporary tensors, so it is a lower-level capacity estimate rather than total serving memory.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A simple KV-cache memory estimate.</p>
 </div>
@@ -614,7 +616,7 @@ K,V\in\mathbb{R}^{B\times H_{\mathrm{KV}}\times T\times d_h}
 <p>This trade is easiest to see with two long requests. If their combined caches no longer fit in accelerator memory, an engine can reject one request, shorten its usable context, or move colder blocks away from the accelerator. Offloading admits more context but may delay a decode step when an old block is needed again. The useful measurement is therefore not cache size alone, but cache size together with time to first token, time per output token, and the request mix.</p>
 <p>Chunked prefill and continuous batching address a related scheduling problem. A long incoming prompt can otherwise occupy the accelerator while already-active requests wait for their next token. Chunked prefill alternates short prompt chunks with decode steps. This protects the generation speed of active requests while managing first-token latency for new prompts.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Computation map</strong></span></p>
-<p>The serving system tokenizes each prompt, runs prefill to create its initial keys and values, and then schedules repeated one-token decode steps while preserving each request’s separate cache and sampling state.</p>
+<p>The computation starts with prompt and produces decode through the intermediate objects shown below.</p>
 <div id="fig-m2-c21-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Native computation diagram: Prefill creates reusable cache entries, while decoding appends one token and one new cache position at a time.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c21-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -625,7 +627,7 @@ Figure&nbsp;21.2: Prefill creates reusable cache entries, while decoding appends
 </figcaption>
 </figure>
 </div>
-<p>Prefill produces the cache that decode reads and extends. Continuous batching decides which requests share each hardware step, while chunking limits how long a new prompt can delay requests that are already decoding.</p>
+<p>The output of prompt is the input required by decode; the intermediate stages name the stored objects that make the transition possible.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Interleaving a long prefill with active decoding</strong></p>
 <p>One request has a 12-token prompt while two requests are already decoding.</p>
@@ -641,7 +643,7 @@ Figure&nbsp;21.2: Prefill creates reusable cache entries, while decoding appends
 <section id="sec-m2-c21-s04" class="level2" data-number="21.4">
 <h2 data-number="21.4" class="anchored" data-anchor-id="sec-m2-c21-s04"><span class="header-section-number">21.4</span> Reusing Common Prompt States with Prefix Caching</h2>
 <p>A prefix cache stores reusable attention state for prompt tokens that appear again across requests.</p>
-<p>Time to first token (TTFT) remains the sum of queue time, prompt-prefill time, and the first decode step. Prefix caching can shorten only the prefill component when the prefix tokens, model weights, tokenization, and attention settings match; it does not directly remove queue time.</p>
+<p>First-token latency is time until the first generated token appears.</p>
 <p>Prefill computes keys and values for every prompt position. If another request begins with the same prefix, a serving engine can reuse cached state instead of recomputing the prefix from the model weights.</p>
 <p>The benefit is latency and compute reduction for repeated prompts; the cost is memory pressure and cache-management complexity. Prefix caching therefore belongs to serving behavior, not to the abstract probability rule for sampling one token.</p>
 <p>Two requests with an identical system prompt or document prefix create the same key and value tensors for that shared prefix. A prefix cache stores those tensors once and lets later requests begin after the repeated prefix instead of recomputing its attention layers.</p>
@@ -730,7 +732,7 @@ Figure&nbsp;21.5: Processing the prompt once creates keys and values that later 
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Temperature softmax:</strong></span></p>
 <p><span id="eq-m2-c21-e06"><span class="math display">\[
-p_i=\frac{\exp(z_i/\tau)}{\sum_j\exp(z_j/\tau)},\quad \tau&gt;0
+P_i=\frac{\exp(z_i/\tau)}{\sum_j\exp(z_j/\tau)}
 \tag{21.6}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Greedy decoding:</strong></span></p>
 <p><span id="eq-m2-c21-e07"><span class="math display">\[
@@ -738,7 +740,7 @@ p_i=\frac{\exp(z_i/\tau)}{\sum_j\exp(z_j/\tau)},\quad \tau&gt;0
 \tag{21.7}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>KV cache dimensions:</strong></span></p>
 <p><span id="eq-m2-c21-e08"><span class="math display">\[
-K^{(l)},V^{(l)}\in\mathbb{R}^{B\times H_{\mathrm{KV}}\times T_{\mathrm{cache}}\times d_h}
+K,V\ \text{per layer}: [B,H_{\mathrm{KV}},T_{\mathrm{cache}},D_h]
 \tag{21.8}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Decode recurrence:</strong></span></p>
 <p><span id="eq-m2-c21-e09"><span class="math display">\[
@@ -759,6 +761,9 @@ K^{(l)},V^{(l)}\in\mathbb{R}^{B\times H_{\mathrm{KV}}\times T_{\mathrm{cache}}\t
 <li><span class="math inline">\(use_{cache}=True\)</span> exposes the state reuse that makes decode cheaper than recomputing the prefix.</li>
 <li>Top-k filters logits by rank; top-p is computed from sorted probabilities and then renormalized before the random draw.</li>
 </ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>It should now be clear how to draw cache length after prefill and after three decode steps.</strong></p>
+</div>
 <p>Transformer inference is stateful because generated tokens reuse keys and values from earlier positions.</p>
 <p>Modern variants and non-text modalities reuse representation and compute patterns with different input structures.</p>
 

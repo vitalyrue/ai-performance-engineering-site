@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -375,6 +375,7 @@ window.Quarto = {
 </header>
 
 
+<p>Teach Triton block programming, online softmax, and IO-aware attention kernels.</p>
 <p>Triton is a Python-based language and compiler for writing GPU kernels at a block-tensor level. Its main abstraction is a program instance that handles a tile of data and is lowered into GPU code.</p>
 <p>Triton is useful when the hot operation is regular, the library kernel does not match the needed layout, or fusion can remove intermediate HBM traffic. Vendor GEMM kernels remain the usual baseline for standard matrix work, while distributed communication and request scheduling belong to their own software layers.</p>
 <p>A Triton kernel still obeys GPU constraints. Program IDs map to tiles. Block sizes shape parallelism and register pressure. Masks protect boundary loads. Strides define physical memory layout. Loads and stores still need coalescing and locality.</p>
@@ -404,7 +405,7 @@ Figure&nbsp;4.1: One Triton program instance computes one output row in the matr
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>CUDA runtime:</strong></span> The host-side API and driver-facing layer that manages device contexts, streams, events, memory copies, and kernel launches. It provides the submission and resource-management interface for both Triton and CUDA C++ paths.</li>
 </ul>
 <p>Triton is the right custom-kernel path when profiling isolates one regular single-GPU operation whose layout, fusion boundary, masking, or reduction pattern is poorly served by the existing compiler or library path. The additional responsibility is to validate tile shape, memory strides, masking, register pressure, numerical correctness, and end-to-end timing against the existing implementation.</p>
-<p>Serving software admits requests and manages the KV cache. Distributed software schedules communication between ranks. The CUDA runtime submits kernels and copies to streams. A Triton kernel directly defines the addresses and arithmetic of one tensor operation; changing that kernel can still alter end-to-end latency, memory pressure, and the timing seen by training or serving software, but it does not implement admission, cache-allocation, or rank-communication policy.</p>
+<p>A serving engine, a distributed framework, and the CUDA runtime own different layers around that kernel. Serving software chooses request admission and KV-cache policy; distributed software chooses rank communication; the runtime orders and launches GPU work. A Triton kernel changes only the measured tensor operation it implements.</p>
 <section id="sec-m4-c04-s02" class="level3" data-number="4.1.1">
 <h3 data-number="4.1.1" class="anchored" data-anchor-id="sec-m4-c04-s02"><span class="header-section-number">4.1.1</span> Kernel implementation choices</h3>
 <p>Kernel implementations differ by who writes them and where an engineer can make a useful change. The source form determines whether the first change belongs in custom kernel code, the captured graph, a library call, or the runtime launch sequence.</p>
@@ -428,7 +429,7 @@ Figure&nbsp;4.2: Triton lowering pipeline
 </figure>
 </div>
 <p>PTX is an intermediate instruction-set representation, not the final device instruction stream. The NVIDIA driver still compiles or loads executable device code. This figure describes the Triton kernel path, not the full PyTorch compiler stack.</p>
-<p>The lowering path changes who controls each optimization, but every route still produces GPU code that CUDA submits and executes. All four paths eventually submit GPU code; a hand-written Triton kernel exposes that work as program instances, offsets, masks, loads, reductions, and stores.</p>
+<p>The lowering path changes who controls each optimization, but every route still produces GPU code that CUDA submits and executes. The next question is how a hand-written Triton kernel represents that work through program instances, offsets, masks, loads, reductions, and stores.</p>
 </section>
 </section>
 <section id="sec-m4-c04-s03" class="level2" data-number="4.2">
@@ -551,39 +552,45 @@ Table&nbsp;4.1: CUDA and Triton memory-movement responsibilities.
 <section id="sec-m4-c04-s09" class="level2" data-number="4.5">
 <h2 data-number="4.5" class="anchored" data-anchor-id="sec-m4-c04-s09"><span class="header-section-number">4.5</span> Matrix-vector multiplication in Triton</h2>
 <p>To ground the Triton program structure in concrete code, we examine a Triton matrix-vector multiplication (GEMV) kernel. GEMV is useful as an example because it exposes the memory-access questions that custom kernels often need to answer: which program instance owns each output element, whether adjacent lanes read adjacent memory, how partial tiles are masked, and where the reduction lives.</p>
-<p>In matrix-vector multiplication y = Ax, each program instance computes one element of the output vector y, corresponding to one row of the matrix A. The kernel loads elements of the matrix row and the vector x in blocks, multiplies them, and reduces the products. The point is not that every GEMV should be custom-written; the point is that this small kernel makes tile assignment, global-memory addresses, masks, reductions, and stores visible. <code>tl.load</code> reads values from device addresses into the program; caches may satisfy some requests, so profiler counters are needed to measure L1, L2, and HBM traffic. <code>tl.store</code> writes the output through the device memory hierarchy.</p>
-<p><strong>Example: Triton matrix-vector kernel.</strong> One program instance computes one output row. It walks across columns in <code>BLOCK</code>-sized chunks, masks the final partial chunk, accumulates products in FP32, and stores one scalar. The launcher supplies an <code>M</code>-program grid; production code must also test correctness and tune the block size.</p>
+<p>In matrix-vector multiplication y = Ax, each program instance computes one element of the output vector y, corresponding to one row of the matrix A. The kernel loads elements of the matrix row and the vector x in blocks, multiplies them, and reduces the products. The point is not that every GEMV should be custom-written; the point is that this small kernel makes tile ownership, HBM reads, masks, reductions, and stores visible.</p>
+<p><strong>Example: Triton matrix-vector kernel.</strong> This Triton example computes one output row per program instance. It includes both the kernel and the Python launcher, so the matrix <code>A</code>, vector <code>x</code>, output <code>y</code>, launch grid, and tile size are visible.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Triton matrix-vector kernel</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c04-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c04-c01-1"><a href="#lst-m4-c04-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c04-c01-2"><a href="#lst-m4-c04-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> triton</span>
-<span id="lst-m4-c04-c01-3"><a href="#lst-m4-c04-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> triton.language <span class="im">as</span> tl</span>
-<span id="lst-m4-c04-c01-4"><a href="#lst-m4-c04-c01-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c04-c01-5"><a href="#lst-m4-c04-c01-5" aria-hidden="true" tabindex="-1"></a><span class="at">@triton.jit</span></span>
-<span id="lst-m4-c04-c01-6"><a href="#lst-m4-c04-c01-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> gemv_kernel(A, x, y, M: tl.constexpr, N: tl.constexpr, BLOCK: tl.constexpr):</span>
-<span id="lst-m4-c04-c01-7"><a href="#lst-m4-c04-c01-7" aria-hidden="true" tabindex="-1"></a>    row <span class="op">=</span> tl.program_id(<span class="dv">0</span>)</span>
-<span id="lst-m4-c04-c01-8"><a href="#lst-m4-c04-c01-8" aria-hidden="true" tabindex="-1"></a>    offsets <span class="op">=</span> tl.arange(<span class="dv">0</span>, BLOCK)</span>
-<span id="lst-m4-c04-c01-9"><a href="#lst-m4-c04-c01-9" aria-hidden="true" tabindex="-1"></a>    acc <span class="op">=</span> tl.full((), <span class="fl">0.0</span>, tl.float32)</span>
-<span id="lst-m4-c04-c01-10"><a href="#lst-m4-c04-c01-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> start <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, N, BLOCK):</span>
-<span id="lst-m4-c04-c01-11"><a href="#lst-m4-c04-c01-11" aria-hidden="true" tabindex="-1"></a>        cols <span class="op">=</span> start <span class="op">+</span> offsets</span>
-<span id="lst-m4-c04-c01-12"><a href="#lst-m4-c04-c01-12" aria-hidden="true" tabindex="-1"></a>        mask <span class="op">=</span> cols <span class="op">&lt;</span> N</span>
-<span id="lst-m4-c04-c01-13"><a href="#lst-m4-c04-c01-13" aria-hidden="true" tabindex="-1"></a>        a <span class="op">=</span> tl.load(A <span class="op">+</span> row <span class="op">*</span> N <span class="op">+</span> cols, mask<span class="op">=</span>mask, other<span class="op">=</span><span class="fl">0.0</span>)</span>
-<span id="lst-m4-c04-c01-14"><a href="#lst-m4-c04-c01-14" aria-hidden="true" tabindex="-1"></a>        xv <span class="op">=</span> tl.load(x <span class="op">+</span> cols, mask<span class="op">=</span>mask, other<span class="op">=</span><span class="fl">0.0</span>)</span>
-<span id="lst-m4-c04-c01-15"><a href="#lst-m4-c04-c01-15" aria-hidden="true" tabindex="-1"></a>        acc <span class="op">+=</span> tl.<span class="bu">sum</span>(a.to(tl.float32) <span class="op">*</span> xv.to(tl.float32), axis<span class="op">=</span><span class="dv">0</span>)</span>
-<span id="lst-m4-c04-c01-16"><a href="#lst-m4-c04-c01-16" aria-hidden="true" tabindex="-1"></a>    tl.store(y <span class="op">+</span> row, acc)</span>
-<span id="lst-m4-c04-c01-17"><a href="#lst-m4-c04-c01-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c04-c01-18"><a href="#lst-m4-c04-c01-18" aria-hidden="true" tabindex="-1"></a>M, N <span class="op">=</span> <span class="dv">4096</span>, <span class="dv">4096</span></span>
-<span id="lst-m4-c04-c01-19"><a href="#lst-m4-c04-c01-19" aria-hidden="true" tabindex="-1"></a>A <span class="op">=</span> torch.randn((M, N), device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float16)</span>
-<span id="lst-m4-c04-c01-20"><a href="#lst-m4-c04-c01-20" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> torch.randn((N,), device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float16)</span>
-<span id="lst-m4-c04-c01-21"><a href="#lst-m4-c04-c01-21" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> torch.empty((M,), device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float32)</span>
-<span id="lst-m4-c04-c01-22"><a href="#lst-m4-c04-c01-22" aria-hidden="true" tabindex="-1"></a>grid <span class="op">=</span> (M,)</span>
-<span id="lst-m4-c04-c01-23"><a href="#lst-m4-c04-c01-23" aria-hidden="true" tabindex="-1"></a>gemv_kernel[grid](A, x, y, M, N, BLOCK<span class="op">=</span><span class="dv">1024</span>)</span>
-<span id="lst-m4-c04-c01-24"><a href="#lst-m4-c04-c01-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c04-c01-25"><a href="#lst-m4-c04-c01-25" aria-hidden="true" tabindex="-1"></a>reference <span class="op">=</span> (A.double() <span class="op">@</span> x.double()).<span class="bu">float</span>()</span>
-<span id="lst-m4-c04-c01-26"><a href="#lst-m4-c04-c01-26" aria-hidden="true" tabindex="-1"></a>torch.testing.assert_close(y, reference, rtol<span class="op">=</span><span class="fl">1e-4</span>, atol<span class="op">=</span><span class="fl">1e-3</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The launcher sets a one-dimensional grid with <code>M</code> program instances, one per matrix row. Each instance loads chunks of <code>BLOCK</code> columns, converts the input values to FP32 before multiplication, and reduces the products with <code>tl.sum</code>. The parameters <code>N</code> and <code>BLOCK</code> specialize the loop and tile size; <code>M</code> is unused inside the kernel and does not need to be <code>tl.constexpr</code>. The final <code>tl.store</code> writes one scalar to global memory, potentially through a cache rather than directly to HBM.</p>
-<p>The correctness check uses a wider FP64 PyTorch calculation and converts its result to the output’s FP32 dtype. It runs outside any timing interval. The example tolerances allow finite-precision reduction differences for this input scale; investigate mismatches rather than widening tolerances merely to pass. Chapter 11 times different tile sizes. Since GEMV has low arithmetic intensity, useful changes usually concern coalescing, tile size, register pressure, and parallel work rather than adding arithmetic.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c04-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c04-c01-1"><a href="#lst-m4-c04-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c04-c01-2"><a href="#lst-m4-c04-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - row = tl.program_id(0) assigns one output row to one program instance.</span></span>
+<span id="lst-m4-c04-c01-3"><a href="#lst-m4-c04-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - offsets and cols define the block of columns read by the program.</span></span>
+<span id="lst-m4-c04-c01-4"><a href="#lst-m4-c04-c01-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - mask handles the final partial block without invalid memory access.</span></span>
+<span id="lst-m4-c04-c01-5"><a href="#lst-m4-c04-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - tl.load reads from HBM; the multiply and reduction happen in registers.</span></span>
+<span id="lst-m4-c04-c01-6"><a href="#lst-m4-c04-c01-6" aria-hidden="true" tabindex="-1"></a><span class="co"># - The Python launcher allocates device tensors and chooses grid=(M,), so there is one program</span></span>
+<span id="lst-m4-c04-c01-7"><a href="#lst-m4-c04-c01-7" aria-hidden="true" tabindex="-1"></a><span class="co">#   instance per output row.</span></span>
+<span id="lst-m4-c04-c01-8"><a href="#lst-m4-c04-c01-8" aria-hidden="true" tabindex="-1"></a><span class="co"># - Real production kernels would tune block size and often split large reductions across</span></span>
+<span id="lst-m4-c04-c01-9"><a href="#lst-m4-c04-c01-9" aria-hidden="true" tabindex="-1"></a><span class="co">#   programs.</span></span>
+<span id="lst-m4-c04-c01-10"><a href="#lst-m4-c04-c01-10" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c04-c01-11"><a href="#lst-m4-c04-c01-11" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c04-c01-12"><a href="#lst-m4-c04-c01-12" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> triton</span>
+<span id="lst-m4-c04-c01-13"><a href="#lst-m4-c04-c01-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> triton.language <span class="im">as</span> tl</span>
+<span id="lst-m4-c04-c01-14"><a href="#lst-m4-c04-c01-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c04-c01-15"><a href="#lst-m4-c04-c01-15" aria-hidden="true" tabindex="-1"></a><span class="at">@triton.jit</span></span>
+<span id="lst-m4-c04-c01-16"><a href="#lst-m4-c04-c01-16" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> gemv_kernel(A, x, y, M: tl.constexpr, N: tl.constexpr, BLOCK: tl.constexpr):</span>
+<span id="lst-m4-c04-c01-17"><a href="#lst-m4-c04-c01-17" aria-hidden="true" tabindex="-1"></a>    row <span class="op">=</span> tl.program_id(<span class="dv">0</span>)</span>
+<span id="lst-m4-c04-c01-18"><a href="#lst-m4-c04-c01-18" aria-hidden="true" tabindex="-1"></a>    offsets <span class="op">=</span> tl.arange(<span class="dv">0</span>, BLOCK)</span>
+<span id="lst-m4-c04-c01-19"><a href="#lst-m4-c04-c01-19" aria-hidden="true" tabindex="-1"></a>    acc <span class="op">=</span> tl.full((), <span class="fl">0.0</span>, tl.float32)</span>
+<span id="lst-m4-c04-c01-20"><a href="#lst-m4-c04-c01-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> start <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, N, BLOCK):</span>
+<span id="lst-m4-c04-c01-21"><a href="#lst-m4-c04-c01-21" aria-hidden="true" tabindex="-1"></a>        cols <span class="op">=</span> start <span class="op">+</span> offsets</span>
+<span id="lst-m4-c04-c01-22"><a href="#lst-m4-c04-c01-22" aria-hidden="true" tabindex="-1"></a>        mask <span class="op">=</span> cols <span class="op">&lt;</span> N</span>
+<span id="lst-m4-c04-c01-23"><a href="#lst-m4-c04-c01-23" aria-hidden="true" tabindex="-1"></a>        a <span class="op">=</span> tl.load(A <span class="op">+</span> row <span class="op">*</span> N <span class="op">+</span> cols, mask<span class="op">=</span>mask, other<span class="op">=</span><span class="fl">0.0</span>)</span>
+<span id="lst-m4-c04-c01-24"><a href="#lst-m4-c04-c01-24" aria-hidden="true" tabindex="-1"></a>        xv <span class="op">=</span> tl.load(x <span class="op">+</span> cols, mask<span class="op">=</span>mask, other<span class="op">=</span><span class="fl">0.0</span>)</span>
+<span id="lst-m4-c04-c01-25"><a href="#lst-m4-c04-c01-25" aria-hidden="true" tabindex="-1"></a>        acc <span class="op">+=</span> tl.<span class="bu">sum</span>(a <span class="op">*</span> xv, axis<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="lst-m4-c04-c01-26"><a href="#lst-m4-c04-c01-26" aria-hidden="true" tabindex="-1"></a>    tl.store(y <span class="op">+</span> row, acc)</span>
+<span id="lst-m4-c04-c01-27"><a href="#lst-m4-c04-c01-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c04-c01-28"><a href="#lst-m4-c04-c01-28" aria-hidden="true" tabindex="-1"></a>M, N <span class="op">=</span> <span class="dv">4096</span>, <span class="dv">4096</span></span>
+<span id="lst-m4-c04-c01-29"><a href="#lst-m4-c04-c01-29" aria-hidden="true" tabindex="-1"></a>A <span class="op">=</span> torch.randn((M, N), device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float16)</span>
+<span id="lst-m4-c04-c01-30"><a href="#lst-m4-c04-c01-30" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> torch.randn((N,), device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float16)</span>
+<span id="lst-m4-c04-c01-31"><a href="#lst-m4-c04-c01-31" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> torch.empty((M,), device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float32)</span>
+<span id="lst-m4-c04-c01-32"><a href="#lst-m4-c04-c01-32" aria-hidden="true" tabindex="-1"></a>grid <span class="op">=</span> (M,)</span>
+<span id="lst-m4-c04-c01-33"><a href="#lst-m4-c04-c01-33" aria-hidden="true" tabindex="-1"></a>gemv_kernel[grid](A, x, y, M, N, BLOCK<span class="op">=</span><span class="dv">1024</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The launcher function configures a one-dimensional grid of size M, which allocates one program instance per matrix row. Each instance loops over columns in chunks of BLOCK size, loads the sub-vectors, multiplies them element-wise, and accumulates the sum using tl.sum. The parameters M, N, and BLOCK are marked <code>tl.constexpr</code>, so Triton can specialize loop structure and tile size at compile time. Finally, tl.store writes the single scalar output back to HBM. Because GEMV has low arithmetic intensity, optimizing this kind of kernel is mostly about memory coalescing, tile size, occupancy, register pressure, and avoiding unnecessary intermediate writes, not about increasing the number of arithmetic operations.</p>
 <p>This kernel makes the boundary concrete: the Python launcher owns tensors and grid size, while each Triton program instance owns one row’s address calculation, loads, reduction, and store. The next decision is whether writing and maintaining a custom kernel is justified by the measured workload.</p>
 </section>
 <section id="sec-m4-c04-s10" class="level2" data-number="4.6">
@@ -601,7 +608,7 @@ Table&nbsp;4.1: CUDA and Triton memory-movement responsibilities.
 </section>
 <section id="sec-m4-c04-s11" class="level2" data-number="4.7">
 <h2 data-number="4.7" class="anchored" data-anchor-id="sec-m4-c04-s11"><span class="header-section-number">4.7</span> Attention computation in four tokens</h2>
-<p>This small attention trace connects the mathematical operation to the tensor shapes that a GPU kernel must load, multiply, normalize, and reduce. We use the query at position four. Its causal mask permits the three earlier keys and the current key, so all four keys in this example remain valid and the mask does not change the scores shown below.</p>
+<p>This small attention trace connects the mathematical operation to the tensor shapes that a GPU kernel must load, multiply, normalize, and reduce. We use the query at position four, so a causal mask permits attention to the three earlier positions and the current position itself.</p>
 <p>The attention rule is a matrix pipeline: form query-key scores, scale them by the square root of the head dimension, normalize them with softmax, and use the resulting weights to combine value vectors.</p>
 <p><span id="eq-m4-c04-e01"><span class="math display">\[
 \text{Attention} = \text{softmax}\left(\frac{Q K^T}{\sqrt{d_{\text{head}}}}\right) V

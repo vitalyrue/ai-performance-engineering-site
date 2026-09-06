@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -111,35 +111,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   }
 }</script>
 
-  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
-  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
-
-<script type="text/javascript">
-const typesetMath = (el) => {
-  if (window.MathJax) {
-    // MathJax Typeset
-    window.MathJax.typeset([el]);
-  } else if (window.katex) {
-    // KaTeX Render
-    var mathElements = el.getElementsByClassName("math");
-    var macros = [];
-    for (var i = 0; i < mathElements.length; i++) {
-      var texText = mathElements[i].firstChild;
-      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
-        window.katex.render(texText.data, mathElements[i], {
-          displayMode: mathElements[i].classList.contains('display'),
-          throwOnError: false,
-          macros: macros,
-          fleqn: false
-        });
-      }
-    }
-  }
-}
-window.Quarto = {
-  typesetMath
-};
-</script>
 
 <link rel="stylesheet" href="../styles.css">
 </head>
@@ -366,6 +337,7 @@ window.Quarto = {
 </header>
 
 
+<p>Optimize the memory-bound token generation loop using KV cache layout and PagedAttention.</p>
 <p>Decode optimization focuses on the repeated one-token step. A small inefficiency in one step becomes large when repeated for thousands of generated tokens across many active requests. Decode is therefore a scheduling, memory-layout, and cache-management problem as much as a model-forward problem.</p>
 <p>The key-value cache avoids recomputing the full prefix, but it also becomes the largest dynamic memory object in long-context serving. Cache layout determines whether decode kernels read memory efficiently. Allocation policy determines how many requests can be admitted without waste.</p>
 <p>A useful diagnostic path compares naive recomputation with cached decode, inspects weight and KV traffic, and then tests launch, layout, paging, or batching changes against the measured limit. A more elaborate path is not automatically faster: metadata, indirection, compilation, and scheduling overhead can outweigh its benefit for small workloads.</p>
@@ -383,35 +355,34 @@ Figure&nbsp;9.1: Decode reuses projected key and value state but still reads a g
 <p>The allocation panels separate logical token order from physical placement. Contiguous reservation can waste free space between requests; a block table can map logical blocks to non-contiguous physical blocks, trading less over-reservation for metadata, indirection, and final-block waste. Fixed recurrent state is a different model design, not another KV layout.</p>
 <section id="sec-m4-c09-s01" class="level2" data-number="9.1">
 <h2 data-number="9.1" class="anchored" data-anchor-id="sec-m4-c09-s01"><span class="header-section-number">9.1</span> Decode loop anatomy</h2>
-<p>Autoregressive generation uses prefill to predict the first output token, then decode steps to predict later tokens. A naive loop may rerun the model over the growing prefix. Let the prompt contain <span class="math inline">\(P\)</span> tokens and let the model generate <span class="math inline">\(G\)</span> new tokens without a cache. The first generation pass processes <span class="math inline">\(P\)</span> tokens; later passes process <span class="math inline">\(P+1\)</span>, …, <span class="math inline">\(P+G-1\)</span>. Across all <span class="math inline">\(G\)</span> outputs, projection and other per-token layer work therefore processes</p>
-<p><span class="math display">\[ \sum_{j=0}^{G-1}(P+j)=GP+\frac{G(G-1)}{2} \]</span></p>
-<p>token positions. Dense full-prefix attention accumulates work proportional to</p>
-<p><span class="math display">\[ \sum_{j=0}^{G-1}(P+j)^2=GP^2+PG(G-1)+\frac{G(G-1)(2G-1)}{6}. \]</span></p>
-<p>This becomes cubic in <span class="math inline">\(G\)</span> only when generated length grows large relative to the fixed prompt. Caching avoids repeating the old key and value projections, but each new query still attends to a growing history. After prefill, the <span class="math inline">\(j\)</span>th single-token decode call attends to <span class="math inline">\(P+j\)</span> positions, including its current input token.</p>
-<p><strong>Example: Cached decode loop.</strong> This example shows greedy generation for unpadded, equal-length prompts with a compatible Hugging Face Transformers model in evaluation mode (<code>model.eval()</code>). It requires a model whose <code>forward</code> method accepts <code>past_key_values</code> and infers positions from the growing cache. Padded batches and models with explicit cache-position APIs need additional masks and position arguments; this is not a universal generation wrapper. Prefill predicts the first output token and creates the cache. Each later call consumes the previous token, reads the cache, and predicts the next token. The loop generates a fixed number of tokens without early stopping at an end-of-sequence token. A zero-token request returns an empty output without running the model.</p>
+<p>Autoregressive generation starts with prefill and then repeats one decode step for each new token. A naive loop may rerun the model over the growing prefix; the amount of repeated token-layer work then grows roughly quadratically with generated length, while repeatedly recomputing full attention can grow more steeply. A cached loop stores key and value states so earlier token representations are not rebuilt:</p>
+<p><strong>Example: Cached decode loop.</strong> This example shows the basic decode dependency. Each step consumes the previous token and cached attention state, produces logits, chooses the next token, and updates the cache.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Cached decode loop</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c09-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c09-c01-1"><a href="#lst-m4-c09-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c09-c01-2"><a href="#lst-m4-c09-c01-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c09-c01-3"><a href="#lst-m4-c09-c01-3" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.inference_mode</span>()</span>
-<span id="lst-m4-c09-c01-4"><a href="#lst-m4-c09-c01-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> cached_decode(model, input_ids, max_new_tokens):</span>
-<span id="lst-m4-c09-c01-5"><a href="#lst-m4-c09-c01-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> max_new_tokens <span class="op">&lt;=</span> <span class="dv">0</span>:</span>
-<span id="lst-m4-c09-c01-6"><a href="#lst-m4-c09-c01-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> torch.empty((input_ids.size(<span class="dv">0</span>), <span class="dv">0</span>), dtype<span class="op">=</span>input_ids.dtype, device<span class="op">=</span>input_ids.device)</span>
-<span id="lst-m4-c09-c01-7"><a href="#lst-m4-c09-c01-7" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="lst-m4-c09-c01-8"><a href="#lst-m4-c09-c01-8" aria-hidden="true" tabindex="-1"></a>    out <span class="op">=</span> model(input_ids, use_cache<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c09-c01-9"><a href="#lst-m4-c09-c01-9" aria-hidden="true" tabindex="-1"></a>    past <span class="op">=</span> out.past_key_values</span>
-<span id="lst-m4-c09-c01-10"><a href="#lst-m4-c09-c01-10" aria-hidden="true" tabindex="-1"></a>    token <span class="op">=</span> out.logits[:, <span class="op">-</span><span class="dv">1</span>].argmax(dim<span class="op">=-</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c09-c01-11"><a href="#lst-m4-c09-c01-11" aria-hidden="true" tabindex="-1"></a>    generated <span class="op">=</span> [token]</span>
-<span id="lst-m4-c09-c01-12"><a href="#lst-m4-c09-c01-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c09-c01-13"><a href="#lst-m4-c09-c01-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(max_new_tokens <span class="op">-</span> <span class="dv">1</span>):</span>
-<span id="lst-m4-c09-c01-14"><a href="#lst-m4-c09-c01-14" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> model(token, past_key_values<span class="op">=</span>past, use_cache<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c09-c01-15"><a href="#lst-m4-c09-c01-15" aria-hidden="true" tabindex="-1"></a>        past <span class="op">=</span> out.past_key_values</span>
-<span id="lst-m4-c09-c01-16"><a href="#lst-m4-c09-c01-16" aria-hidden="true" tabindex="-1"></a>        token <span class="op">=</span> out.logits[:, <span class="op">-</span><span class="dv">1</span>].argmax(dim<span class="op">=-</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c09-c01-17"><a href="#lst-m4-c09-c01-17" aria-hidden="true" tabindex="-1"></a>        generated.append(token)</span>
-<span id="lst-m4-c09-c01-18"><a href="#lst-m4-c09-c01-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c09-c01-19"><a href="#lst-m4-c09-c01-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> torch.cat(generated, dim<span class="op">=</span><span class="dv">1</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The return value contains only generated token IDs, not the original prompt. Attention still reads a cache that grows with context length, so removing prefix recomputation does not make each step constant-cost. The remaining work is often sensitive to memory bandwidth and per-step launch overhead.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c09-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c09-c01-1"><a href="#lst-m4-c09-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c09-c01-2"><a href="#lst-m4-c09-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - The first call processes the prompt and creates the initial cache.</span></span>
+<span id="lst-m4-c09-c01-3"><a href="#lst-m4-c09-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - Later calls process only the newest token but read the existing cache.</span></span>
+<span id="lst-m4-c09-c01-4"><a href="#lst-m4-c09-c01-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - The loop is serial at the sequence level, so per-step overhead matters.</span></span>
+<span id="lst-m4-c09-c01-5"><a href="#lst-m4-c09-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - A production engine batches many such loops together.</span></span>
+<span id="lst-m4-c09-c01-6"><a href="#lst-m4-c09-c01-6" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c09-c01-7"><a href="#lst-m4-c09-c01-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c09-c01-8"><a href="#lst-m4-c09-c01-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c09-c01-9"><a href="#lst-m4-c09-c01-9" aria-hidden="true" tabindex="-1"></a><span class="at">@torch.inference_mode</span>()</span>
+<span id="lst-m4-c09-c01-10"><a href="#lst-m4-c09-c01-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> cached_decode(model, input_ids, max_new_tokens):</span>
+<span id="lst-m4-c09-c01-11"><a href="#lst-m4-c09-c01-11" aria-hidden="true" tabindex="-1"></a>    out <span class="op">=</span> model(input_ids, use_cache<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c09-c01-12"><a href="#lst-m4-c09-c01-12" aria-hidden="true" tabindex="-1"></a>    past <span class="op">=</span> out.past_key_values</span>
+<span id="lst-m4-c09-c01-13"><a href="#lst-m4-c09-c01-13" aria-hidden="true" tabindex="-1"></a>    token <span class="op">=</span> out.logits[:, <span class="op">-</span><span class="dv">1</span>].argmax(dim<span class="op">=-</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c09-c01-14"><a href="#lst-m4-c09-c01-14" aria-hidden="true" tabindex="-1"></a>    generated <span class="op">=</span> [token]</span>
+<span id="lst-m4-c09-c01-15"><a href="#lst-m4-c09-c01-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c09-c01-16"><a href="#lst-m4-c09-c01-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(max_new_tokens <span class="op">-</span> <span class="dv">1</span>):</span>
+<span id="lst-m4-c09-c01-17"><a href="#lst-m4-c09-c01-17" aria-hidden="true" tabindex="-1"></a>        out <span class="op">=</span> model(token, past_key_values<span class="op">=</span>past, use_cache<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c09-c01-18"><a href="#lst-m4-c09-c01-18" aria-hidden="true" tabindex="-1"></a>        past <span class="op">=</span> out.past_key_values</span>
+<span id="lst-m4-c09-c01-19"><a href="#lst-m4-c09-c01-19" aria-hidden="true" tabindex="-1"></a>        token <span class="op">=</span> out.logits[:, <span class="op">-</span><span class="dv">1</span>].argmax(dim<span class="op">=-</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c09-c01-20"><a href="#lst-m4-c09-c01-20" aria-hidden="true" tabindex="-1"></a>        generated.append(token)</span>
+<span id="lst-m4-c09-c01-21"><a href="#lst-m4-c09-c01-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c09-c01-22"><a href="#lst-m4-c09-c01-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> torch.cat(generated, dim<span class="op">=</span><span class="dv">1</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The cached decode loop separates the first prefill pass, where <code>use_cache=True</code> initializes <code>past_key_values</code>, from subsequent decode steps. During decode, the model accepts only the newest token plus the existing cache, produces logits for the next token, and appends new key/value states. Caching avoids recomputing the full prefix, but attention over the cached history still reads state that grows with context length. The result is often a bandwidth-sensitive workload, not a constant-cost operation.</p>
 </section>
 <section id="sec-m4-c09-s02" class="level2" data-number="9.2">
 <h2 data-number="9.2" class="anchored" data-anchor-id="sec-m4-c09-s02"><span class="header-section-number">9.2</span> Recompute and cache reuse</h2>
@@ -513,29 +484,38 @@ Table&nbsp;9.1: Contiguous key-value allocation versus paged allocation.
 </figure>
 </div>
 <p>Paged allocation is most useful when variable request lengths make contiguous reservation waste enough HBM to limit admission. It changes cache allocation and lookup, not the attention formula, so kernel efficiency, scheduler fairness, and prefix-cache correctness remain separate measurements.</p>
-<p><strong>Example: PagedAttention block lookup.</strong> This pseudocode shows the mapping idea without tying it to a particular engine implementation. The request grows in logical token order, but physical KV blocks do not need to be contiguous. The attention path pays an indirection cost to reduce allocation waste. Paging improves memory management, not the arithmetic complexity of attention. The key point is that logical sequence positions are resolved through a block table before the attention kernel reads KV memory.</p>
+<p><strong>Example: PagedAttention block lookup.</strong> This pseudocode shows the mapping idea without tying it to a particular engine implementation. The key point is that logical sequence positions are resolved through a block table before the attention kernel reads KV memory.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> PagedAttention block lookup</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c09-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c09-c02-1"><a href="#lst-m4-c09-c02-1" aria-hidden="true" tabindex="-1"></a>block_size <span class="op">=</span> <span class="dv">16</span></span>
-<span id="lst-m4-c09-c02-2"><a href="#lst-m4-c09-c02-2" aria-hidden="true" tabindex="-1"></a><span class="co"># request A: logical block -&gt; physical KV block</span></span>
-<span id="lst-m4-c09-c02-3"><a href="#lst-m4-c09-c02-3" aria-hidden="true" tabindex="-1"></a>block_table <span class="op">=</span> {<span class="dv">0</span>: <span class="dv">7</span>, <span class="dv">1</span>: <span class="dv">2</span>, <span class="dv">2</span>: <span class="dv">15</span>}</span>
-<span id="lst-m4-c09-c02-4"><a href="#lst-m4-c09-c02-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c09-c02-5"><a href="#lst-m4-c09-c02-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> physical_location(token_index):</span>
-<span id="lst-m4-c09-c02-6"><a href="#lst-m4-c09-c02-6" aria-hidden="true" tabindex="-1"></a>    logical_block <span class="op">=</span> token_index <span class="op">//</span> block_size</span>
-<span id="lst-m4-c09-c02-7"><a href="#lst-m4-c09-c02-7" aria-hidden="true" tabindex="-1"></a>    offset <span class="op">=</span> token_index <span class="op">%</span> block_size</span>
-<span id="lst-m4-c09-c02-8"><a href="#lst-m4-c09-c02-8" aria-hidden="true" tabindex="-1"></a>    physical_block <span class="op">=</span> block_table[logical_block]</span>
-<span id="lst-m4-c09-c02-9"><a href="#lst-m4-c09-c02-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> physical_block, offset</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c09-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c09-c02-1"><a href="#lst-m4-c09-c02-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c09-c02-2"><a href="#lst-m4-c09-c02-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - The request grows in logical token order.</span></span>
+<span id="lst-m4-c09-c02-3"><a href="#lst-m4-c09-c02-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - Physical KV blocks do not need to be contiguous.</span></span>
+<span id="lst-m4-c09-c02-4"><a href="#lst-m4-c09-c02-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - The attention path pays an indirection cost to reduce allocation waste.</span></span>
+<span id="lst-m4-c09-c02-5"><a href="#lst-m4-c09-c02-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - Paging improves memory management, not the arithmetic complexity of attention.</span></span>
+<span id="lst-m4-c09-c02-6"><a href="#lst-m4-c09-c02-6" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c09-c02-7"><a href="#lst-m4-c09-c02-7" aria-hidden="true" tabindex="-1"></a>block_size <span class="op">=</span> <span class="dv">16</span></span>
+<span id="lst-m4-c09-c02-8"><a href="#lst-m4-c09-c02-8" aria-hidden="true" tabindex="-1"></a><span class="co"># request A: logical block -&gt; physical KV block</span></span>
+<span id="lst-m4-c09-c02-9"><a href="#lst-m4-c09-c02-9" aria-hidden="true" tabindex="-1"></a>block_table <span class="op">=</span> {<span class="dv">0</span>: <span class="dv">7</span>, <span class="dv">1</span>: <span class="dv">2</span>, <span class="dv">2</span>: <span class="dv">15</span>}</span>
+<span id="lst-m4-c09-c02-10"><a href="#lst-m4-c09-c02-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c09-c02-11"><a href="#lst-m4-c09-c02-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> physical_location(token_index):</span>
+<span id="lst-m4-c09-c02-12"><a href="#lst-m4-c09-c02-12" aria-hidden="true" tabindex="-1"></a>    logical_block <span class="op">=</span> token_index <span class="op">//</span> block_size</span>
+<span id="lst-m4-c09-c02-13"><a href="#lst-m4-c09-c02-13" aria-hidden="true" tabindex="-1"></a>    offset <span class="op">=</span> token_index <span class="op">%</span> block_size</span>
+<span id="lst-m4-c09-c02-14"><a href="#lst-m4-c09-c02-14" aria-hidden="true" tabindex="-1"></a>    physical_block <span class="op">=</span> block_table[logical_block]</span>
+<span id="lst-m4-c09-c02-15"><a href="#lst-m4-c09-c02-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> physical_block, offset</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The pseudocode implements only metadata translation from a logical token position to a physical block and offset. A complete implementation also accounts for layer, KV head, vector dimension, append writes, vectorized reads, and the attention kernel that consumes the resolved addresses.</p>
 </section>
 <section id="sec-m4-c09-s06" class="level2" data-number="9.6">
 <h2 data-number="9.6" class="anchored" data-anchor-id="sec-m4-c09-s06"><span class="header-section-number">9.6</span> Hybrid attention and SSM-style serving state</h2>
-<p>In a hybrid model, attention layers still store one key and value record per retained token, so their state and read traffic grow with context length. State-space or recurrent layers instead update a fixed-size hidden state for each sequence. Replacing some attention layers with recurrent layers can therefore reduce long-context KV capacity and bandwidth, but it changes the work rather than removing it: the runtime now needs fast scan or recurrent-update kernels, a defined state layout, and architecture-specific rules for chunking, invalidation, and prefix reuse. The recurrent state is a compressed summary, not an addressable record of every past token.</p>
+<p>Hybrid serving state refers to models that do not use the same attention KV-cache pattern in every layer. Some layers may use transformer attention and store token history as keys and values, while state-space or recurrent-style layers carry compact state that updates over time.</p>
+<p>The useful comparison is scaling behavior rather than a single pair of sizes. Attention KV state grows with stored token positions, while a recurrent state remains sequence-length-independent for a fixed layer, model, and batch. The recurrent state is a compressed summary, not a collection of individually addressable past-token records, so equal byte counts would not imply equal information or recall behavior.</p>
+<p>Transformer attention layers store keys and values for prior tokens, so their serving state grows with sequence length. State-space model (SSM) or recurrent-style layers maintain a compact hidden state that is updated as tokens arrive. Hybrid architectures combine these ideas: attention layers still need KV cache, while SSM-style layers carry fixed-size recurrent state.</p>
+<p>This changes long-context decode economics. If fewer layers require full KV history, memory pressure and HBM reads can be lower. However, the implementation burden moves elsewhere: state scans, chunked updates, custom kernels, cache invalidation rules, and prefix reuse all need architecture-specific handling.</p>
 <p>Mamba-style models are the usual reference point for this serving pattern. They can reduce the dominance of attention KV cache in long-context decode, but they do not remove the need for careful kernel design. Scan kernels, chunking, and state layout become the new performance-critical objects.</p>
 </section>
 <section id="sec-m4-c09-s07" class="level2" data-number="9.7">
 <h2 data-number="9.7" class="anchored" data-anchor-id="sec-m4-c09-s07"><span class="header-section-number">9.7</span> Worked decode reasoning path</h2>
-<p>Finding a decode bottleneck means checking the one-token path in a fixed order. Measure the one-token path before enabling an engine feature. Compare cached with uncached decode, then use the timeline and memory counters to determine whether repeated computation, GPU idle gaps, HBM traffic, or KV capacity currently limits the service metric.</p>
+<p>Finding a decode bottleneck means checking the one-token path in a fixed order. The goal is to avoid applying an engine-level feature before proving which bottleneck is exposed.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Step 1: compare naive and cached decode:</strong></span> If caching barely helps, the implementation may not be using the cache correctly or may be dominated by something outside attention recomputation.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Step 2: inspect the per-token trace:</strong></span> GPU gaps suggest launch overhead, Python scheduling, or engine control-plane cost. High HBM traffic with busy kernels suggests a bandwidth-bound decode path.</li>

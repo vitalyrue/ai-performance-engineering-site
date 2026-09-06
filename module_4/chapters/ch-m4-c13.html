@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -380,6 +380,7 @@ window.Quarto = {
 </header>
 
 
+<p>Teach DDP, FSDP/ZeRO, Tensor Parallelism, Pipeline Parallelism, and Expert Parallelism.</p>
 <p>Distributed training changes the problem from one GPU executing one copy of the workload to many GPUs coordinating state and computation. The central design question is what is replicated, what is sharded, and what must be communicated every step.</p>
 <p>The scaling axis follows the object that prevents one device from meeting the target. Data parallelism splits examples or requests; sharded data parallelism splits model state; tensor and pipeline parallelism split model computation; expert parallelism splits expert modules and routes token representations.</p>
 <p>Every split creates a communication schedule that must fit the topology and the user-facing metric. Replication, state sharding, model-parallel execution, and distributed serving divide different objects, so each produces different collectives, cache-placement rules, and waiting points.</p>
@@ -462,50 +463,56 @@ Figure&nbsp;13.2: Distributed data parallel training
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> DDP training template</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c13-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c13-c01-1"><a href="#lst-m4-c13-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
-<span id="lst-m4-c13-c01-2"><a href="#lst-m4-c13-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c13-c01-3"><a href="#lst-m4-c13-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.distributed <span class="im">as</span> dist</span>
-<span id="lst-m4-c13-c01-4"><a href="#lst-m4-c13-c01-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
-<span id="lst-m4-c13-c01-5"><a href="#lst-m4-c13-c01-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.utils.data <span class="im">import</span> DataLoader, DistributedSampler, TensorDataset</span>
-<span id="lst-m4-c13-c01-6"><a href="#lst-m4-c13-c01-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.nn.parallel <span class="im">import</span> DistributedDataParallel <span class="im">as</span> DDP</span>
-<span id="lst-m4-c13-c01-7"><a href="#lst-m4-c13-c01-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c13-c01-8"><a href="#lst-m4-c13-c01-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> train_one_rank():</span>
-<span id="lst-m4-c13-c01-9"><a href="#lst-m4-c13-c01-9" aria-hidden="true" tabindex="-1"></a>    dist.init_process_group(<span class="st">"nccl"</span>)</span>
-<span id="lst-m4-c13-c01-10"><a href="#lst-m4-c13-c01-10" aria-hidden="true" tabindex="-1"></a>    local_rank <span class="op">=</span> <span class="bu">int</span>(os.environ[<span class="st">"LOCAL_RANK"</span>])</span>
-<span id="lst-m4-c13-c01-11"><a href="#lst-m4-c13-c01-11" aria-hidden="true" tabindex="-1"></a>    torch.cuda.set_device(local_rank)</span>
-<span id="lst-m4-c13-c01-12"><a href="#lst-m4-c13-c01-12" aria-hidden="true" tabindex="-1"></a>    device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, local_rank)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c13-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c13-c01-1"><a href="#lst-m4-c13-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c13-c01-2"><a href="#lst-m4-c13-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - LOCAL_RANK maps the process to one GPU inside the node.</span></span>
+<span id="lst-m4-c13-c01-3"><a href="#lst-m4-c13-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - DistributedSampler gives each rank a different shard of the data stream.</span></span>
+<span id="lst-m4-c13-c01-4"><a href="#lst-m4-c13-c01-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - DDP synchronizes gradients during loss.backward().</span></span>
+<span id="lst-m4-c13-c01-5"><a href="#lst-m4-c13-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - destroy_process_group() prevents stale distributed state after the run.</span></span>
+<span id="lst-m4-c13-c01-6"><a href="#lst-m4-c13-c01-6" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c13-c01-7"><a href="#lst-m4-c13-c01-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="lst-m4-c13-c01-8"><a href="#lst-m4-c13-c01-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c13-c01-9"><a href="#lst-m4-c13-c01-9" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.distributed <span class="im">as</span> dist</span>
+<span id="lst-m4-c13-c01-10"><a href="#lst-m4-c13-c01-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="lst-m4-c13-c01-11"><a href="#lst-m4-c13-c01-11" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.utils.data <span class="im">import</span> DataLoader, DistributedSampler, TensorDataset</span>
+<span id="lst-m4-c13-c01-12"><a href="#lst-m4-c13-c01-12" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.nn.parallel <span class="im">import</span> DistributedDataParallel <span class="im">as</span> DDP</span>
 <span id="lst-m4-c13-c01-13"><a href="#lst-m4-c13-c01-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c13-c01-14"><a href="#lst-m4-c13-c01-14" aria-hidden="true" tabindex="-1"></a>    feature_count <span class="op">=</span> <span class="dv">1024</span></span>
-<span id="lst-m4-c13-c01-15"><a href="#lst-m4-c13-c01-15" aria-hidden="true" tabindex="-1"></a>    class_count <span class="op">=</span> <span class="dv">100</span></span>
-<span id="lst-m4-c13-c01-16"><a href="#lst-m4-c13-c01-16" aria-hidden="true" tabindex="-1"></a>    num_epochs <span class="op">=</span> <span class="dv">2</span></span>
-<span id="lst-m4-c13-c01-17"><a href="#lst-m4-c13-c01-17" aria-hidden="true" tabindex="-1"></a>    generator <span class="op">=</span> torch.Generator().manual_seed(<span class="dv">0</span>)</span>
-<span id="lst-m4-c13-c01-18"><a href="#lst-m4-c13-c01-18" aria-hidden="true" tabindex="-1"></a>    dataset <span class="op">=</span> TensorDataset(</span>
-<span id="lst-m4-c13-c01-19"><a href="#lst-m4-c13-c01-19" aria-hidden="true" tabindex="-1"></a>        torch.randn(<span class="dv">4096</span>, feature_count, generator<span class="op">=</span>generator),</span>
-<span id="lst-m4-c13-c01-20"><a href="#lst-m4-c13-c01-20" aria-hidden="true" tabindex="-1"></a>        torch.randint(class_count, (<span class="dv">4096</span>,), generator<span class="op">=</span>generator),</span>
-<span id="lst-m4-c13-c01-21"><a href="#lst-m4-c13-c01-21" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m4-c13-c01-22"><a href="#lst-m4-c13-c01-22" aria-hidden="true" tabindex="-1"></a>    sampler <span class="op">=</span> DistributedSampler(dataset, shuffle<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c13-c01-23"><a href="#lst-m4-c13-c01-23" aria-hidden="true" tabindex="-1"></a>    loader <span class="op">=</span> DataLoader(</span>
-<span id="lst-m4-c13-c01-24"><a href="#lst-m4-c13-c01-24" aria-hidden="true" tabindex="-1"></a>        dataset, batch_size<span class="op">=</span><span class="dv">8</span>, sampler<span class="op">=</span>sampler, num_workers<span class="op">=</span><span class="dv">4</span>, pin_memory<span class="op">=</span><span class="va">True</span></span>
-<span id="lst-m4-c13-c01-25"><a href="#lst-m4-c13-c01-25" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m4-c13-c01-26"><a href="#lst-m4-c13-c01-26" aria-hidden="true" tabindex="-1"></a>    model <span class="op">=</span> DDP(nn.Linear(feature_count, class_count).to(device), device_ids<span class="op">=</span>[local_rank])</span>
-<span id="lst-m4-c13-c01-27"><a href="#lst-m4-c13-c01-27" aria-hidden="true" tabindex="-1"></a>    loss_fn <span class="op">=</span> nn.CrossEntropyLoss()</span>
-<span id="lst-m4-c13-c01-28"><a href="#lst-m4-c13-c01-28" aria-hidden="true" tabindex="-1"></a>    optimizer <span class="op">=</span> torch.optim.AdamW(model.parameters(), lr<span class="op">=</span><span class="fl">3e-4</span>)</span>
-<span id="lst-m4-c13-c01-29"><a href="#lst-m4-c13-c01-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c13-c01-30"><a href="#lst-m4-c13-c01-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
-<span id="lst-m4-c13-c01-31"><a href="#lst-m4-c13-c01-31" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(num_epochs):</span>
-<span id="lst-m4-c13-c01-32"><a href="#lst-m4-c13-c01-32" aria-hidden="true" tabindex="-1"></a>            sampler.set_epoch(epoch)</span>
-<span id="lst-m4-c13-c01-33"><a href="#lst-m4-c13-c01-33" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> features, labels <span class="kw">in</span> loader:</span>
-<span id="lst-m4-c13-c01-34"><a href="#lst-m4-c13-c01-34" aria-hidden="true" tabindex="-1"></a>                features <span class="op">=</span> features.to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c13-c01-35"><a href="#lst-m4-c13-c01-35" aria-hidden="true" tabindex="-1"></a>                labels <span class="op">=</span> labels.to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c13-c01-36"><a href="#lst-m4-c13-c01-36" aria-hidden="true" tabindex="-1"></a>                loss <span class="op">=</span> loss_fn(model(features), labels)</span>
-<span id="lst-m4-c13-c01-37"><a href="#lst-m4-c13-c01-37" aria-hidden="true" tabindex="-1"></a>                loss.backward()</span>
-<span id="lst-m4-c13-c01-38"><a href="#lst-m4-c13-c01-38" aria-hidden="true" tabindex="-1"></a>                optimizer.step()</span>
-<span id="lst-m4-c13-c01-39"><a href="#lst-m4-c13-c01-39" aria-hidden="true" tabindex="-1"></a>                optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c13-c01-40"><a href="#lst-m4-c13-c01-40" aria-hidden="true" tabindex="-1"></a>    <span class="cf">finally</span>:</span>
-<span id="lst-m4-c13-c01-41"><a href="#lst-m4-c13-c01-41" aria-hidden="true" tabindex="-1"></a>        dist.destroy_process_group()</span>
-<span id="lst-m4-c13-c01-42"><a href="#lst-m4-c13-c01-42" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c13-c01-43"><a href="#lst-m4-c13-c01-43" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">"__main__"</span>:</span>
-<span id="lst-m4-c13-c01-44"><a href="#lst-m4-c13-c01-44" aria-hidden="true" tabindex="-1"></a>    train_one_rank()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m4-c13-c01-14"><a href="#lst-m4-c13-c01-14" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> train_one_rank():</span>
+<span id="lst-m4-c13-c01-15"><a href="#lst-m4-c13-c01-15" aria-hidden="true" tabindex="-1"></a>    dist.init_process_group(<span class="st">"nccl"</span>)</span>
+<span id="lst-m4-c13-c01-16"><a href="#lst-m4-c13-c01-16" aria-hidden="true" tabindex="-1"></a>    local_rank <span class="op">=</span> <span class="bu">int</span>(os.environ[<span class="st">"LOCAL_RANK"</span>])</span>
+<span id="lst-m4-c13-c01-17"><a href="#lst-m4-c13-c01-17" aria-hidden="true" tabindex="-1"></a>    torch.cuda.set_device(local_rank)</span>
+<span id="lst-m4-c13-c01-18"><a href="#lst-m4-c13-c01-18" aria-hidden="true" tabindex="-1"></a>    device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, local_rank)</span>
+<span id="lst-m4-c13-c01-19"><a href="#lst-m4-c13-c01-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c13-c01-20"><a href="#lst-m4-c13-c01-20" aria-hidden="true" tabindex="-1"></a>    feature_count <span class="op">=</span> <span class="dv">1024</span></span>
+<span id="lst-m4-c13-c01-21"><a href="#lst-m4-c13-c01-21" aria-hidden="true" tabindex="-1"></a>    class_count <span class="op">=</span> <span class="dv">100</span></span>
+<span id="lst-m4-c13-c01-22"><a href="#lst-m4-c13-c01-22" aria-hidden="true" tabindex="-1"></a>    num_epochs <span class="op">=</span> <span class="dv">2</span></span>
+<span id="lst-m4-c13-c01-23"><a href="#lst-m4-c13-c01-23" aria-hidden="true" tabindex="-1"></a>    generator <span class="op">=</span> torch.Generator().manual_seed(<span class="dv">0</span>)</span>
+<span id="lst-m4-c13-c01-24"><a href="#lst-m4-c13-c01-24" aria-hidden="true" tabindex="-1"></a>    dataset <span class="op">=</span> TensorDataset(</span>
+<span id="lst-m4-c13-c01-25"><a href="#lst-m4-c13-c01-25" aria-hidden="true" tabindex="-1"></a>        torch.randn(<span class="dv">4096</span>, feature_count, generator<span class="op">=</span>generator),</span>
+<span id="lst-m4-c13-c01-26"><a href="#lst-m4-c13-c01-26" aria-hidden="true" tabindex="-1"></a>        torch.randint(class_count, (<span class="dv">4096</span>,), generator<span class="op">=</span>generator),</span>
+<span id="lst-m4-c13-c01-27"><a href="#lst-m4-c13-c01-27" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m4-c13-c01-28"><a href="#lst-m4-c13-c01-28" aria-hidden="true" tabindex="-1"></a>    sampler <span class="op">=</span> DistributedSampler(dataset, shuffle<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c13-c01-29"><a href="#lst-m4-c13-c01-29" aria-hidden="true" tabindex="-1"></a>    loader <span class="op">=</span> DataLoader(</span>
+<span id="lst-m4-c13-c01-30"><a href="#lst-m4-c13-c01-30" aria-hidden="true" tabindex="-1"></a>        dataset, batch_size<span class="op">=</span><span class="dv">8</span>, sampler<span class="op">=</span>sampler, num_workers<span class="op">=</span><span class="dv">4</span>, pin_memory<span class="op">=</span><span class="va">True</span></span>
+<span id="lst-m4-c13-c01-31"><a href="#lst-m4-c13-c01-31" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m4-c13-c01-32"><a href="#lst-m4-c13-c01-32" aria-hidden="true" tabindex="-1"></a>    model <span class="op">=</span> DDP(nn.Linear(feature_count, class_count).to(device), device_ids<span class="op">=</span>[local_rank])</span>
+<span id="lst-m4-c13-c01-33"><a href="#lst-m4-c13-c01-33" aria-hidden="true" tabindex="-1"></a>    loss_fn <span class="op">=</span> nn.CrossEntropyLoss()</span>
+<span id="lst-m4-c13-c01-34"><a href="#lst-m4-c13-c01-34" aria-hidden="true" tabindex="-1"></a>    optimizer <span class="op">=</span> torch.optim.AdamW(model.parameters(), lr<span class="op">=</span><span class="fl">3e-4</span>)</span>
+<span id="lst-m4-c13-c01-35"><a href="#lst-m4-c13-c01-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c13-c01-36"><a href="#lst-m4-c13-c01-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="lst-m4-c13-c01-37"><a href="#lst-m4-c13-c01-37" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(num_epochs):</span>
+<span id="lst-m4-c13-c01-38"><a href="#lst-m4-c13-c01-38" aria-hidden="true" tabindex="-1"></a>            sampler.set_epoch(epoch)</span>
+<span id="lst-m4-c13-c01-39"><a href="#lst-m4-c13-c01-39" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> features, labels <span class="kw">in</span> loader:</span>
+<span id="lst-m4-c13-c01-40"><a href="#lst-m4-c13-c01-40" aria-hidden="true" tabindex="-1"></a>                features <span class="op">=</span> features.to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c13-c01-41"><a href="#lst-m4-c13-c01-41" aria-hidden="true" tabindex="-1"></a>                labels <span class="op">=</span> labels.to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c13-c01-42"><a href="#lst-m4-c13-c01-42" aria-hidden="true" tabindex="-1"></a>                loss <span class="op">=</span> loss_fn(model(features), labels)</span>
+<span id="lst-m4-c13-c01-43"><a href="#lst-m4-c13-c01-43" aria-hidden="true" tabindex="-1"></a>                loss.backward()</span>
+<span id="lst-m4-c13-c01-44"><a href="#lst-m4-c13-c01-44" aria-hidden="true" tabindex="-1"></a>                optimizer.step()</span>
+<span id="lst-m4-c13-c01-45"><a href="#lst-m4-c13-c01-45" aria-hidden="true" tabindex="-1"></a>                optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c13-c01-46"><a href="#lst-m4-c13-c01-46" aria-hidden="true" tabindex="-1"></a>    <span class="cf">finally</span>:</span>
+<span id="lst-m4-c13-c01-47"><a href="#lst-m4-c13-c01-47" aria-hidden="true" tabindex="-1"></a>        dist.destroy_process_group()</span>
+<span id="lst-m4-c13-c01-48"><a href="#lst-m4-c13-c01-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c13-c01-49"><a href="#lst-m4-c13-c01-49" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">"__main__"</span>:</span>
+<span id="lst-m4-c13-c01-50"><a href="#lst-m4-c13-c01-50" aria-hidden="true" tabindex="-1"></a>    train_one_rank()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Backward propagation is the key distributed boundary in this template: DDP hooks mark gradient buckets ready and submit their reductions while other backward work may still run. Measure bucket timing, the exposed communication tail, and the slowest rank before changing bucket sizes, rank placement, or the communication backend.</p>
 </section>
 <section id="sec-m4-c13-s05" class="level2" data-number="13.4">
@@ -594,9 +601,24 @@ Table&nbsp;13.1: DDP, ZeRO, and FSDP state placement comparison.
 </section>
 <section id="sec-m4-c13-s07" class="level2" data-number="13.5">
 <h2 data-number="13.5" class="anchored" data-anchor-id="sec-m4-c13-s07"><span class="header-section-number">13.5</span> Model-parallel strategies</h2>
+<p>Parallelism strategies differ by what object they partition and how often that partition requires communication. The strategies below split work inside or across model execution rather than merely increasing the number of independent replicas.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Data parallelism:</strong></span> Partitions examples across ranks while each rank normally holds a full model replica.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>FSDP:</strong></span> Partitions model state across ranks and gathers needed parameters near layer execution.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Tensor parallelism:</strong></span> Splits tensor dimensions or weight matrices inside a transformer layer, so several GPUs cooperate on one layer execution.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Pipeline parallelism:</strong></span> Splits the ordered layer stack into stages placed on different devices, then feeds micro-batches through the stages.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Expert parallelism:</strong></span> Splits Mixture-of-Experts (MoE) expert modules across ranks and routes tokens to the selected experts.</li>
+</ul>
 <section id="sec-m4-c13-s08" class="level3" data-number="13.5.1">
 <h3 data-number="13.5.1" class="anchored" data-anchor-id="sec-m4-c13-s08"><span class="header-section-number">13.5.1</span> Model-parallel execution and Megatron-LM</h3>
-<p>Model parallelism splits one model execution across ranks. Tensor parallelism divides work inside a layer, pipeline parallelism assigns layer ranges to stages, and expert parallelism routes token representations to specific expert ranks. Megatron-LM implements several such layouts; the performance question is where each layout forces ranks to exchange partial results.</p>
+<p>Tensor, pipeline, sequence, context, and expert parallelism are execution strategies rather than features defined by one library. Megatron-LM is one widely used framework that implements several of these strategies for transformer models and supplies concrete placement and collective schedules.</p>
+<p>Megatron-style tensor parallelism keeps compatible projection slices local, then places all-reduce or reduce-scatter operations where the complete hidden representation is required. Pipeline schedules divide layer ranges and micro-batches; expert parallelism adds token-routing all-to-all traffic.</p>
+<p>Tensor Parallelism (TP) partitions weight matrices and layer computation so several GPUs cooperate on one layer. Communication placement depends on the row-, column-, sequence-, or context-partition pattern; it is not necessarily an all-reduce after every operation. Because many useful TP layouts place collectives inside each transformer block, the participating ranks usually need a low-latency, high-bandwidth scale-up fabric.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Sequence parallelism:</strong></span> Splits selected activation work along the sequence-position dimension, commonly around tensor-parallel regions where operations such as normalization or dropout can remain local. It reduces replicated activation memory but adds gather or reduce-scatter operations where a complete representation is needed.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Context parallelism:</strong></span> Splits a long attention context and its associated state across devices. Each rank holds only part of the token history, while attention must exchange or combine information across those context partitions. It is useful when long-context activations or KV state do not fit locally, but it places communication inside attention.</li>
+</ul>
+<p>Sequence parallelism mainly removes duplicated activation storage around tensor-parallel execution. Context parallelism addresses the larger long-context attention state. They split the sequence axis for different execution purposes and should be selected from the memory object and communication pattern that actually limit the run.</p>
 <p>Two common forward-path partitions show where collective communication appears:</p>
 <ul>
 <li>MLP Block Sharding: The first linear projection (Gate &amp; Up projections) is sharded column-parallel: W = [W₁ | W₂]. Each GPU computes its local multiplication Yᵢ = XWᵢ without communication. The second down-projection is sharded row-parallel: V = [V₁ᵀ | V₂ᵀ]ᵀ. Each GPU computes YᵢVᵢ, and a single All-Reduce combines the partial sums: Z = Y₁V₁ + Y₂V₂.</li>
@@ -654,7 +676,8 @@ Table&nbsp;13.2: Tensor-parallel all-reduce placement.
 </div>
 </figure>
 </div>
-<p>Pipeline parallelism assigns contiguous layer ranges to K stages and moves each micro-batch through them in order.</p>
+<p>Pipeline Parallelism partitions the transformer layers across different devices (stages). It uses micro-batches to keep stages utilized, but introduces a pipeline bubble (idle stage time during fill and drain phases). The fraction of training time spent in this bubble is calculated as:</p>
+<p>Pipeline parallelism partitions the model by layers rather than by tensor dimensions. Each stage holds a contiguous range of layers.</p>
 <div id="fig-m4-c13-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Pipeline parallelism partitions the model by layers rather than by tensor dimensions. Each stage holds a contiguous range of layers. The key trade-off is utilization versus bubbles. Micro-batches keep stages busy, but activation movement and scheduling complexity increase.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c13-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -665,7 +688,9 @@ Figure&nbsp;13.3: Pipeline parallelism
 </figcaption>
 </figure>
 </div>
-<p>During fill, later stages wait for their first input; during drain, earlier stages finish before the last micro-batch leaves the pipeline. These empty intervals form the pipeline bubble. Figure 13.4 shows the occupied and idle intervals for a GPipe schedule.</p>
+<p>The key trade-off is utilization versus bubbles. Micro-batches keep stages busy, but activation movement and scheduling complexity increase.</p>
+<p>The GPipe schedule visual is a time chart for pipeline-parallel training. It compares useful forward/backward work against idle fill and drain time across pipeline devices.</p>
+<p>A pipeline has idle time during fill and drain. At the beginning, later stages wait for work; at the end, earlier stages have already finished.</p>
 <div id="fig-m4-c13-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A pipeline has idle time during fill and drain. At the beginning, later stages wait for work; at the end, earlier stages have already finished. This idle region is the pipeline bubble. More micro-batches improve stage utilization, but they increase activation lifetime and scheduling complexity.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c13-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -676,11 +701,14 @@ Figure&nbsp;13.4: GPipe micro-batch schedule and pipeline bubble
 </figcaption>
 </figure>
 </div>
+<p>This idle region is the pipeline bubble. More micro-batches improve stage utilization, but they increase activation lifetime and scheduling complexity.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Reading the pipeline schedule</strong></p>
-<p>Figure 13.4 is a schematic GPipe schedule, not a measured timing trace. Pipeline stages appear on the vertical axis and schedule time on the horizontal axis. Labeled blocks show forward and backward work for each micro-batch; empty regions show fill, drain, or waiting time. Under the balanced-stage assumptions of Equation 13.1, increasing the number of micro-batches reduces the first-order fill/drain fraction. The activation-memory effect is schedule-dependent: with a fixed micro-batch size, additional in-flight work can extend activation lifetimes, while with a fixed global batch, increasing the micro-batch count usually reduces each micro-batch’s size. Check peak memory for the actual schedule and retention policy.</p>
+<p><strong>Chart note</strong></p>
+<p><strong>Measured or compared:</strong> Pipeline stage occupancy over time for a GPipe-style micro-batch schedule.</p>
+<p><strong>Axes, units, and series:</strong> The horizontal axis is time; the vertical axis is devices or pipeline stages. Colored blocks label forward and backward micro-batch work such as F1 through F4 and B1 through B4; empty regions are bubble or idle time.</p>
+<p><strong>Read for:</strong> Read for the utilization boundary: increasing micro-batches lengthens the steady-state region relative to fill and drain, lowering the bubble fraction but increasing live activation state.</p>
+<p><strong>Source status:</strong> Exact source schedule screenshot used as a schematic timeline; the bubble-fraction formula below supplies the quantitative model.</p>
 </div>
-<p>With M equal-duration micro-batches and balanced stages, the first-order bubble fraction is:</p>
 <p><span id="eq-m4-c13-e01"><span class="math display">\[
 \text{bubble}_{\text{fraction}} = \frac{K - 1}{M + K - 1}
 \tag{13.1}\]</span></span></p>
@@ -774,17 +802,12 @@ Table&nbsp;13.3: Distributed parallelism comparison.
 <section id="sec-m4-c13-s09" class="level3" data-number="13.5.2">
 <h3 data-number="13.5.2" class="anchored" data-anchor-id="sec-m4-c13-s09"><span class="header-section-number">13.5.2</span> Activation-memory derivation for GPT-style training</h3>
 <p>Large-model training often hits the activation wall before the parameter wall. Parameters are static with respect to batch size and sequence length, but saved activations grow with both. In GPT-style transformers, attention score tensors can also scale quadratically with sequence length if the implementation materializes them.</p>
-<p>Estimate saved activation storage by counting two common tensor shapes. Let <span class="math inline">\(B\)</span> be local micro-batch size, <span class="math inline">\(T\)</span> sequence length, <span class="math inline">\(d\)</span> hidden width, <span class="math inline">\(H\)</span> attention-head count, <span class="math inline">\(L\)</span> local transformer layers, and <span class="math inline">\(s\)</span> bytes per stored element.</p>
 <ul>
-<li>A hidden-sized tensor has <span class="math inline">\(BTd\)</span> elements and occupies <span class="math inline">\(BTds\)</span> bytes per layer.</li>
-<li>A materialized dense attention matrix has <span class="math inline">\(BHT^2\)</span> elements and occupies <span class="math inline">\(BHT^2s\)</span> bytes per layer.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Linear-layer activations:</strong></span> A saved input to a projection scales with B times T times d, where B is batch size, T is sequence length, and d is hidden dimension. Across many layers and projections, this linear term becomes large.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Attention scores:</strong></span> A dense attention score matrix scales with B times number_of_heads times T squared. FlashAttention-style kernels reduce the need to materialize this matrix in HBM, but the dependency explains why long context is hard.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Weights versus activations:</strong></span> Weights scale with model width and layer count; activations also scale with the chosen training batch and context. Increasing sequence length can therefore break memory even when the model weights fit.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Checkpointing trade-off:</strong></span> Activation checkpointing stores fewer activations and recomputes selected forward work during backward propagation. It saves memory at the cost of extra FLOPs and longer step time.</li>
 </ul>
-<p>If each layer saves <span class="math inline">\(n_{\text{hidden}}\)</span> hidden-sized tensors and <span class="math inline">\(n_{\text{score}}\)</span> attention-matrix-sized tensors, their combined payload is approximately</p>
-<p><span class="math display">\[ A \approx Ls\left(n_{\text{hidden}}BTd+n_{\text{score}}BHT^2\right). \]</span></p>
-<p>For an illustrative calculation, assume <span class="math inline">\(n_{\text{hidden}}=4\)</span>, <span class="math inline">\(n_{\text{score}}=1\)</span>, <span class="math inline">\(B=1\)</span>, <span class="math inline">\(T=2048\)</span>, <span class="math inline">\(d=4096\)</span>, <span class="math inline">\(H=32\)</span>, <span class="math inline">\(L=10\)</span>, and <span class="math inline">\(s=2\)</span> bytes. This gives</p>
-<p><span class="math display">\[ A \approx 10\cdot2\left(4\cdot2048\cdot4096+32\cdot2048^2\right) =3{,}355{,}443{,}200\ \text{bytes}=3.125\ \text{GiB}. \]</span></p>
-<p>These are assumed tensor counts, not measurements of a particular model. Actual counts depend on the layer implementation, backward algorithm, recomputation policy, and fused kernels. The estimate excludes weights, gradients, optimizer state, temporary workspaces, and allocator overhead; measure peak allocation before using it as a device-memory budget.</p>
-<p>Several techniques change the saved tensors. Activation checkpointing discards selected forward intermediates and recomputes them during backward. FlashAttention-style kernels avoid materializing the full attention matrix. Sequence parallelism partitions activation work around tensor-parallel regions, with gathers and reduce-scatters where needed. Context parallelism partitions attention’s sequence dimension and exchanges key/value data or partial results inside attention. The exact per-rank saving depends on which tensors each implementation keeps or reconstructs.</p>
 <p>This derivation explains why FSDP or tensor parallelism alone can leave training memory limited by activations. FSDP shards model state, while activations remain tied to local micro-batch and layer execution unless activation checkpointing, sequence parallelism, FlashAttention, or smaller micro-batches reduce them.</p>
 </section>
 <section id="sec-m4-c13-s10" class="level3" data-number="13.5.3">
@@ -803,7 +826,7 @@ Table&nbsp;13.3: Distributed parallelism comparison.
 <h3 data-number="13.6.1" class="anchored" data-anchor-id="sec-m4-c13-s12"><span class="header-section-number">13.6.1</span> Distributed serving frameworks</h3>
 <p>A distributed serving framework combines request routing and cache ownership with replica, tensor-parallel, or pipeline-parallel worker groups. vLLM and SGLang can coordinate multi-GPU serving groups; TensorRT-LLM and related deployment stacks can execute compiled sharded engines on supported configurations. The framework choice follows the placement strategy and topology rather than defining them.</p>
 <p>The critical ownership questions are which worker group holds the model shard, which group owns each request’s KV cache, which collectives lie on every decode step, and whether routing preserves that locality across replicas.</p>
-<p>A serving design combines three decisions: how each model is split within a worker group, how requests are routed among groups, and where each request’s KV cache remains. Together they determine whether communication occurs at admission, during prefill, inside every layer, or for every generated token.</p>
+<p>The choice is among model splitting, replica routing, and key-value-cache placement. Each option changes whether communication appears during admission, prefill, every layer, or every generated token.</p>
 <p>A common serving strategy keeps frequent collectives inside a node and scales across nodes by replicating serving groups. This avoids making every token depend on a slow cross-node path. When the model is too large for one node, the system must balance model sharding, cache locality, batch scheduling, and network cost.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Tensor-parallel serving:</strong></span> Splits layer math across GPUs. It helps when one layer is too large or too slow for one GPU, but it may put collectives in the per-layer or per-token path, so fast intra-node links matter.</li>

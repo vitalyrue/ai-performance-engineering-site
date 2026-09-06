@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -349,7 +349,7 @@ window.Quarto = {
   <li><a href="#sec-m4-c03-s09" id="toc-sec-m4-c03-s09" class="nav-link" data-scroll-target="#sec-m4-c03-s09"><span class="header-section-number">3.5</span> Thread-to-data mapping</a></li>
   <li><a href="#sec-m4-c03-s10" id="toc-sec-m4-c03-s10" class="nav-link" data-scroll-target="#sec-m4-c03-s10"><span class="header-section-number">3.6</span> Memory coalescing and cache controls</a></li>
   <li><a href="#sec-m4-c03-s11" id="toc-sec-m4-c03-s11" class="nav-link" data-scroll-target="#sec-m4-c03-s11"><span class="header-section-number">3.7</span> Matrix operations in vendor libraries</a></li>
-  <li><a href="#sec-m4-c03-s12" id="toc-sec-m4-c03-s12" class="nav-link" data-scroll-target="#sec-m4-c03-s12"><span class="header-section-number">3.8</span> CUDA launch and indexing example</a></li>
+  <li><a href="#sec-m4-c03-s12" id="toc-sec-m4-c03-s12" class="nav-link" data-scroll-target="#sec-m4-c03-s12"><span class="header-section-number">3.8</span> Complete CUDA workload</a></li>
   </ul>
 </nav>
     </div>
@@ -375,12 +375,13 @@ window.Quarto = {
 </header>
 
 
+<p>Explain how host code launches GPU kernels, manages memory transfers, and coordinates streams and warps.</p>
 <p>Compute Unified Device Architecture (CUDA) is the execution model beneath most NVIDIA GPU deep learning work. A Python program may call PyTorch, a compiler may emit Triton, and a serving engine may hide scheduling details, but the GPU still executes kernels over grids, blocks, threads, and warps.</p>
 <p>CUDA makes hardware hierarchy programmable. The host program launches kernels on a device. A kernel launch creates a grid of blocks. Each block contains threads that can cooperate through shared memory and synchronization. Threads are scheduled in warps, which makes memory coalescing and branch divergence central performance concerns.</p>
 <p>The CUDA memory model is equally important. Device tensors live in GPU memory. The PyTorch caching allocator reserves and reuses memory blocks. Transfers between CPU and GPU can be synchronous or asynchronous, and pinned host memory is often required for effective overlap.</p>
 <p>A single PyTorch statement such as <code>logits = model(input_ids)</code> expands into many kernel launches during training. A one-token decode step can also launch many small kernels; compilation, fusion, batching, or CUDA Graph replay can reduce the exposed launch work when the execution path is compatible.</p>
-<p>A PyTorch model call does not execute as one GPU instruction. Host code prepares tensors and dispatches operations; libraries or compilers select kernels; the CUDA runtime places copies and launches into streams; and GPU blocks and warps execute the resulting work. To locate a delay, identify where a control is interpreted, the downstream operation it changes, and the trace evidence that connects that operation to the end metric.</p>
-<p>Use the layer map below to trace effects rather than assign an exclusive owner. Model code shapes inputs and operations; PyTorch interprets tensor and backend settings; compilers and libraries turn those choices into kernels; CUDA orders their submission; and serving or distributed runtimes coordinate work around each execution. A change at one layer can alter work observed at later layers, so record both the immediate action and the downstream result.</p>
+<p>A model call reaches the GPU through a short software path: application or model code expresses work, PyTorch stores tensor metadata and dispatches operations, a compiler or library selects kernels, the CUDA runtime submits work, and the GPU executes it. Serving engines and distributed frameworks operate around that path by scheduling requests or coordinating several processes.</p>
+<p>The following compact map assigns each layer an object it can change. Later chapters return to a layer only when its controls become relevant to a measured mechanism.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Model and application layer:</strong></span> Defines model calls, input preparation, generation behavior, and the performance question being measured.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch framework layer:</strong></span> Stores tensor metadata and provides autograd, device placement, dispatch, the caching allocator, and framework-level measurement interfaces.</li>
@@ -389,7 +390,17 @@ window.Quarto = {
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Serving and distributed layer:</strong></span> Schedules request admission and KV-cache use, and coordinates process groups, collective requests, and rank placement around one model execution path.</li>
 </ul>
 <p>The storage and placement labels below distinguish physical location from ownership scope. HBM is GPU-attached device memory; it is close to the GPU but is not on-chip storage. The next list defines the scopes used throughout the remaining chapters.</p>
-<p>When this chapter says where state is local, it names the boundary explicitly: on-chip for registers and shared memory, same-GPU for L2 and HBM, same-server for intra-node links, and process- or rank-local for software ownership. Quantization chapters use a separate meaning of group: the values that share one scale.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>On-chip or SM-local storage:</strong></span> Registers, shared memory, and the per-Streaming-Multiprocessor L1 or unified-cache path used by work executing on one SM. These resources are small and physically near the execution units.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Same-GPU or GPU-resident state:</strong></span> Tensors, cache lines, and workspaces reachable by one GPU. This includes HBM and device-wide L2; HBM is device memory rather than on-chip memory.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Intra-node or same-server scope:</strong></span> Resources and communication paths inside one server, including its GPUs, host memory, PCIe topology, NICs, and optional NVLink or NVSwitch fabric.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Process-local or rank-local state:</strong></span> CPU-side objects, a CUDA context, and the GPU assigned to one process or distributed rank. It says who owns the state, not where every byte is physically stored.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Quantization-group scope:</strong></span> A block, channel, or group of values that shares a scale. It describes numeric grouping rather than hardware placement.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Scope convention</strong></p>
+<p>When placement matters, the text uses on-chip, same-GPU, intra-node, process-local, rank-local, or quantization-group rather than relying on local alone.</p>
+</div>
 <p>A framework call crosses the CUDA runtime and driver, then reaches a vendor library or custom kernel launch that is placed in a stream queue.</p>
 <div id="fig-m4-c03-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Framework calls pass through the CUDA runtime and driver to vendor libraries or kernel launches, stream queues, and GPU execution. Supporting panels show execution nesting, coalescing, stream synchronization, and PCIe host transfer through pinned memory.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -467,62 +478,95 @@ Figure&nbsp;3.1: Framework operations become ordered CUDA work before GPU thread
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Asynchronous copy and streams:</strong></span> A copy can overlap with compute only when the copy is issued asynchronously, the host memory path supports it, and stream dependencies do not serialize the work. A later synchronization can still expose the full cost.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>cudaMemcpy:</strong></span> The CUDA runtime copy operation used to move bytes between host and device or between devices. In PyTorch this is usually hidden behind <code>.to(device)</code>, <code>.cuda()</code>, <code>.cpu()</code>, or tensor copy calls.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Direct Memory Access (DMA):</strong></span> A hardware transfer path that can move data without the CPU copying each byte. Pinned host memory helps DMA-based GPU transfers, but the transfer still consumes interconnect bandwidth.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>PCIe transfer:</strong></span> Host-device or some device-device traffic over the PCIe bus; its bandwidth is far below HBM, so repeated round trips should be avoided.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>PCIe transfer:</strong></span> The common host/device path. Its bandwidth is far below HBM bandwidth, so hot training and inference loops should avoid repeated CPU/GPU round trips.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Peer transfer:</strong></span> A GPU-to-GPU copy that can avoid host staging when peer access, topology, and the runtime configuration permit a direct path.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Mapped host memory:</strong></span> Lets a GPU kernel access a host allocation through the system interconnect, which can be useful for small or irregular control data and slow for bulk tensor traffic.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Managed memory:</strong></span> Can migrate or prefetch pages between processors; <code>cudaMemAdvise</code> and <code>cudaMemPrefetchAsync</code> guide residency, while ordinary L1 and L2 cache behavior remains hardware-managed.</li>
 </ul>
 <p>A low-level CUDA lifecycle makes the hidden costs visible: allocate device memory, copy inputs from host to device, launch the kernel, synchronize only when required, copy results back if the host needs them, and free or reuse device memory. PyTorch hides most of these calls, but the performance costs remain.</p>
-<p><strong>Example: Host-device copy lifecycle.</strong> Illustrative CUDA C++ lifecycle; requires <code>nvcc</code> and a CUDA-capable GPU. The listing emphasizes allocation, stream ordering, copies, launch, synchronization, and cleanup. It omits input initialization, result checking, and CUDA error handling, so do not use it as a complete runnable test. A runnable version should initialize <code>h_x</code> and <code>h_y</code>, check every CUDA call and the launch, verify selected <code>h_out</code> values after synchronization, and report the build command and expected result.</p>
+<p><strong>Example: Host-device copy lifecycle.</strong> This compact CUDA C++ example makes the host-to-device lifecycle explicit: allocate device storage, submit an asynchronous copy, launch a kernel, copy the result back, synchronize, and release the resources.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Host-device copy lifecycle</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c03-c01"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="lst-m4-c03-c01-1"><a href="#lst-m4-c03-c01-1" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;cuda_runtime.h&gt;</span></span>
-<span id="lst-m4-c03-c01-2"><a href="#lst-m4-c03-c01-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c03-c01-3"><a href="#lst-m4-c03-c01-3" aria-hidden="true" tabindex="-1"></a>__global__ <span class="dt">void</span> add<span class="op">(</span><span class="at">const</span> <span class="dt">float</span><span class="op">*</span> x<span class="op">,</span> <span class="at">const</span> <span class="dt">float</span><span class="op">*</span> y<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
-<span id="lst-m4-c03-c01-4"><a href="#lst-m4-c03-c01-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
-<span id="lst-m4-c03-c01-5"><a href="#lst-m4-c03-c01-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> x<span class="op">[</span>i<span class="op">]</span> <span class="op">+</span> y<span class="op">[</span>i<span class="op">];</span></span>
-<span id="lst-m4-c03-c01-6"><a href="#lst-m4-c03-c01-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
-<span id="lst-m4-c03-c01-7"><a href="#lst-m4-c03-c01-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c03-c01-8"><a href="#lst-m4-c03-c01-8" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
-<span id="lst-m4-c03-c01-9"><a href="#lst-m4-c03-c01-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> n <span class="op">=</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">20</span><span class="op">;</span></span>
-<span id="lst-m4-c03-c01-10"><a href="#lst-m4-c03-c01-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">size_t</span> bytes <span class="op">=</span> n <span class="op">*</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">float</span><span class="op">);</span></span>
-<span id="lst-m4-c03-c01-11"><a href="#lst-m4-c03-c01-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> <span class="op">*</span>h_x<span class="op">,</span> <span class="op">*</span>h_y<span class="op">,</span> <span class="op">*</span>h_out<span class="op">,</span> <span class="op">*</span>d_x<span class="op">,</span> <span class="op">*</span>d_y<span class="op">,</span> <span class="op">*</span>d_out<span class="op">;</span></span>
-<span id="lst-m4-c03-c01-12"><a href="#lst-m4-c03-c01-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">cudaStream_t</span> stream<span class="op">;</span></span>
-<span id="lst-m4-c03-c01-13"><a href="#lst-m4-c03-c01-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c03-c01-14"><a href="#lst-m4-c03-c01-14" aria-hidden="true" tabindex="-1"></a>    cudaMallocHost<span class="op">(&amp;</span>h_x<span class="op">,</span> bytes<span class="op">);</span>  <span class="co">// page-locked host buffers</span></span>
-<span id="lst-m4-c03-c01-15"><a href="#lst-m4-c03-c01-15" aria-hidden="true" tabindex="-1"></a>    cudaMallocHost<span class="op">(&amp;</span>h_y<span class="op">,</span> bytes<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-16"><a href="#lst-m4-c03-c01-16" aria-hidden="true" tabindex="-1"></a>    cudaMallocHost<span class="op">(&amp;</span>h_out<span class="op">,</span> bytes<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-17"><a href="#lst-m4-c03-c01-17" aria-hidden="true" tabindex="-1"></a>    cudaMalloc<span class="op">(</span><span class="kw">reinterpret_cast</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">**&gt;(&amp;</span>d_x<span class="op">),</span> bytes<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-18"><a href="#lst-m4-c03-c01-18" aria-hidden="true" tabindex="-1"></a>    cudaMalloc<span class="op">(</span><span class="kw">reinterpret_cast</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">**&gt;(&amp;</span>d_y<span class="op">),</span> bytes<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-19"><a href="#lst-m4-c03-c01-19" aria-hidden="true" tabindex="-1"></a>    cudaMalloc<span class="op">(</span><span class="kw">reinterpret_cast</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">**&gt;(&amp;</span>d_out<span class="op">),</span> bytes<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-20"><a href="#lst-m4-c03-c01-20" aria-hidden="true" tabindex="-1"></a>    cudaStreamCreate<span class="op">(&amp;</span>stream<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-21"><a href="#lst-m4-c03-c01-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c03-c01-22"><a href="#lst-m4-c03-c01-22" aria-hidden="true" tabindex="-1"></a>    cudaMemcpyAsync<span class="op">(</span>d_x<span class="op">,</span> h_x<span class="op">,</span> bytes<span class="op">,</span> cudaMemcpyHostToDevice<span class="op">,</span> stream<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-23"><a href="#lst-m4-c03-c01-23" aria-hidden="true" tabindex="-1"></a>    cudaMemcpyAsync<span class="op">(</span>d_y<span class="op">,</span> h_y<span class="op">,</span> bytes<span class="op">,</span> cudaMemcpyHostToDevice<span class="op">,</span> stream<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-24"><a href="#lst-m4-c03-c01-24" aria-hidden="true" tabindex="-1"></a>    add<span class="op">&lt;&lt;&lt;(</span>n <span class="op">+</span> <span class="dv">255</span><span class="op">)</span> <span class="op">/</span> <span class="dv">256</span><span class="op">,</span> <span class="dv">256</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> stream<span class="op">&gt;&gt;&gt;(</span>d_x<span class="op">,</span> d_y<span class="op">,</span> d_out<span class="op">,</span> n<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-25"><a href="#lst-m4-c03-c01-25" aria-hidden="true" tabindex="-1"></a>    cudaMemcpyAsync<span class="op">(</span>h_out<span class="op">,</span> d_out<span class="op">,</span> bytes<span class="op">,</span> cudaMemcpyDeviceToHost<span class="op">,</span> stream<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-26"><a href="#lst-m4-c03-c01-26" aria-hidden="true" tabindex="-1"></a>    cudaStreamSynchronize<span class="op">(</span>stream<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-27"><a href="#lst-m4-c03-c01-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c03-c01-28"><a href="#lst-m4-c03-c01-28" aria-hidden="true" tabindex="-1"></a>    cudaStreamDestroy<span class="op">(</span>stream<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-29"><a href="#lst-m4-c03-c01-29" aria-hidden="true" tabindex="-1"></a>    cudaFree<span class="op">(</span>d_x<span class="op">);</span> cudaFree<span class="op">(</span>d_y<span class="op">);</span> cudaFree<span class="op">(</span>d_out<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-30"><a href="#lst-m4-c03-c01-30" aria-hidden="true" tabindex="-1"></a>    cudaFreeHost<span class="op">(</span>h_x<span class="op">);</span> cudaFreeHost<span class="op">(</span>h_y<span class="op">);</span> cudaFreeHost<span class="op">(</span>h_out<span class="op">);</span></span>
-<span id="lst-m4-c03-c01-31"><a href="#lst-m4-c03-c01-31" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>A host-to-device transfer begins when the CPU submits a copy. If the source is pageable, the runtime may first copy it into a page-locked staging buffer; a pinned source can avoid that staging step and support asynchronous DMA. <code>non_blocking=True</code> asks PyTorch to submit without making the host wait, but it does not make the consumer independent: a kernel that needs the batch waits when correct stream ordering or an explicit dependency requires it. Transfer time is hidden only when independent work can run at the same time on hardware that supports the overlap. Confirm that overlap on a timeline. Calls such as <code>.item()</code>, <code>.cpu()</code>, or printing a CUDA-produced value wait for the work needed to produce the requested value; a stream or device synchronization has the broader wait scope defined by that synchronization operation.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c03-c01"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="lst-m4-c03-c01-1"><a href="#lst-m4-c03-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co">// What this code shows:</span></span>
+<span id="lst-m4-c03-c01-2"><a href="#lst-m4-c03-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co">// - cudaMallocHost creates page-locked host buffers so the copy engine can use a direct DMA-</span></span>
+<span id="lst-m4-c03-c01-3"><a href="#lst-m4-c03-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co">//   friendly path.</span></span>
+<span id="lst-m4-c03-c01-4"><a href="#lst-m4-c03-c01-4" aria-hidden="true" tabindex="-1"></a><span class="co">// - cudaMemcpyAsync submits host-device transfers to the stream; the kernel waits on the same</span></span>
+<span id="lst-m4-c03-c01-5"><a href="#lst-m4-c03-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co">//   stream order.</span></span>
+<span id="lst-m4-c03-c01-6"><a href="#lst-m4-c03-c01-6" aria-hidden="true" tabindex="-1"></a><span class="co">// - The kernel reads tensors already resident in GPU HBM; it does not move each value through the</span></span>
+<span id="lst-m4-c03-c01-7"><a href="#lst-m4-c03-c01-7" aria-hidden="true" tabindex="-1"></a><span class="co">//   CPU.</span></span>
+<span id="lst-m4-c03-c01-8"><a href="#lst-m4-c03-c01-8" aria-hidden="true" tabindex="-1"></a><span class="co">// - cudaStreamSynchronize makes the host wait for the device before the result is consumed or</span></span>
+<span id="lst-m4-c03-c01-9"><a href="#lst-m4-c03-c01-9" aria-hidden="true" tabindex="-1"></a><span class="co">//   resources are released.</span></span>
+<span id="lst-m4-c03-c01-10"><a href="#lst-m4-c03-c01-10" aria-hidden="true" tabindex="-1"></a><span class="co">//</span></span>
+<span id="lst-m4-c03-c01-11"><a href="#lst-m4-c03-c01-11" aria-hidden="true" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;cuda_runtime.h&gt;</span></span>
+<span id="lst-m4-c03-c01-12"><a href="#lst-m4-c03-c01-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c01-13"><a href="#lst-m4-c03-c01-13" aria-hidden="true" tabindex="-1"></a>__global__ <span class="dt">void</span> add<span class="op">(</span><span class="at">const</span> <span class="dt">float</span><span class="op">*</span> x<span class="op">,</span> <span class="at">const</span> <span class="dt">float</span><span class="op">*</span> y<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="lst-m4-c03-c01-14"><a href="#lst-m4-c03-c01-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="lst-m4-c03-c01-15"><a href="#lst-m4-c03-c01-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> x<span class="op">[</span>i<span class="op">]</span> <span class="op">+</span> y<span class="op">[</span>i<span class="op">];</span></span>
+<span id="lst-m4-c03-c01-16"><a href="#lst-m4-c03-c01-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="lst-m4-c03-c01-17"><a href="#lst-m4-c03-c01-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c01-18"><a href="#lst-m4-c03-c01-18" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="lst-m4-c03-c01-19"><a href="#lst-m4-c03-c01-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> n <span class="op">=</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">20</span><span class="op">;</span></span>
+<span id="lst-m4-c03-c01-20"><a href="#lst-m4-c03-c01-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">size_t</span> bytes <span class="op">=</span> n <span class="op">*</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">float</span><span class="op">);</span></span>
+<span id="lst-m4-c03-c01-21"><a href="#lst-m4-c03-c01-21" aria-hidden="true" tabindex="-1"></a>    <span class="dt">float</span> <span class="op">*</span>h_x<span class="op">,</span> <span class="op">*</span>h_y<span class="op">,</span> <span class="op">*</span>h_out<span class="op">,</span> <span class="op">*</span>d_x<span class="op">,</span> <span class="op">*</span>d_y<span class="op">,</span> <span class="op">*</span>d_out<span class="op">;</span></span>
+<span id="lst-m4-c03-c01-22"><a href="#lst-m4-c03-c01-22" aria-hidden="true" tabindex="-1"></a>    <span class="dt">cudaStream_t</span> stream<span class="op">;</span></span>
+<span id="lst-m4-c03-c01-23"><a href="#lst-m4-c03-c01-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c01-24"><a href="#lst-m4-c03-c01-24" aria-hidden="true" tabindex="-1"></a>    cudaMallocHost<span class="op">(&amp;</span>h_x<span class="op">,</span> bytes<span class="op">);</span>  <span class="co">// page-locked host buffers</span></span>
+<span id="lst-m4-c03-c01-25"><a href="#lst-m4-c03-c01-25" aria-hidden="true" tabindex="-1"></a>    cudaMallocHost<span class="op">(&amp;</span>h_y<span class="op">,</span> bytes<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-26"><a href="#lst-m4-c03-c01-26" aria-hidden="true" tabindex="-1"></a>    cudaMallocHost<span class="op">(&amp;</span>h_out<span class="op">,</span> bytes<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-27"><a href="#lst-m4-c03-c01-27" aria-hidden="true" tabindex="-1"></a>    cudaMalloc<span class="op">(</span><span class="kw">reinterpret_cast</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">**&gt;(&amp;</span>d_x<span class="op">),</span> bytes<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-28"><a href="#lst-m4-c03-c01-28" aria-hidden="true" tabindex="-1"></a>    cudaMalloc<span class="op">(</span><span class="kw">reinterpret_cast</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">**&gt;(&amp;</span>d_y<span class="op">),</span> bytes<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-29"><a href="#lst-m4-c03-c01-29" aria-hidden="true" tabindex="-1"></a>    cudaMalloc<span class="op">(</span><span class="kw">reinterpret_cast</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">**&gt;(&amp;</span>d_out<span class="op">),</span> bytes<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-30"><a href="#lst-m4-c03-c01-30" aria-hidden="true" tabindex="-1"></a>    cudaStreamCreate<span class="op">(&amp;</span>stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-31"><a href="#lst-m4-c03-c01-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c01-32"><a href="#lst-m4-c03-c01-32" aria-hidden="true" tabindex="-1"></a>    cudaMemcpyAsync<span class="op">(</span>d_x<span class="op">,</span> h_x<span class="op">,</span> bytes<span class="op">,</span> cudaMemcpyHostToDevice<span class="op">,</span> stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-33"><a href="#lst-m4-c03-c01-33" aria-hidden="true" tabindex="-1"></a>    cudaMemcpyAsync<span class="op">(</span>d_y<span class="op">,</span> h_y<span class="op">,</span> bytes<span class="op">,</span> cudaMemcpyHostToDevice<span class="op">,</span> stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-34"><a href="#lst-m4-c03-c01-34" aria-hidden="true" tabindex="-1"></a>    add<span class="op">&lt;&lt;&lt;(</span>n <span class="op">+</span> <span class="dv">255</span><span class="op">)</span> <span class="op">/</span> <span class="dv">256</span><span class="op">,</span> <span class="dv">256</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> stream<span class="op">&gt;&gt;&gt;(</span>d_x<span class="op">,</span> d_y<span class="op">,</span> d_out<span class="op">,</span> n<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-35"><a href="#lst-m4-c03-c01-35" aria-hidden="true" tabindex="-1"></a>    cudaMemcpyAsync<span class="op">(</span>h_out<span class="op">,</span> d_out<span class="op">,</span> bytes<span class="op">,</span> cudaMemcpyDeviceToHost<span class="op">,</span> stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-36"><a href="#lst-m4-c03-c01-36" aria-hidden="true" tabindex="-1"></a>    cudaStreamSynchronize<span class="op">(</span>stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-37"><a href="#lst-m4-c03-c01-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c01-38"><a href="#lst-m4-c03-c01-38" aria-hidden="true" tabindex="-1"></a>    cudaStreamDestroy<span class="op">(</span>stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-39"><a href="#lst-m4-c03-c01-39" aria-hidden="true" tabindex="-1"></a>    cudaFree<span class="op">(</span>d_x<span class="op">);</span> cudaFree<span class="op">(</span>d_y<span class="op">);</span> cudaFree<span class="op">(</span>d_out<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-40"><a href="#lst-m4-c03-c01-40" aria-hidden="true" tabindex="-1"></a>    cudaFreeHost<span class="op">(</span>h_x<span class="op">);</span> cudaFreeHost<span class="op">(</span>h_y<span class="op">);</span> cudaFreeHost<span class="op">(</span>h_out<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-41"><a href="#lst-m4-c03-c01-41" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>What synchronization hides</strong></p>
+<p>Many timing mistakes come from measuring a host API call without realizing GPU work is asynchronous. Conversely, an innocent-looking call such as <code>.item()</code>, <code>.cpu()</code>, or an explicit synchronize can force the host to wait for earlier GPU work.</p>
+</div>
+<p>A host-device copy moves bytes between CPU memory and GPU HBM. CUDA exposes the mechanism through operations such as <code>cudaMemcpy</code> and <code>cudaMemcpyAsync</code>; PyTorch usually exposes the same behavior through tensor placement calls such as <code>.to('cuda')</code>, <code>.cuda()</code>, <code>.cpu()</code>, and DataLoader transfer paths.</p>
+<p>The CPU submits the transfer request, and DMA-capable copy hardware performs the bulk byte movement. Pinned host memory matters because the pages stay resident while the DMA transfer is in flight; ordinary pageable memory may require an extra staging copy through a pinned buffer.</p>
+<p>Pinned host memory is page-locked staging memory for host-device transfers. It prevents the operating system from moving or paging out the host buffer while a DMA transfer is in flight. It improves transfer mechanics, while HBM remains the high-bandwidth device-memory tier and GPU cache residency remains hardware-managed.</p>
+<p>Mapped host memory and managed memory are placement mechanisms. Mapped host memory lets a GPU kernel access a host allocation through the system interconnect, which can be useful for small or irregular control data and slow for bulk tensor traffic. Managed memory can migrate or prefetch pages between processors; <code>cudaMemAdvise</code> and <code>cudaMemPrefetchAsync</code> guide residency, while ordinary L1 and L2 cache behavior remains hardware-managed.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Pinned-memory staging:</strong></span> A producer places input batches in page-locked host memory so the GPU copy path can use DMA more efficiently.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Double buffering:</strong></span> The next batch is prepared or copied while the current batch is computing, reducing exposed input-transfer time.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Copy-compute overlap:</strong></span> A copy and a kernel run concurrently only when they are issued asynchronously, memory supports the async path, stream dependencies permit overlap, and hardware resources are available.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Synchronization boundary:</strong></span> A later <code>.item()</code>, <code>.cpu()</code>, print, profiler step, or explicit synchronize can reveal copy or kernel time that looked hidden at submission.</li>
+</ul>
 <p><strong>Example: Pinned host batch transfer.</strong> This abbreviated training-input path assumes that <code>dataset</code>, <code>model</code>, and <code>loss_fn</code> already exist. It demonstrates pinned staging and a non-blocking transfer request, but it does not prove overlap unless a timeline shows copy and compute running concurrently.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Pinned host batch transfer</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c03-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c03-c02-1"><a href="#lst-m4-c03-c02-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.utils.data <span class="im">import</span> DataLoader</span>
-<span id="lst-m4-c03-c02-2"><a href="#lst-m4-c03-c02-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c03-c02-3"><a href="#lst-m4-c03-c02-3" aria-hidden="true" tabindex="-1"></a>loader <span class="op">=</span> DataLoader(dataset, batch_size<span class="op">=</span><span class="dv">32</span>, pin_memory<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c03-c02-4"><a href="#lst-m4-c03-c02-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c03-c02-5"><a href="#lst-m4-c03-c02-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> batch <span class="kw">in</span> loader:</span>
-<span id="lst-m4-c03-c02-6"><a href="#lst-m4-c03-c02-6" aria-hidden="true" tabindex="-1"></a>    input_ids <span class="op">=</span> batch[<span class="st">"input_ids"</span>].to(<span class="st">"cuda"</span>, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c03-c02-7"><a href="#lst-m4-c03-c02-7" aria-hidden="true" tabindex="-1"></a>    labels <span class="op">=</span> batch[<span class="st">"labels"</span>].to(<span class="st">"cuda"</span>, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c03-c02-8"><a href="#lst-m4-c03-c02-8" aria-hidden="true" tabindex="-1"></a>    logits <span class="op">=</span> model(input_ids)</span>
-<span id="lst-m4-c03-c02-9"><a href="#lst-m4-c03-c02-9" aria-hidden="true" tabindex="-1"></a>    loss <span class="op">=</span> loss_fn(logits, labels)</span>
-<span id="lst-m4-c03-c02-10"><a href="#lst-m4-c03-c02-10" aria-hidden="true" tabindex="-1"></a>    loss.backward()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c03-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c03-c02-1"><a href="#lst-m4-c03-c02-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c03-c02-2"><a href="#lst-m4-c03-c02-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - pin_memory=True asks the DataLoader to allocate page-locked host buffers for batches.</span></span>
+<span id="lst-m4-c03-c02-3"><a href="#lst-m4-c03-c02-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - non_blocking=True lets PyTorch request an asynchronous copy when the source and stream path</span></span>
+<span id="lst-m4-c03-c02-4"><a href="#lst-m4-c03-c02-4" aria-hidden="true" tabindex="-1"></a><span class="co">#   support it.</span></span>
+<span id="lst-m4-c03-c02-5"><a href="#lst-m4-c03-c02-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - The model still waits if the kernel needs input_ids before the copy finishes.</span></span>
+<span id="lst-m4-c03-c02-6"><a href="#lst-m4-c03-c02-6" aria-hidden="true" tabindex="-1"></a><span class="co"># - Nsight Systems or PyTorch Profiler is needed to confirm whether transfer time is hidden or</span></span>
+<span id="lst-m4-c03-c02-7"><a href="#lst-m4-c03-c02-7" aria-hidden="true" tabindex="-1"></a><span class="co">#   exposed.</span></span>
+<span id="lst-m4-c03-c02-8"><a href="#lst-m4-c03-c02-8" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c03-c02-9"><a href="#lst-m4-c03-c02-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.utils.data <span class="im">import</span> DataLoader</span>
+<span id="lst-m4-c03-c02-10"><a href="#lst-m4-c03-c02-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c02-11"><a href="#lst-m4-c03-c02-11" aria-hidden="true" tabindex="-1"></a>loader <span class="op">=</span> DataLoader(dataset, batch_size<span class="op">=</span><span class="dv">32</span>, pin_memory<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c03-c02-12"><a href="#lst-m4-c03-c02-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c02-13"><a href="#lst-m4-c03-c02-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> batch <span class="kw">in</span> loader:</span>
+<span id="lst-m4-c03-c02-14"><a href="#lst-m4-c03-c02-14" aria-hidden="true" tabindex="-1"></a>    input_ids <span class="op">=</span> batch[<span class="st">"input_ids"</span>].to(<span class="st">"cuda"</span>, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c03-c02-15"><a href="#lst-m4-c03-c02-15" aria-hidden="true" tabindex="-1"></a>    labels <span class="op">=</span> batch[<span class="st">"labels"</span>].to(<span class="st">"cuda"</span>, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c03-c02-16"><a href="#lst-m4-c03-c02-16" aria-hidden="true" tabindex="-1"></a>    logits <span class="op">=</span> model(input_ids)</span>
+<span id="lst-m4-c03-c02-17"><a href="#lst-m4-c03-c02-17" aria-hidden="true" tabindex="-1"></a>    loss <span class="op">=</span> loss_fn(logits, labels)</span>
+<span id="lst-m4-c03-c02-18"><a href="#lst-m4-c03-c02-18" aria-hidden="true" tabindex="-1"></a>    loss.backward()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Overlap condition</strong></p>
+<p><code>non_blocking=True</code> requests asynchronous submission. PCIe cost is hidden only when the data source, stream ordering, and hardware path allow useful copy-compute overlap.</p>
+</div>
 <p>An asynchronous copy hides transfer time only when pinned memory, stream order, hardware, and independent compute permit real overlap; <code>non_blocking=True</code> alone is not evidence. Once the bytes arrive, the next question is how allocator reuse, fragmentation, and runtime controls affect the device memory available to later kernels.</p>
 </section>
 <section id="sec-m4-c03-s07" class="level3" data-number="3.3.2">
@@ -586,11 +630,19 @@ Table&nbsp;3.1: Runtime memory controls and their enforceable boundaries.
 </section>
 <section id="sec-m4-c03-s08" class="level2" data-number="3.4">
 <h2 data-number="3.4" class="anchored" data-anchor-id="sec-m4-c03-s08"><span class="header-section-number">3.4</span> Asynchronous execution and synchronization</h2>
-<p>A stream orders the operations submitted to it: a kernel begins only after earlier copies and kernels in that same stream. Different streams do not automatically establish an order merely because one operation reads data written by another. The application must provide the dependency, for example by recording an event after the producer and making the consumer stream wait on that event; without that ordering, the consumer can race the producer. Correctly ordered operations in different streams are eligible to overlap when they are independent and the device has the required copy or compute resources. For GPU elapsed time, record start and end events in the measured stream and synchronize the end event before reading the duration. Use a device- or stream-wide synchronization only when its full wait scope is required, because a broader wait can remove useful overlap and make a host timer include work outside the intended region.</p>
+<p>A CUDA stream is an ordered queue of operations. Work in one stream runs in issue order, while work in different streams can overlap if dependencies and hardware resources allow it. A CUDA event records a point in a stream and can be used for timing or ordering. Synchronization forces the host or another stream to wait, which is sometimes necessary but often harmful when inserted accidentally.</p>
 </section>
 <section id="sec-m4-c03-s09" class="level2" data-number="3.5">
 <h2 data-number="3.5" class="anchored" data-anchor-id="sec-m4-c03-s09"><span class="header-section-number">3.5</span> Thread-to-data mapping</h2>
-<p>Section 3.2 defined the grid, block, and thread. To map that hierarchy onto a one-dimensional tensor, thread <code>t</code> in block <code>b</code> starts at <code>i = b * blockDim.x + t</code>. If the grid contains fewer threads than elements, the thread advances by <code>blockDim.x * gridDim.x</code> and processes <code>i + stride</code>, <code>i + 2 * stride</code>, and so on. Adjacent threads then access adjacent elements when the array is contiguous, which gives the memory system an opportunity to coalesce their requests. If lanes diverge into different branches or scattered addresses, the same mathematical operation may require many more memory transactions.</p>
+<p>A kernel usually maps thread and block indices to tensor indices. The simplest pattern uses a global thread index computed from block index and thread index. A grid-stride loop lets each thread process multiple elements when the tensor is larger than the total number of launched threads.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Grid:</strong></span> The full set of thread blocks launched for one kernel.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Block:</strong></span> A group of CUDA threads that can cooperate through shared memory and synchronization within that block.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Thread:</strong></span> One execution lane of scalar work inside a block. Threads are scheduled in warps on Streaming Multiprocessors (SMs).</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Global thread index:</strong></span> A computed index such as <code>blockIdx.x * blockDim.x + threadIdx.x</code> that maps a thread to a logical tensor element.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Grid-stride loop:</strong></span> A loop where each thread processes element <code>i</code>, then <code>i + blockDim.x * gridDim.x</code>, and so on. This lets one launch cover tensors larger than the number of launched threads.</li>
+</ul>
+<p>Thread mapping controls memory behavior. Adjacent lanes in a warp should usually access adjacent addresses so the memory system can coalesce requests. If lanes diverge into different branches or scattered addresses, the same mathematical operation may require many more memory transactions.</p>
 <p>The mapping also controls work balance. If some threads process much more data than others, the warp or block waits for the slowest lane. If the launch exposes too little parallel work, SMs remain idle even when the kernel code is correct.</p>
 </section>
 <section id="sec-m4-c03-s10" class="level2" data-number="3.6">
@@ -659,7 +711,17 @@ C = A B
 y = A x
 \tag{3.2}\]</span></span></p>
 <p>Here A has shape M by N, x has length N, and y has length M. Small-batch decode can resemble GEMV because one or a few token vectors read a large matrix with much less reuse than GEMM. For example, multiplying a 4096 by 4096 matrix by one vector reads many weights to produce one output vector. The notation omits batching, fused epilogues, cache effects, and the fact that production kernels often reshape the operation to recover reuse.</p>
-<p>The difference is reuse. In a training or prefill projection, many token vectors can reuse a weight tile, so the operation is usually GEMM-like and may reach high Tensor Core utilization. In small-batch decode, one or a few vectors use the same large weight matrix, so bytes read per arithmetic operation increase and the projection becomes GEMV-like. <code>GEMV-like</code> is a performance description, not a guarantee about the production kernel: batching, fusion, grouped-query attention, tensor parallelism, and custom layouts can change the executed shape. Table 3.3 summarizes the comparison.</p>
+<p>Large transformer training and prefill often create GEMM-like work with high arithmetic intensity. Single-token decode at small batch can behave more like GEMV: many weights are read for one or a few vectors, so memory bandwidth becomes more visible.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Definition - GEMM and GEMV</strong></p>
+<p><strong>GEMM:</strong> General Matrix-Matrix Multiplication, usually written as C = AB. It often exposes enough reuse to use tensor cores efficiently.</p>
+<p><strong>GEMV:</strong> General Matrix-Vector Multiplication, usually written as y = Ax. Small-batch decode can become GEMV-like and expose memory bandwidth or launch overhead.</p>
+<p><strong>Caveat:</strong> GEMV-like is a performance intuition; production engines may batch, fuse, or reshape the operation.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Why decode can resemble GEMV</strong></p>
+<p>Calling decode ‘GEMV-like’ describes its memory and arithmetic pattern. Production serving engines can reshape that work through batching, fused kernels, grouped-query attention, tensor parallelism, and custom layouts.</p>
+</div>
 <div id="tbl-m4-c03-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c03-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -719,10 +781,10 @@ Figure&nbsp;3.2: GEMV optimization journey
 <p><strong>Read for:</strong> The important trend is non-monotonic optimization: a naive custom kernel is much slower than the library path, a shared-memory version can regress, and warp-per-row scheduling recovers library-level timing.</p>
 <p><strong>Source status:</strong> Exact source table screenshot; values are read from the slide and are not recomputed or redrawn by the generator.</p>
 </div>
-<p>The five implementations change how threads read a row and combine partial sums. Compare each one with the vendor-library baseline for the same matrix shape, dtype, GPU, warmup, timing boundary, and correctness tolerance.</p>
+<p>To understand the GEMV performance optimization space, we trace the 5-step optimization journey of a CUDA kernel computing y = Ax:</p>
 <ul>
 <li>Iteration 1 (Naive): Each thread is assigned to compute one output element of y, looping over all columns of the weight matrix A. This is simple but leads to uncoalesced global memory reads because adjacent threads read non-adjacent rows in memory.</li>
-<li>Iteration 2 - mapping change, exact operation needs source verification: the current text says that layout or thread indexing changed, but it does not identify the source matrix layout, strides, or lane-to-address mapping. State those details from the source experiment before explaining why traffic changed. A transpose view alone changes metadata, not stored byte order. Until the mapping is confirmed, do not label the iteration as a coalescing improvement.</li>
+<li>Iteration 2 (Changed layout or traversal): The matrix layout or thread indexing is changed so adjacent lanes request nearby addresses. A view-only transpose does not move bytes, so the actual stride and lane-to-address mapping must be checked.</li>
 <li>Iteration 3 (Shared Memory Block Reduce): The kernel divides the column dimension across threads in a block, cooperatively summing chunks into shared memory before executing block-level synchronization (__syncthreads()). This iteration frequently regresses or fails to improve speed due to shared memory bank conflicts, synchronization barriers, and thread address arithmetic overhead.</li>
 <li>Iteration 4 (Cooperating Threads): A row is divided across many threads and reduced at block scope. The useful thread count depends on row width, dtype, occupancy, and synchronization cost.</li>
 <li>Iteration 5 (Warp per Row / Warp-Shuffle): One warp can cooperate on a row and reduce partial sums with register shuffles, avoiding block-wide barriers for that reduction. Whether it approaches cuBLAS depends on the measured shape, dtype, GPU, and timing method.</li>
@@ -731,19 +793,26 @@ Figure&nbsp;3.2: GEMV optimization journey
 <p>Launch overhead often becomes visible in small-batch decode because each kernel does little work. A CUDA launch has a nonzero host-side cost whose size depends on the software stack, hardware, synchronization, and measurement method. For sufficiently small operations, that fixed cost can exceed device execution time. The knee on a size-versus-latency plot is the measured transition for one operation and environment; below it, launch cost dominates, while larger inputs eventually expose memory or compute limits.</p>
 </section>
 <section id="sec-m4-c03-s12" class="level2" data-number="3.8">
-<h2 data-number="3.8" class="anchored" data-anchor-id="sec-m4-c03-s12"><span class="header-section-number">3.8</span> CUDA launch and indexing example</h2>
-<p>This CUDA-like pseudocode connects one-dimensional tensor indexing to a launch configuration. It shows block and thread indices, a grid-stride loop, and the access pattern needed for coalescing; allocation, data transfer, synchronization, and cleanup are outside this example.</p>
-<p><strong>Example: Grid-stride vector add.</strong></p>
+<h2 data-number="3.8" class="anchored" data-anchor-id="sec-m4-c03-s12"><span class="header-section-number">3.8</span> Complete CUDA workload</h2>
+<p>The example below is a compact model of how CUDA launch parameters become tensor indexing. The code is only readable once host, kernel, grid, block, and thread roles are clear, so the example now maps those roles onto one concrete tensor loop.</p>
+<p><strong>Example: Grid-stride vector add.</strong> This CUDA-like pseudocode shows how a kernel maps blocks and threads onto a one-dimensional tensor. It is illustrative pseudocode for index assignment and launch-parameter reasoning.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Grid-stride vector add</p>
 </div>
-<pre id="lst-m4-c03-c03" class="text"><code>kernel vector_add(x, y, out, n):
-    tid = blockIdx.x * blockDim.x + threadIdx.x
-    stride = blockDim.x * gridDim.x
-    for i in range(tid, n, stride):
-        out[i] = x[i] + y[i]
-
-launch grid = ceil(n / block_size), block = block_size</code></pre>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c03-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c03-c03-1"><a href="#lst-m4-c03-c03-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c03-c03-2"><a href="#lst-m4-c03-c03-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - blockIdx.x selects the block, threadIdx.x selects the thread inside the block.</span></span>
+<span id="lst-m4-c03-c03-3"><a href="#lst-m4-c03-c03-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - The grid-stride loop lets the same launch handle tensors larger than the number of resident</span></span>
+<span id="lst-m4-c03-c03-4"><a href="#lst-m4-c03-c03-4" aria-hidden="true" tabindex="-1"></a><span class="co">#   threads.</span></span>
+<span id="lst-m4-c03-c03-5"><a href="#lst-m4-c03-c03-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - If consecutive threads read consecutive x[i] and y[i], memory access is coalesced.</span></span>
+<span id="lst-m4-c03-c03-6"><a href="#lst-m4-c03-c03-6" aria-hidden="true" tabindex="-1"></a><span class="co"># - The launch configuration controls how much parallel work is exposed to the GPU.</span></span>
+<span id="lst-m4-c03-c03-7"><a href="#lst-m4-c03-c03-7" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c03-c03-8"><a href="#lst-m4-c03-c03-8" aria-hidden="true" tabindex="-1"></a>kernel vector_add(x, y, out, n):</span>
+<span id="lst-m4-c03-c03-9"><a href="#lst-m4-c03-c03-9" aria-hidden="true" tabindex="-1"></a>    tid <span class="op">=</span> blockIdx.x <span class="op">*</span> blockDim.x <span class="op">+</span> threadIdx.x</span>
+<span id="lst-m4-c03-c03-10"><a href="#lst-m4-c03-c03-10" aria-hidden="true" tabindex="-1"></a>    stride <span class="op">=</span> blockDim.x <span class="op">*</span> gridDim.x</span>
+<span id="lst-m4-c03-c03-11"><a href="#lst-m4-c03-c03-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(tid, n, stride):</span>
+<span id="lst-m4-c03-c03-12"><a href="#lst-m4-c03-c03-12" aria-hidden="true" tabindex="-1"></a>        out[i] <span class="op">=</span> x[i] <span class="op">+</span> y[i]</span>
+<span id="lst-m4-c03-c03-13"><a href="#lst-m4-c03-c03-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c03-14"><a href="#lst-m4-c03-c03-14" aria-hidden="true" tabindex="-1"></a>launch grid <span class="op">=</span> ceil(n <span class="op">/</span> block_size), block <span class="op">=</span> block_size</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The complete launch makes the cost visible: thread mapping, address order, memory transfer, and synchronization all shape the result. Triton keeps these concerns but expresses them through program instances, tiles, offsets, masks, and compiler-selected lower-level execution.</p>
 
 

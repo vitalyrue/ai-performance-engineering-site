@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -443,7 +443,7 @@ window.Quarto = {
   <li><a href="#sec-m2-c10-s02" id="toc-sec-m2-c10-s02" class="nav-link" data-scroll-target="#sec-m2-c10-s02"><span class="header-section-number">10.2</span> Accelerating Convergence and Escaping Plateaus with Momentum</a></li>
   <li><a href="#sec-m2-c10-s03" id="toc-sec-m2-c10-s03" class="nav-link" data-scroll-target="#sec-m2-c10-s03"><span class="header-section-number">10.3</span> Adapting Per-Parameter Learning Rates with RMSprop and Adam</a></li>
   <li><a href="#sec-m2-c10-s04" id="toc-sec-m2-c10-s04" class="nav-link" data-scroll-target="#sec-m2-c10-s04"><span class="header-section-number">10.4</span> Decoupling Weight Decay and Controlling Gradients with AdamW</a></li>
-  <li><a href="#sec-m2-c10-s05" id="toc-sec-m2-c10-s05" class="nav-link" data-scroll-target="#sec-m2-c10-s05"><span class="header-section-number">10.5</span> Combining AdamW with Linear Learning-Rate Warmup</a></li>
+  <li><a href="#sec-m2-c10-s05" id="toc-sec-m2-c10-s05" class="nav-link" data-scroll-target="#sec-m2-c10-s05"><span class="header-section-number">10.5</span> Stabilizing Early Training with Warmup and Cosine Decay Schedules</a></li>
   <li><a href="#sec-m2-c10-s06" id="toc-sec-m2-c10-s06" class="nav-link" data-scroll-target="#sec-m2-c10-s06"><span class="header-section-number">10.6</span> Regularizing Parameters with L2 Weight Decay and Dropout</a></li>
   <li><a href="#sec-m2-c10-s07" id="toc-sec-m2-c10-s07" class="nav-link" data-scroll-target="#sec-m2-c10-s07"><span class="header-section-number">10.7</span> Bounding Gradient Norms with Gradient Clipping</a></li>
   <li><a href="#sec-m2-c10-s08" id="toc-sec-m2-c10-s08" class="nav-link" data-scroll-target="#sec-m2-c10-s08"><span class="header-section-number">10.8</span> Selecting Hyperparameters for Stable Optimization</a></li>
@@ -476,6 +476,7 @@ window.Quarto = {
 <p>A gradient points toward a local reduction in loss, but its size and direction can vary sharply from one mini-batch to the next. Optimizers smooth, scale, and constrain the resulting parameter updates.</p>
 <p>A gradient says which direction reduces loss locally; an optimizer chooses the actual parameter step. This chapter compares SGD, momentum, RMSprop, Adam, and AdamW as different ways of turning noisy mini-batch gradients into stable updates.</p>
 <p>In code, <code>torch.optim.SGD</code>, <code>Adam</code>, and <code>AdamW</code> hold optimizer state and apply gradients after <code>loss.backward()</code>; gradient clipping uses <code>torch.nn.utils.clip_grad_norm_</code>.</p>
+<p>Chapter 10 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c10-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 10 opener for Gradient descent and optimizers, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c10-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -486,6 +487,7 @@ Figure&nbsp;10.1: Update rules combine gradients, learning rates, history, and r
 </figcaption>
 </figure>
 </div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c10-s01" class="level2" data-number="10.1">
 <h2 data-number="10.1" class="anchored" data-anchor-id="sec-m2-c10-s01"><span class="header-section-number">10.1</span> Stepping Weights with Stochastic Gradient Descent</h2>
 <p>Gradient descent describes a family of methods that differ mainly in how much data they use to estimate each update direction. The batch choice controls noise, memory use, and update frequency.</p>
@@ -530,6 +532,11 @@ g_B=\frac{1}{\lvert B\rvert}\sum_{i\in B}\operatorname{grad}L_i(\theta)
 <p>Plain gradient descent reacts only to the current batch. Momentum adds a running direction so a sequence of similar gradients reinforces a stable update instead of being treated as unrelated steps.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Momentum:</strong></span> An exponential moving average of gradients used to smooth update directions.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Adam:</strong></span> An optimizer that tracks moving averages of gradients and squared gradients.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Warmup:</strong></span> A schedule that starts with smaller learning rates before reaching the main rate.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decay:</strong></span> A schedule that reduces learning rate later in training.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Bias correction:</strong></span> The Adam adjustment that removes initialization bias from moving-average moment estimates.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Learning-rate warmup:</strong></span> A schedule that increases the learning rate gradually during early optimization steps.</li>
 </ul>
 <p>Momentum stores one velocity tensor for each parameter tensor. At step t, the new gradient is added to a decayed copy of the previous velocity; the parameter then moves along that combined direction.</p>
 <p>This helps when consecutive batches point roughly the same way. Unlike the adaptive methods that follow, momentum changes the direction of the update but does not give separate coordinates different step sizes.</p>
@@ -547,7 +554,6 @@ v_{t} = \beta v_{t-1} + g_{t};\quad \theta_{t+1} = \theta_{t} - \eta v_{t}
 <p><strong>Example: Momentum</strong></p>
 <p>With <span class="math inline">\(\beta=0.9\)</span>, <span class="math inline">\(v_{t-1}=0.2\)</span>, and <span class="math inline">\(g_t=0.5\)</span>, the unscaled momentum rule gives <span class="math inline">\(v_t=0.9\cdot0.2+0.5=0.68\)</span>.</p>
 </div>
-<p>The following runnable PyTorch example receives the three-example logistic-regression batch from Chapter 5. <code>zero_grad()</code> clears old gradient buffers, <code>backward()</code> fills them from the current loss, and <code>step()</code> updates <span class="math inline">\(w\)</span> and <span class="math inline">\(b\)</span>. It prints the scalar loss and the changed parameters; omitting <code>zero_grad()</code> would add this batch’s gradients to any gradients left from an earlier step.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> One optimizer step on the running logistic-regression batch</p>
 </div>
@@ -638,21 +644,24 @@ s_{t} = \beta s_{t-1} + (1-\beta)g_{t}^{2};\quad \theta_{t+1} = \theta_{t} - \et
 m_{t} = \beta_{1}m_{t-1} + (1-\beta_{1})g_{t}
 \tag{10.6}\]</span></span></p>
 <p>where <span class="math inline">\(g_{t}\)</span> is gradient at step t; <span class="math inline">\(m_{t}\)</span> is first-moment state; <span class="math inline">\(v_{t}\)</span> is second-moment state; <span class="math inline">\(\beta_{1}\)</span>,<span class="math inline">\(\beta_{2}\)</span> is decay coefficients; t is update step index.</p>
-<p>The first moment preserves signed direction from recent gradients.</p>
+<p>Adam combines an exponential average of gradients with an exponential average of squared gradients. Both averages start at zero, so bias correction rescales them during the early steps.</p>
+<p>The first moment supplies direction; the second moment supplies a coordinatewise scale.</p>
 <p>Adam also tracks an exponential moving average of squared gradients.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Adam second moment:</strong></span></p>
 <p><span id="eq-m2-c10-e07"><span class="math display">\[
 v_{t} = \beta_{2}v_{t-1} + (1-\beta_{2})g_{t}^{2}
 \tag{10.7}\]</span></span></p>
 <p>where <span class="math inline">\(g_{t}\)</span> is gradient at step t; <span class="math inline">\(m_{t}\)</span> is first-moment state; <span class="math inline">\(v_{t}\)</span> is second-moment state; <span class="math inline">\(\beta_{1}\)</span>,<span class="math inline">\(\beta_{2}\)</span> is decay coefficients; t is update step index.</p>
-<p>The second moment records recent squared magnitudes and therefore supplies a separate scale for each coordinate.</p>
+<p>Adam combines an exponential average of gradients with an exponential average of squared gradients. Both averages start at zero, so bias correction rescales them during the early steps.</p>
+<p>The first moment supplies direction; the second moment supplies a coordinatewise scale.</p>
 <p>Bias correction compensates for moments initialized at zero.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Adam bias correction:</strong></span></p>
 <p><span id="eq-m2-c10-e08"><span class="math display">\[
 \widehat{m}_{t} = \frac{m_{t}}{1-\beta_{1}^{t}},\quad \widehat{v}_{t} = \frac{v_{t}}{1-\beta_{2}^{t}}
 \tag{10.8}\]</span></span></p>
 <p>where <span class="math inline">\(g_{t}\)</span> is gradient at step t; <span class="math inline">\(m_{t}\)</span> is first-moment state; <span class="math inline">\(v_{t}\)</span> is second-moment state; <span class="math inline">\(\beta_{1}\)</span>,<span class="math inline">\(\beta_{2}\)</span> is decay coefficients; t is update step index.</p>
-<p>Because both moments start at zero, their early values are biased toward zero. Dividing by <span class="math inline">\(1-\beta_1^t\)</span> and <span class="math inline">\(1-\beta_2^t\)</span> removes that initialization effect.</p>
+<p>Adam combines an exponential average of gradients with an exponential average of squared gradients. Both averages start at zero, so bias correction rescales them during the early steps.</p>
+<p>The first moment supplies direction; the second moment supplies a coordinatewise scale.</p>
 <p>The Adam update rescales the first moment by the square root of the second moment.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Adam update:</strong></span></p>
 <p><span id="eq-m2-c10-e09"><span class="math display">\[
@@ -684,7 +693,7 @@ m_{t} = \beta_{1}m_{t-1} + (1-\beta_{1})g_{t};\quad v_{t} = \beta_{2}v_{t-1} + (
 <p>AdamW applies shrinkage directly to parameters instead of folding it into the adaptive gradient. Schedules and regularization determine how strongly that update acts over training.</p>
 </section>
 <section id="sec-m2-c10-s05" class="level2" data-number="10.5">
-<h2 data-number="10.5" class="anchored" data-anchor-id="sec-m2-c10-s05"><span class="header-section-number">10.5</span> Combining AdamW with Linear Learning-Rate Warmup</h2>
+<h2 data-number="10.5" class="anchored" data-anchor-id="sec-m2-c10-s05"><span class="header-section-number">10.5</span> Stabilizing Early Training with Warmup and Cosine Decay Schedules</h2>
 <p>AdamW combines Adam’s adaptive update with a separate parameter shrinkage term, and warmup controls the size of the earliest optimization steps.</p>
 <p>Decoupled weight decay is a direct parameter shrinkage applied separately from Adam’s gradient moments.</p>
 <p>In AdamW, weight decay shrinks the parameter directly instead of entering the gradient moments. This makes the regularization action easier to separate from Adam’s adaptive scaling.</p>
@@ -756,7 +765,6 @@ J(\theta) = \widehat{R}(\theta) + \lambda\,\theta^{T}\theta
 <p>where <span class="math inline">\(\hat{R}\)</span> is empirical risk; λ is regularization strength; θ is parameter vector.</p>
 <p>Adding the squared parameter norm penalizes large weights while retaining the data-fitting term.</p>
 <p>Regularization changes the objective being minimized, not the meaning of the input data.</p>
-<p>Dropout acts on activations rather than directly on parameter magnitudes. During training, each activation coordinate is multiplied by an independent mask <span class="math inline">\(m_j\sim\operatorname{Bernoulli}(1-p)\)</span> and the retained values are rescaled as <span class="math inline">\(\widetilde{h}_j=m_jh_j/(1-p)\)</span>. During evaluation the mask is disabled and <span class="math inline">\(\widetilde{h}=h\)</span>. A large dropout probability can remove too much signal and cause underfitting; leaving a model in training mode during evaluation makes its predictions unnecessarily random.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Keeping Weights from Fitting Noise</strong></p>
 <p><strong>L2 regularization:</strong></p>
@@ -787,14 +795,13 @@ J(\theta) = \widehat{R}(\theta) + \lambda\,\theta^{T}\theta
 <p><span id="eq-m2-c10-e17"><span class="math display">\[
 g_{\mathrm{clipped}} = g\,\min\!\left(1,\frac{c}{\lVert g\rVert_{2}}\right)
 \tag{10.17}\]</span></span></p>
-<p>where <span class="math inline">\(g\)</span> is the original gradient vector, <span class="math inline">\(c&gt;0\)</span> is the maximum allowed norm, and <span class="math inline">\(\lVert g\rVert_2\)</span> is the Euclidean norm of the gradient.</p>
+<p>where g is original gradient vector; c is maximum allowed gradient norm; <span class="math inline">\(norm_{2}\)</span>(g) is euclidean norm of the gradient.</p>
 <p>If the norm is already below c, the multiplier is 1. If the norm exceeds c, the multiplier makes the new norm exactly c.</p>
 <p>Clipping preserves direction while limiting step size before optimizer-specific scaling.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Gradient clipping</strong></p>
 <p>If <span class="math inline">\(\lVert g\rVert_2=10\)</span> and <span class="math inline">\(c=1\)</span>, the gradient is multiplied by <span class="math inline">\(c/\lVert g\rVert_2=0.1\)</span>.</p>
 </div>
-<p>This abbreviated PyTorch training-loop fragment assumes that <code>model</code>, <code>loss</code>, and <code>optimizer</code> already exist. It first fills gradients, then clips their combined norm to at most 1.0, applies the optimizer update, and clears the buffers for the next batch. Clipping before <code>backward()</code> would have no current gradients to rescale, while omitting <code>zero_grad()</code> would accumulate gradients across batches.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Gradient clipping in a PyTorch training step</p>
 </div>
@@ -891,6 +898,9 @@ L_{\mathrm{total}} = L_{\mathrm{data}} + \lambda\,\lVert\theta\rVert_{2}^{2}
 <li>SGD uses the current gradient directly; AdamW also reads and updates optimizer state.</li>
 <li>A too-large learning rate can increase loss or cause oscillation; a too-small rate can make learning appear stuck.</li>
 </ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>It should now be clear how to update one scalar parameter by hand and explain how batch size changes the gradient estimate.</strong></p>
+</div>
 <p>Optimizers are update rules that decide how gradients change parameters and optimizer state.</p>
 <p>Backpropagation computes gradients through composed operations.</p>
 

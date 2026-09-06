@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -374,6 +374,7 @@ window.Quarto = {
 </header>
 
 
+<p>Provide quantitative roofline modeling and systematic profiling workflows.</p>
 <p>Performance debugging follows a causal chain: count work, bytes, and elapsed time; classify the likely constraint; construct a roofline bound; then verify the hypothesis in a trace. The sections below introduce those steps in that order.</p>
 <p>Roofline reasoning supplies a plausibility model, while profiling supplies evidence about the gap between that model and the real execution. The gap can come from launch overhead, synchronization, communication, cache effects, or an incorrect workload model.</p>
 <p>The profiling workflow should start broad and then zoom in. PyTorch Profiler identifies expensive operations and memory pressure. Nsight Systems shows CPU/GPU timelines, launch gaps, and collectives. Nsight Compute diagnoses one kernel in detail.</p>
@@ -493,7 +494,7 @@ Table&nbsp;5.1: Byte-count starting points. They are lower bounds or first-pass 
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Launch-bound:</strong></span> GPU work is short and CPU or dispatch gaps dominate. Many small eager operations are a common example; test fusion, compilation, or CUDA Graph replay.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Communication-bound:</strong></span> Collectives dominate the timeline. Distributed gradient synchronization is a common example; test overlap, sharding, rank placement, and topology.</li>
 </ul>
-<p>These four labels apply to a measured region, and each points to a different first experiment rather than a permanent property of the model. These labels choose the first experiment; arithmetic intensity then tests whether memory bandwidth or compute throughput can explain the measured region.</p>
+<p>These four labels apply to a measured region, and each points to a different first experiment rather than a permanent property of the model. The next question is how arithmetic intensity and hardware ceilings place that region on a quantitative compute-versus-memory bound.</p>
 </section>
 <section id="sec-m4-c05-s03" class="level2" data-number="5.3">
 <h2 data-number="5.3" class="anchored" data-anchor-id="sec-m4-c05-s03"><span class="header-section-number">5.3</span> Roofline analysis</h2>
@@ -501,7 +502,14 @@ Table&nbsp;5.1: Byte-count starting points. They are lower bounds or first-pass 
 <section id="sec-m4-c05-s04" class="level3" data-number="5.3.1">
 <h3 data-number="5.3.1" class="anchored" data-anchor-id="sec-m4-c05-s04"><span class="header-section-number">5.3.1</span> Constructing the model</h3>
 <p>The roofline chart places achieved throughput against arithmetic intensity on a log-log scale. Its diagonal memory-bandwidth ceiling and horizontal compute ceiling meet at the ridge point, which separates the first-order bandwidth-limited and compute-limited regions.</p>
-<p>Use the quantities from Section 5.1 for one measured region. Divide FLOPs by bytes moved to place the point on the horizontal axis, and divide FLOPs by elapsed time to place it on the vertical axis. Then compare that point with the bandwidth and compute ceilings for the same dtype, operation path, and memory level.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>FLOPs:</strong></span> Floating-point operations performed by the kernel or operation being modeled. Counting them requires knowing the algorithm and tensor shape together.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Bytes moved:</strong></span> Data read from and written to the relevant memory level. For a simple roofline this usually means HBM traffic, but a cache-aware analysis may distinguish L2, shared memory, or host-device transfer.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Elapsed time:</strong></span> Measured runtime for the same region whose FLOPs and bytes are being counted.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Achieved throughput:</strong></span> FLOPs divided by elapsed time. It is the realized compute rate, not the device peak.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Arithmetic intensity:</strong></span> FLOPs divided by bytes moved. It determines where the point sits on the roofline x-axis.</li>
+</ul>
+<p>The roofline chart plots a kernel’s arithmetic intensity against achieved performance and overlays hardware ceilings. It is a diagnostic chart: the point’s position tells whether the first-order limit is memory bandwidth, compute throughput, or an inconsistency in the model inputs.</p>
 <p>The roofline model connects measured performance to hardware limits. It separates memory-bandwidth limits from compute-throughput limits.</p>
 <div id="fig-m4-c05-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The roofline model connects measured performance to hardware limits. It separates memory-bandwidth limits from compute-throughput limits. The printed ceilings are an H100 FP16 theoretical-peak example. In the first-order model, points left of the ridge are bounded by the memory roof and points right of it by the compute roof; a point below either roof still requires profiling before choosing a kernel, precision, or hardware change.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -552,33 +560,38 @@ Figure&nbsp;5.2: Roofline model
 </section>
 <section id="sec-m4-c05-s06" class="level2" data-number="5.4">
 <h2 data-number="5.4" class="anchored" data-anchor-id="sec-m4-c05-s06"><span class="header-section-number">5.4</span> Profiling workflow</h2>
-<p>Profiling is the primary method for verifying performance hypotheses and identifying the execution bottlenecks of deep learning models. When the slow layer is not yet known, start with PyTorch Profiler to connect framework operations with CPU time, CUDA activity, shapes, and allocations. Move to Nsight Systems for launch ordering and idle gaps, or to Nsight Compute after a specific kernel has been isolated:</p>
-<p><strong>Example: PyTorch profiler pass.</strong> This profiling template measures CPU and CUDA activity for one warmed-up function. Warmup avoids mixing initialization or compilation with steady-state timing. <code>cuda_time_total</code> identifies GPU kernels and operations that dominate device time. <code>profile_memory=True</code> helps connect bottlenecks to allocation and tensor size. If CPU time dominates, kernel optimization alone may not help.</p>
+<p>Profiling is the primary method for verifying performance hypotheses and identifying the execution bottlenecks of deep learning models. Before resorting to low-level profiling tools like Nsight, performance engineers should use the built-in PyTorch Profiler to trace framework activities, memory allocations, and CPU-to-GPU execution timelines:</p>
+<p><strong>Example: PyTorch profiler pass.</strong> This profiling template measures CPU and CUDA activity for one warmed-up function. It is useful for finding expensive operators, memory allocation spikes, and whether time is on the CPU side or GPU side.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> PyTorch profiler pass</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c05-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c05-c01-1"><a href="#lst-m4-c05-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c05-c01-2"><a href="#lst-m4-c05-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.profiler <span class="im">import</span> profile, ProfilerActivity</span>
-<span id="lst-m4-c05-c01-3"><a href="#lst-m4-c05-c01-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c01-4"><a href="#lst-m4-c05-c01-4" aria-hidden="true" tabindex="-1"></a>device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, <span class="dv">0</span>)</span>
-<span id="lst-m4-c05-c01-5"><a href="#lst-m4-c05-c01-5" aria-hidden="true" tabindex="-1"></a>args <span class="op">=</span> (torch.randn(<span class="dv">1024</span>, <span class="dv">1024</span>, device<span class="op">=</span>device),)</span>
-<span id="lst-m4-c05-c01-6"><a href="#lst-m4-c05-c01-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c01-7"><a href="#lst-m4-c05-c01-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fn(x):</span>
-<span id="lst-m4-c05-c01-8"><a href="#lst-m4-c05-c01-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> torch.relu(x <span class="op">@</span> x)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c05-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c05-c01-1"><a href="#lst-m4-c05-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c05-c01-2"><a href="#lst-m4-c05-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - Warmup avoids mixing initialization or compilation with steady-state timing.</span></span>
+<span id="lst-m4-c05-c01-3"><a href="#lst-m4-c05-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - cuda_time_total identifies GPU kernels and operations that dominate device time.</span></span>
+<span id="lst-m4-c05-c01-4"><a href="#lst-m4-c05-c01-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - profile_memory=True helps connect bottlenecks to allocation and tensor size.</span></span>
+<span id="lst-m4-c05-c01-5"><a href="#lst-m4-c05-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - If CPU time dominates, kernel optimization alone may not help.</span></span>
+<span id="lst-m4-c05-c01-6"><a href="#lst-m4-c05-c01-6" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c05-c01-7"><a href="#lst-m4-c05-c01-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c05-c01-8"><a href="#lst-m4-c05-c01-8" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.profiler <span class="im">import</span> profile, ProfilerActivity</span>
 <span id="lst-m4-c05-c01-9"><a href="#lst-m4-c05-c01-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c01-10"><a href="#lst-m4-c05-c01-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>):</span>
-<span id="lst-m4-c05-c01-11"><a href="#lst-m4-c05-c01-11" aria-hidden="true" tabindex="-1"></a>    fn(<span class="op">*</span>args)  <span class="co"># warmup</span></span>
-<span id="lst-m4-c05-c01-12"><a href="#lst-m4-c05-c01-12" aria-hidden="true" tabindex="-1"></a>torch.cuda.synchronize()</span>
-<span id="lst-m4-c05-c01-13"><a href="#lst-m4-c05-c01-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c01-14"><a href="#lst-m4-c05-c01-14" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> profile(</span>
-<span id="lst-m4-c05-c01-15"><a href="#lst-m4-c05-c01-15" aria-hidden="true" tabindex="-1"></a>    activities<span class="op">=</span>[ProfilerActivity.CPU, ProfilerActivity.CUDA],</span>
-<span id="lst-m4-c05-c01-16"><a href="#lst-m4-c05-c01-16" aria-hidden="true" tabindex="-1"></a>    record_shapes<span class="op">=</span><span class="va">True</span>,</span>
-<span id="lst-m4-c05-c01-17"><a href="#lst-m4-c05-c01-17" aria-hidden="true" tabindex="-1"></a>    profile_memory<span class="op">=</span><span class="va">True</span>,</span>
-<span id="lst-m4-c05-c01-18"><a href="#lst-m4-c05-c01-18" aria-hidden="true" tabindex="-1"></a>) <span class="im">as</span> prof:</span>
-<span id="lst-m4-c05-c01-19"><a href="#lst-m4-c05-c01-19" aria-hidden="true" tabindex="-1"></a>    fn(<span class="op">*</span>args)</span>
-<span id="lst-m4-c05-c01-20"><a href="#lst-m4-c05-c01-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c01-21"><a href="#lst-m4-c05-c01-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(prof.key_averages().table(sort_by<span class="op">=</span><span class="st">"cuda_time_total"</span>, row_limit<span class="op">=</span><span class="dv">20</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>This template runs several warmup iterations to initialize the PyTorch CUDA allocator and warm up the kernels before capturing execution. A <code>torch.cuda.synchronize()</code> call enforces the completion of warmup before the profiler’s active region begins. In the profile block, PyTorch logs operations, tensor shapes, and memory changes. The resulting printout sorts operations by CUDA execution time. Inspecting this table helps identify whether execution is dominated by slow GPU kernels, CPU-to-GPU memory copies, or allocator overhead.</p>
+<span id="lst-m4-c05-c01-10"><a href="#lst-m4-c05-c01-10" aria-hidden="true" tabindex="-1"></a>device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, <span class="dv">0</span>)</span>
+<span id="lst-m4-c05-c01-11"><a href="#lst-m4-c05-c01-11" aria-hidden="true" tabindex="-1"></a>args <span class="op">=</span> (torch.randn(<span class="dv">1024</span>, <span class="dv">1024</span>, device<span class="op">=</span>device),)</span>
+<span id="lst-m4-c05-c01-12"><a href="#lst-m4-c05-c01-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c01-13"><a href="#lst-m4-c05-c01-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> fn(x):</span>
+<span id="lst-m4-c05-c01-14"><a href="#lst-m4-c05-c01-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> torch.relu(x <span class="op">@</span> x)</span>
+<span id="lst-m4-c05-c01-15"><a href="#lst-m4-c05-c01-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c01-16"><a href="#lst-m4-c05-c01-16" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>):</span>
+<span id="lst-m4-c05-c01-17"><a href="#lst-m4-c05-c01-17" aria-hidden="true" tabindex="-1"></a>    fn(<span class="op">*</span>args)  <span class="co"># warmup</span></span>
+<span id="lst-m4-c05-c01-18"><a href="#lst-m4-c05-c01-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c01-19"><a href="#lst-m4-c05-c01-19" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> profile(</span>
+<span id="lst-m4-c05-c01-20"><a href="#lst-m4-c05-c01-20" aria-hidden="true" tabindex="-1"></a>    activities<span class="op">=</span>[ProfilerActivity.CPU, ProfilerActivity.CUDA],</span>
+<span id="lst-m4-c05-c01-21"><a href="#lst-m4-c05-c01-21" aria-hidden="true" tabindex="-1"></a>    record_shapes<span class="op">=</span><span class="va">True</span>,</span>
+<span id="lst-m4-c05-c01-22"><a href="#lst-m4-c05-c01-22" aria-hidden="true" tabindex="-1"></a>    profile_memory<span class="op">=</span><span class="va">True</span>,</span>
+<span id="lst-m4-c05-c01-23"><a href="#lst-m4-c05-c01-23" aria-hidden="true" tabindex="-1"></a>) <span class="im">as</span> prof:</span>
+<span id="lst-m4-c05-c01-24"><a href="#lst-m4-c05-c01-24" aria-hidden="true" tabindex="-1"></a>    fn(<span class="op">*</span>args)</span>
+<span id="lst-m4-c05-c01-25"><a href="#lst-m4-c05-c01-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c01-26"><a href="#lst-m4-c05-c01-26" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(prof.key_averages().table(sort_by<span class="op">=</span><span class="st">"cuda_time_total"</span>, row_limit<span class="op">=</span><span class="dv">20</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>This template runs several warmup iterations to initialize the PyTorch CUDA allocator and warm up the kernels before capturing execution. In the profile block, PyTorch logs operations, tensor shapes, and memory changes. The resulting printout sorts operations by CUDA execution time. Inspecting this table helps identify whether execution is dominated by slow GPU kernels, CPU-to-GPU memory copies, or allocator overhead.</p>
 <section id="sec-m4-c05-s07" class="level3" data-number="5.4.1">
 <h3 data-number="5.4.1" class="anchored" data-anchor-id="sec-m4-c05-s07"><span class="header-section-number">5.4.1</span> Profiler selection</h3>
 <p>Different profilers answer different questions. Start with the cheapest tool that can disprove the current guess, then move to lower-level tools only when more detail is needed.</p>
@@ -732,7 +745,7 @@ Table&nbsp;5.3: Kernel-level metric families. Exact counter names vary with GPU 
 <p><strong>Input and state:</strong> Tokenization produces the fixed prompt IDs. Prefill builds the initial KV cache; decode then appends one token per active request and reads the existing cache.</p>
 <p><strong>Evidence:</strong> A PyTorch timeline shows many short decode kernels separated by CPU gaps, while Nsight Compute shows the isolated kernels are not close to the memory or compute ceiling.</p>
 <p><strong>Intervention:</strong> Warm up the shape family, capture the stable decode region with CUDA Graphs, and keep request admission and variable-length control outside the captured region.</p>
-<p><strong>Measurement:</strong> Repeat the same workload without profiler instrumentation. Compare TPOT, 95th-percentile (p95) request latency, GPU idle time, and output correctness. TPOT shows whether repeated decode became faster; p95 shows whether the change also improved slow requests rather than only the average run. Report compile and capture time separately from steady-state decode.</p>
+<p><strong>Measurement:</strong> Repeat the same workload without profiler instrumentation. Compare TPOT, p95 latency, GPU idle time, and output correctness; report compile and capture time separately from steady-state decode.</p>
 <p><strong>Conclusion:</strong> The improvement belongs to launch/control overhead, not to the arithmetic kernel. If the gap remains, inspect CPU scheduling, batching, or cache-management work next.</p>
 </div>
 </section>
@@ -740,80 +753,104 @@ Table&nbsp;5.3: Kernel-level metric families. Exact counter names vary with GPU 
 <section id="sec-m4-c05-s11" class="level2" data-number="5.5">
 <h2 data-number="5.5" class="anchored" data-anchor-id="sec-m4-c05-s11"><span class="header-section-number">5.5</span> Runtime API probes</h2>
 <p>A runtime API probe is a small code fragment that asks one narrow question about the execution layer. The notebooks use probes like these to check device capability, dtype footprint, GPU timing, trace export, and compiler graph breaks before applying larger optimizations.</p>
-<p>Choose the probe that answers the current question. Check device capability and dtype before using hardware ceilings or byte counts; use CUDA events for kernel timing; export a profiler trace for operation ordering and gaps; use TorchDynamo diagnostics when compilation splits the function. Combine probes only when the first result leaves the cause unclear.</p>
-<p><strong>Example: Device capability and dtype footprint.</strong> This probe shows that <code>torch.cuda</code> owns device visibility and basic CUDA runtime facts, while a tensor’s dtype determines its byte footprint. <code>get_device_capability</code> is a hardware probe, not a guarantee that every desired kernel path is enabled. <code>element_size</code> connects dtype to memory traffic: one million BF16 values occupy about two megabytes before allocator overhead.</p>
+<p>Read the probes as a dependency chain: first confirm the device and dtype facts, then time the GPU work correctly, then collect a trace, and only then diagnose compiler graph breaks. Skipping that order often leads to fixing code before proving which layer is actually limiting the workload.</p>
+<p><strong>Example: Device capability and dtype footprint.</strong> This probe shows that <code>torch.cuda</code> owns device visibility and basic CUDA runtime facts, while a tensor’s dtype determines its byte footprint. It is useful before interpreting roofline numbers or deciding whether a precision format is realistic on the current GPU.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Device capability and dtype footprint</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c05-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c05-c02-1"><a href="#lst-m4-c05-c02-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c05-c02-2"><a href="#lst-m4-c05-c02-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c02-3"><a href="#lst-m4-c05-c02-3" aria-hidden="true" tabindex="-1"></a>device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, <span class="dv">0</span>)</span>
-<span id="lst-m4-c05-c02-4"><a href="#lst-m4-c05-c02-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c02-5"><a href="#lst-m4-c05-c02-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(torch.cuda.get_device_name(device))</span>
-<span id="lst-m4-c05-c02-6"><a href="#lst-m4-c05-c02-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(torch.cuda.get_device_capability(device))</span>
-<span id="lst-m4-c05-c02-7"><a href="#lst-m4-c05-c02-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c02-8"><a href="#lst-m4-c05-c02-8" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> torch.empty(<span class="dv">1_000_000</span>, dtype<span class="op">=</span>torch.bfloat16, device<span class="op">=</span>device)</span>
-<span id="lst-m4-c05-c02-9"><a href="#lst-m4-c05-c02-9" aria-hidden="true" tabindex="-1"></a>bytes_per_element <span class="op">=</span> x.element_size()</span>
-<span id="lst-m4-c05-c02-10"><a href="#lst-m4-c05-c02-10" aria-hidden="true" tabindex="-1"></a>footprint_bytes <span class="op">=</span> x.numel() <span class="op">*</span> bytes_per_element</span>
-<span id="lst-m4-c05-c02-11"><a href="#lst-m4-c05-c02-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c02-12"><a href="#lst-m4-c05-c02-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bytes_per_element, <span class="st">"bytes per element"</span>)</span>
-<span id="lst-m4-c05-c02-13"><a href="#lst-m4-c05-c02-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(footprint_bytes, <span class="st">"total bytes"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p><strong>Example: CUDA event timing.</strong> This probe measures elapsed time on the CUDA stream rather than trusting an unsynchronized CPU timer. It places allocation and warmup outside the measured region so the timing better reflects steady GPU work. CUDA launches are asynchronous from the CPU side, so CPU wall-clock timing can accidentally measure queueing rather than device execution. Events measure work between markers on a stream; they still need synchronization before reading elapsed time.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c05-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c05-c02-1"><a href="#lst-m4-c05-c02-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c05-c02-2"><a href="#lst-m4-c05-c02-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - get_device_capability is a hardware probe, not a guarantee that every desired kernel path is</span></span>
+<span id="lst-m4-c05-c02-3"><a href="#lst-m4-c05-c02-3" aria-hidden="true" tabindex="-1"></a><span class="co">#   enabled.</span></span>
+<span id="lst-m4-c05-c02-4"><a href="#lst-m4-c05-c02-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - element_size connects dtype to memory traffic: one million BF16 values occupy about two</span></span>
+<span id="lst-m4-c05-c02-5"><a href="#lst-m4-c05-c02-5" aria-hidden="true" tabindex="-1"></a><span class="co">#   megabytes before allocator overhead.</span></span>
+<span id="lst-m4-c05-c02-6"><a href="#lst-m4-c05-c02-6" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c05-c02-7"><a href="#lst-m4-c05-c02-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c05-c02-8"><a href="#lst-m4-c05-c02-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c02-9"><a href="#lst-m4-c05-c02-9" aria-hidden="true" tabindex="-1"></a>device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, <span class="dv">0</span>)</span>
+<span id="lst-m4-c05-c02-10"><a href="#lst-m4-c05-c02-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c02-11"><a href="#lst-m4-c05-c02-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(torch.cuda.get_device_name(device))</span>
+<span id="lst-m4-c05-c02-12"><a href="#lst-m4-c05-c02-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(torch.cuda.get_device_capability(device))</span>
+<span id="lst-m4-c05-c02-13"><a href="#lst-m4-c05-c02-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c02-14"><a href="#lst-m4-c05-c02-14" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> torch.empty(<span class="dv">1_000_000</span>, dtype<span class="op">=</span>torch.bfloat16, device<span class="op">=</span>device)</span>
+<span id="lst-m4-c05-c02-15"><a href="#lst-m4-c05-c02-15" aria-hidden="true" tabindex="-1"></a>bytes_per_element <span class="op">=</span> x.element_size()</span>
+<span id="lst-m4-c05-c02-16"><a href="#lst-m4-c05-c02-16" aria-hidden="true" tabindex="-1"></a>footprint_bytes <span class="op">=</span> x.numel() <span class="op">*</span> bytes_per_element</span>
+<span id="lst-m4-c05-c02-17"><a href="#lst-m4-c05-c02-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c02-18"><a href="#lst-m4-c05-c02-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bytes_per_element, <span class="st">"bytes per element"</span>)</span>
+<span id="lst-m4-c05-c02-19"><a href="#lst-m4-c05-c02-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(footprint_bytes, <span class="st">"total bytes"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Example: CUDA event timing.</strong> This probe measures elapsed time on the CUDA stream rather than trusting an unsynchronized CPU timer. It places allocation and warmup outside the measured region so the timing better reflects steady GPU work.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> CUDA event timing</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c05-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c05-c03-1"><a href="#lst-m4-c05-c03-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c05-c03-2"><a href="#lst-m4-c05-c03-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c03-3"><a href="#lst-m4-c05-c03-3" aria-hidden="true" tabindex="-1"></a>device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, <span class="dv">0</span>)</span>
-<span id="lst-m4-c05-c03-4"><a href="#lst-m4-c05-c03-4" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> torch.randn(<span class="dv">4096</span>, <span class="dv">4096</span>, device<span class="op">=</span>device, dtype<span class="op">=</span>torch.float16)</span>
-<span id="lst-m4-c05-c03-5"><a href="#lst-m4-c05-c03-5" aria-hidden="true" tabindex="-1"></a>w <span class="op">=</span> torch.randn(<span class="dv">4096</span>, <span class="dv">4096</span>, device<span class="op">=</span>device, dtype<span class="op">=</span>torch.float16)</span>
-<span id="lst-m4-c05-c03-6"><a href="#lst-m4-c05-c03-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c03-7"><a href="#lst-m4-c05-c03-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>):</span>
-<span id="lst-m4-c05-c03-8"><a href="#lst-m4-c05-c03-8" aria-hidden="true" tabindex="-1"></a>    _ <span class="op">=</span> x <span class="op">@</span> w</span>
-<span id="lst-m4-c05-c03-9"><a href="#lst-m4-c05-c03-9" aria-hidden="true" tabindex="-1"></a>torch.cuda.synchronize()</span>
-<span id="lst-m4-c05-c03-10"><a href="#lst-m4-c05-c03-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c03-11"><a href="#lst-m4-c05-c03-11" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c05-c03-12"><a href="#lst-m4-c05-c03-12" aria-hidden="true" tabindex="-1"></a>end <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c05-c03-13"><a href="#lst-m4-c05-c03-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c03-14"><a href="#lst-m4-c05-c03-14" aria-hidden="true" tabindex="-1"></a>start.record()</span>
-<span id="lst-m4-c05-c03-15"><a href="#lst-m4-c05-c03-15" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> x <span class="op">@</span> w</span>
-<span id="lst-m4-c05-c03-16"><a href="#lst-m4-c05-c03-16" aria-hidden="true" tabindex="-1"></a>end.record()</span>
-<span id="lst-m4-c05-c03-17"><a href="#lst-m4-c05-c03-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c03-18"><a href="#lst-m4-c05-c03-18" aria-hidden="true" tabindex="-1"></a>torch.cuda.synchronize()</span>
-<span id="lst-m4-c05-c03-19"><a href="#lst-m4-c05-c03-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(start.elapsed_time(end), <span class="st">"ms"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p><strong>Example: Profiler trace export.</strong> This probe connects PyTorch-level operations to CPU time, CUDA time, tensor shapes, and a timeline trace. The table answers which PyTorch operations dominate; the exported trace helps inspect gaps, copies, launch bursts, and repeated decode-step structure. Profiler output identifies the next question; end-to-end latency or throughput determines whether the workload improved.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c05-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c05-c03-1"><a href="#lst-m4-c05-c03-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c05-c03-2"><a href="#lst-m4-c05-c03-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - CUDA launches are asynchronous from the CPU side, so CPU wall-clock timing can accidentally</span></span>
+<span id="lst-m4-c05-c03-3"><a href="#lst-m4-c05-c03-3" aria-hidden="true" tabindex="-1"></a><span class="co">#   measure queueing rather than device execution.</span></span>
+<span id="lst-m4-c05-c03-4"><a href="#lst-m4-c05-c03-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - Events measure work between markers on a stream; they still need synchronization before</span></span>
+<span id="lst-m4-c05-c03-5"><a href="#lst-m4-c05-c03-5" aria-hidden="true" tabindex="-1"></a><span class="co">#   reading elapsed time.</span></span>
+<span id="lst-m4-c05-c03-6"><a href="#lst-m4-c05-c03-6" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c05-c03-7"><a href="#lst-m4-c05-c03-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c05-c03-8"><a href="#lst-m4-c05-c03-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c03-9"><a href="#lst-m4-c05-c03-9" aria-hidden="true" tabindex="-1"></a>device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, <span class="dv">0</span>)</span>
+<span id="lst-m4-c05-c03-10"><a href="#lst-m4-c05-c03-10" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> torch.randn(<span class="dv">4096</span>, <span class="dv">4096</span>, device<span class="op">=</span>device, dtype<span class="op">=</span>torch.float16)</span>
+<span id="lst-m4-c05-c03-11"><a href="#lst-m4-c05-c03-11" aria-hidden="true" tabindex="-1"></a>w <span class="op">=</span> torch.randn(<span class="dv">4096</span>, <span class="dv">4096</span>, device<span class="op">=</span>device, dtype<span class="op">=</span>torch.float16)</span>
+<span id="lst-m4-c05-c03-12"><a href="#lst-m4-c05-c03-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c03-13"><a href="#lst-m4-c05-c03-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>):</span>
+<span id="lst-m4-c05-c03-14"><a href="#lst-m4-c05-c03-14" aria-hidden="true" tabindex="-1"></a>    _ <span class="op">=</span> x <span class="op">@</span> w</span>
+<span id="lst-m4-c05-c03-15"><a href="#lst-m4-c05-c03-15" aria-hidden="true" tabindex="-1"></a>torch.cuda.synchronize()</span>
+<span id="lst-m4-c05-c03-16"><a href="#lst-m4-c05-c03-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c03-17"><a href="#lst-m4-c05-c03-17" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c05-c03-18"><a href="#lst-m4-c05-c03-18" aria-hidden="true" tabindex="-1"></a>end <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c05-c03-19"><a href="#lst-m4-c05-c03-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c03-20"><a href="#lst-m4-c05-c03-20" aria-hidden="true" tabindex="-1"></a>start.record()</span>
+<span id="lst-m4-c05-c03-21"><a href="#lst-m4-c05-c03-21" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> x <span class="op">@</span> w</span>
+<span id="lst-m4-c05-c03-22"><a href="#lst-m4-c05-c03-22" aria-hidden="true" tabindex="-1"></a>end.record()</span>
+<span id="lst-m4-c05-c03-23"><a href="#lst-m4-c05-c03-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c03-24"><a href="#lst-m4-c05-c03-24" aria-hidden="true" tabindex="-1"></a>torch.cuda.synchronize()</span>
+<span id="lst-m4-c05-c03-25"><a href="#lst-m4-c05-c03-25" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(start.elapsed_time(end), <span class="st">"ms"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Example: Profiler trace export.</strong> This probe connects PyTorch-level operations to CPU time, CUDA time, tensor shapes, and a timeline trace. The model and input IDs come from the decode experiment; the important point is that <code>torch.profiler</code> produces both an operator summary and a browser-inspectable trace.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Profiler trace export</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c05-c04"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c05-c04-1"><a href="#lst-m4-c05-c04-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c05-c04-2"><a href="#lst-m4-c05-c04-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.profiler <span class="im">import</span> profile, ProfilerActivity</span>
-<span id="lst-m4-c05-c04-3"><a href="#lst-m4-c05-c04-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c04-4"><a href="#lst-m4-c05-c04-4" aria-hidden="true" tabindex="-1"></a>model.<span class="bu">eval</span>()</span>
-<span id="lst-m4-c05-c04-5"><a href="#lst-m4-c05-c04-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c04-6"><a href="#lst-m4-c05-c04-6" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.inference_mode():</span>
-<span id="lst-m4-c05-c04-7"><a href="#lst-m4-c05-c04-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> profile(</span>
-<span id="lst-m4-c05-c04-8"><a href="#lst-m4-c05-c04-8" aria-hidden="true" tabindex="-1"></a>        activities<span class="op">=</span>[ProfilerActivity.CPU, ProfilerActivity.CUDA],</span>
-<span id="lst-m4-c05-c04-9"><a href="#lst-m4-c05-c04-9" aria-hidden="true" tabindex="-1"></a>        record_shapes<span class="op">=</span><span class="va">True</span>,</span>
-<span id="lst-m4-c05-c04-10"><a href="#lst-m4-c05-c04-10" aria-hidden="true" tabindex="-1"></a>        profile_memory<span class="op">=</span><span class="va">True</span>,</span>
-<span id="lst-m4-c05-c04-11"><a href="#lst-m4-c05-c04-11" aria-hidden="true" tabindex="-1"></a>    ) <span class="im">as</span> prof:</span>
-<span id="lst-m4-c05-c04-12"><a href="#lst-m4-c05-c04-12" aria-hidden="true" tabindex="-1"></a>        _ <span class="op">=</span> model(input_ids<span class="op">=</span>input_ids, use_cache<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c05-c04-13"><a href="#lst-m4-c05-c04-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c04-14"><a href="#lst-m4-c05-c04-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(prof.key_averages().table(sort_by<span class="op">=</span><span class="st">"cuda_time_total"</span>, row_limit<span class="op">=</span><span class="dv">20</span>))</span>
-<span id="lst-m4-c05-c04-15"><a href="#lst-m4-c05-c04-15" aria-hidden="true" tabindex="-1"></a>prof.export_chrome_trace(<span class="st">"decode_trace.json"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p><strong>Example: Graph-break diagnosis.</strong> This probe uses TorchDynamo diagnostics to show why a Python function cannot remain one compiled graph. The scalar <code>.item()</code> forces a host-side value and creates data-dependent Python control flow, so the compiler must break the graph. This tool diagnoses compiler behavior; confirm any resulting change with steady-state workload measurements. The usual fix is to express the branch with tensor operations or keep the compiled region away from scalar Python decisions.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c05-c04"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c05-c04-1"><a href="#lst-m4-c05-c04-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c05-c04-2"><a href="#lst-m4-c05-c04-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - The table answers which PyTorch operations dominate; the exported trace helps inspect gaps,</span></span>
+<span id="lst-m4-c05-c04-3"><a href="#lst-m4-c05-c04-3" aria-hidden="true" tabindex="-1"></a><span class="co">#   copies, launch bursts, and repeated decode-step structure.</span></span>
+<span id="lst-m4-c05-c04-4"><a href="#lst-m4-c05-c04-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - Profiler output identifies the next question; end-to-end latency or throughput determines</span></span>
+<span id="lst-m4-c05-c04-5"><a href="#lst-m4-c05-c04-5" aria-hidden="true" tabindex="-1"></a><span class="co">#   whether the workload improved.</span></span>
+<span id="lst-m4-c05-c04-6"><a href="#lst-m4-c05-c04-6" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c05-c04-7"><a href="#lst-m4-c05-c04-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c05-c04-8"><a href="#lst-m4-c05-c04-8" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch.profiler <span class="im">import</span> profile, ProfilerActivity</span>
+<span id="lst-m4-c05-c04-9"><a href="#lst-m4-c05-c04-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c04-10"><a href="#lst-m4-c05-c04-10" aria-hidden="true" tabindex="-1"></a>model.<span class="bu">eval</span>()</span>
+<span id="lst-m4-c05-c04-11"><a href="#lst-m4-c05-c04-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c04-12"><a href="#lst-m4-c05-c04-12" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.inference_mode():</span>
+<span id="lst-m4-c05-c04-13"><a href="#lst-m4-c05-c04-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> profile(</span>
+<span id="lst-m4-c05-c04-14"><a href="#lst-m4-c05-c04-14" aria-hidden="true" tabindex="-1"></a>        activities<span class="op">=</span>[ProfilerActivity.CPU, ProfilerActivity.CUDA],</span>
+<span id="lst-m4-c05-c04-15"><a href="#lst-m4-c05-c04-15" aria-hidden="true" tabindex="-1"></a>        record_shapes<span class="op">=</span><span class="va">True</span>,</span>
+<span id="lst-m4-c05-c04-16"><a href="#lst-m4-c05-c04-16" aria-hidden="true" tabindex="-1"></a>        profile_memory<span class="op">=</span><span class="va">True</span>,</span>
+<span id="lst-m4-c05-c04-17"><a href="#lst-m4-c05-c04-17" aria-hidden="true" tabindex="-1"></a>    ) <span class="im">as</span> prof:</span>
+<span id="lst-m4-c05-c04-18"><a href="#lst-m4-c05-c04-18" aria-hidden="true" tabindex="-1"></a>        _ <span class="op">=</span> model(input_ids<span class="op">=</span>input_ids, use_cache<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c05-c04-19"><a href="#lst-m4-c05-c04-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c04-20"><a href="#lst-m4-c05-c04-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(prof.key_averages().table(sort_by<span class="op">=</span><span class="st">"cuda_time_total"</span>, row_limit<span class="op">=</span><span class="dv">20</span>))</span>
+<span id="lst-m4-c05-c04-21"><a href="#lst-m4-c05-c04-21" aria-hidden="true" tabindex="-1"></a>prof.export_chrome_trace(<span class="st">"decode_trace.json"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Example: Graph-break diagnosis.</strong> This probe uses TorchDynamo diagnostics to show why a Python function cannot remain one compiled graph. The scalar <code>.item()</code> forces a host-side value and creates data-dependent Python control flow, so the compiler must break the graph.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Graph-break diagnosis</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c05-c05"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c05-c05-1"><a href="#lst-m4-c05-c05-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c05-c05-2"><a href="#lst-m4-c05-c05-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch <span class="im">import</span> _dynamo <span class="im">as</span> dynamo</span>
-<span id="lst-m4-c05-c05-3"><a href="#lst-m4-c05-c05-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c05-4"><a href="#lst-m4-c05-c05-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> bad_step(x):</span>
-<span id="lst-m4-c05-c05-5"><a href="#lst-m4-c05-c05-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> x.<span class="bu">sum</span>().item() <span class="op">&gt;</span> <span class="dv">0</span>:</span>
-<span id="lst-m4-c05-c05-6"><a href="#lst-m4-c05-c05-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> x <span class="op">*</span> <span class="dv">2</span></span>
-<span id="lst-m4-c05-c05-7"><a href="#lst-m4-c05-c05-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x <span class="op">-</span> <span class="dv">2</span></span>
-<span id="lst-m4-c05-c05-8"><a href="#lst-m4-c05-c05-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c05-c05-9"><a href="#lst-m4-c05-c05-9" aria-hidden="true" tabindex="-1"></a>report <span class="op">=</span> dynamo.explain(bad_step)(torch.ones(<span class="dv">8</span>, device<span class="op">=</span><span class="st">"cuda"</span>))</span>
-<span id="lst-m4-c05-c05-10"><a href="#lst-m4-c05-c05-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(report)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c05-c05"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c05-c05-1"><a href="#lst-m4-c05-c05-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c05-c05-2"><a href="#lst-m4-c05-c05-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - This tool diagnoses compiler behavior. Confirm any resulting change with steady-state workload</span></span>
+<span id="lst-m4-c05-c05-3"><a href="#lst-m4-c05-c05-3" aria-hidden="true" tabindex="-1"></a><span class="co">#   measurements.</span></span>
+<span id="lst-m4-c05-c05-4"><a href="#lst-m4-c05-c05-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - The usual fix is to express the branch with tensor operations or keep the compiled region away</span></span>
+<span id="lst-m4-c05-c05-5"><a href="#lst-m4-c05-c05-5" aria-hidden="true" tabindex="-1"></a><span class="co">#   from scalar Python decisions.</span></span>
+<span id="lst-m4-c05-c05-6"><a href="#lst-m4-c05-c05-6" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c05-c05-7"><a href="#lst-m4-c05-c05-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c05-c05-8"><a href="#lst-m4-c05-c05-8" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> torch <span class="im">import</span> _dynamo <span class="im">as</span> dynamo</span>
+<span id="lst-m4-c05-c05-9"><a href="#lst-m4-c05-c05-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c05-10"><a href="#lst-m4-c05-c05-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> bad_step(x):</span>
+<span id="lst-m4-c05-c05-11"><a href="#lst-m4-c05-c05-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> x.<span class="bu">sum</span>().item() <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="lst-m4-c05-c05-12"><a href="#lst-m4-c05-c05-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> x <span class="op">*</span> <span class="dv">2</span></span>
+<span id="lst-m4-c05-c05-13"><a href="#lst-m4-c05-c05-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x <span class="op">-</span> <span class="dv">2</span></span>
+<span id="lst-m4-c05-c05-14"><a href="#lst-m4-c05-c05-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c05-c05-15"><a href="#lst-m4-c05-c05-15" aria-hidden="true" tabindex="-1"></a>report <span class="op">=</span> dynamo.explain(bad_step)(torch.ones(<span class="dv">8</span>, device<span class="op">=</span><span class="st">"cuda"</span>))</span>
+<span id="lst-m4-c05-c05-16"><a href="#lst-m4-c05-c05-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(report)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>These probes deliberately stay small. A probe should answer one layer question, then the engineer can decide whether the next step belongs to CUDA timing, graph capture, profiler inspection, serving-engine metrics, or distributed communication.</p>
 <p>The profiler now separates kernel limits from host-side launch gaps and repeated framework work. Chapter 6 uses that evidence to decide when graph compilation, generated kernels, CUDA Graph replay, or ordinary eager execution is the appropriate local runtime path.</p>
 

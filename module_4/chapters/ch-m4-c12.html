@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -452,7 +452,7 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 </div>
 </figure>
 </div>
-<p>Message size suggests whether startup delay or sustained transfer is the first limit. The route then sets the latency and bandwidth available to that payload, including the device, switch, and node boundaries where links become shared.</p>
+<p>Message size determines whether startup delay, rank skew, or sustained bandwidth is the first likely limit, but the effective rate still depends on the route between participants. The next question is how many device, switch, and node boundaries the payload crosses and where that path becomes shared.</p>
 </section>
 <section id="sec-m4-c12-s02" class="level2" data-number="12.2">
 <h2 data-number="12.2" class="anchored" data-anchor-id="sec-m4-c12-s02"><span class="header-section-number">12.2</span> Topology and communication distance</h2>
@@ -467,9 +467,15 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 </section>
 <section id="sec-m4-c12-s03" class="level2" data-number="12.3">
 <h2 data-number="12.3" class="anchored" data-anchor-id="sec-m4-c12-s03"><span class="header-section-number">12.3</span> Communication cost model</h2>
-<p>Diagnose communication with four linked questions: how much startup delay each operation pays, what byte rate the selected path sustains, which topology the payload crosses, and how long ranks wait for one another. These effects interact: a longer path changes latency and bandwidth, and rank skew can expose otherwise fast transfers on the critical path.</p>
+<p>Communication performance has four independent ingredients. A trace that says ‘all-reduce is slow’ is incomplete until it identifies which ingredient is limiting the operation.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Latency:</strong></span> Startup and coordination time before the payload is effectively transferred. It dominates frequent small messages and token-path synchronization.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Bandwidth:</strong></span> Sustained byte rate for large transfers. It dominates large gradients, parameter shards, activation transfers, and KV-cache movement.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Topology:</strong></span> The physical and logical path between devices. GPU pairs connected through NVLink or NVSwitch do not behave like pairs crossing PCIe, NICs, or spine switches.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Synchronization:</strong></span> The waiting behavior introduced when ranks must enter collective operations in a compatible order. Rank skew can make the collective look slow even when the network is healthy.</li>
+</ul>
 <p>Optimizations target different ingredients. Larger buckets can improve bandwidth efficiency but may reduce overlap. Topology-aware rank placement can keep frequent collectives on fast links. Reducing message count can help latency-bound paths. Removing rank imbalance can shorten apparent collective time without changing the network.</p>
-<p>Once the trace separates startup, transfer, and rank waiting, map the slow interval to the actual GPU-to-GPU or GPU-to-NIC path. The fabric and device placement determine which changes can improve it.</p>
+<p>Communication tuning must target the measured term: message count for latency, payload handling for bandwidth, placement for topology, or readiness skew for synchronization. The next question is which physical fabric and device-to-network path actually carries the bytes.</p>
 </section>
 <section id="sec-m4-c12-s04" class="level2" data-number="12.4">
 <h2 data-number="12.4" class="anchored" data-anchor-id="sec-m4-c12-s04"><span class="header-section-number">12.4</span> Physical communication paths</h2>
@@ -579,7 +585,8 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Serving limits:</strong></span> Decode has a short per-token critical path, so communication in tensor-parallel serving can be visible even when training overlap looks good.</li>
 </ul>
 <p>Overlap works only when there is independent computation available while communication runs. If the next layer or token needs the communicated result immediately, the communication remains exposed.</p>
-<p>Adjacent compute and collective blocks do not prove overlap. Align the compute and communication lanes, then inspect the end-to-end critical path: if a shorter collective would shorten the step, its remaining tail is exposed; otherwise independent computation has hidden it.</p>
+<p>The common mistake is assuming overlap has hidden communication because kernels and collectives appear adjacent in a trace. The test is critical path time: if shortening the collective would still shorten the step, communication is not fully hidden.</p>
+<p>Overlap is established by aligned compute and communication lanes plus a shorter critical path, not by adjacent colored blocks. If removing or shortening the communication would still shorten the step, an exposed communication tail remains.</p>
 </section>
 <section id="sec-m4-c12-s10" class="level2" data-number="12.10">
 <h2 data-number="12.10" class="anchored" data-anchor-id="sec-m4-c12-s10"><span class="header-section-number">12.10</span> Profiling communication</h2>
@@ -589,43 +596,59 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> NCCL collective timing probe</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c12-c01"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="lst-m4-c12-c01-1"><a href="#lst-m4-c12-c01-1" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> os</span>
-<span id="lst-m4-c12-c01-2"><a href="#lst-m4-c12-c01-2" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> torch</span>
-<span id="lst-m4-c12-c01-3"><a href="#lst-m4-c12-c01-3" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> torch.distributed as dist</span>
-<span id="lst-m4-c12-c01-4"><a href="#lst-m4-c12-c01-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c12-c01-5"><a href="#lst-m4-c12-c01-5" aria-hidden="true" tabindex="-1"></a><span class="ex">dist.init_process_group</span><span class="er">(</span><span class="st">"nccl"</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-6"><a href="#lst-m4-c12-c01-6" aria-hidden="true" tabindex="-1"></a><span class="ex">try:</span></span>
-<span id="lst-m4-c12-c01-7"><a href="#lst-m4-c12-c01-7" aria-hidden="true" tabindex="-1"></a>    <span class="ex">local_rank</span> = int<span class="er">(</span><span class="ex">os.environ[</span><span class="st">"LOCAL_RANK"</span><span class="ex">]</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-8"><a href="#lst-m4-c12-c01-8" aria-hidden="true" tabindex="-1"></a>    <span class="ex">torch.cuda.set_device</span><span class="er">(</span><span class="ex">local_rank</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-9"><a href="#lst-m4-c12-c01-9" aria-hidden="true" tabindex="-1"></a>    <span class="ex">device</span> = torch.device<span class="er">(</span><span class="st">"cuda"</span><span class="ex">,</span> local_rank<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-10"><a href="#lst-m4-c12-c01-10" aria-hidden="true" tabindex="-1"></a>    <span class="ex">payload</span> = torch.zeros<span class="er">(</span><span class="ex">256</span> <span class="pp">*</span> 1024 <span class="pp">*</span> 1024, device=device, dtype=torch.float16<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-11"><a href="#lst-m4-c12-c01-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c12-c01-12"><a href="#lst-m4-c12-c01-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> range<span class="er">(</span><span class="ex">5</span><span class="kw">)</span><span class="bu">:</span></span>
-<span id="lst-m4-c12-c01-13"><a href="#lst-m4-c12-c01-13" aria-hidden="true" tabindex="-1"></a>        <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">payload,</span> op=dist.ReduceOp.SUM<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-14"><a href="#lst-m4-c12-c01-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">torch.cuda.synchronize()</span></span>
-<span id="lst-m4-c12-c01-15"><a href="#lst-m4-c12-c01-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dist.barrier()</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c12-c01"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="lst-m4-c12-c01-1"><a href="#lst-m4-c12-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c12-c01-2"><a href="#lst-m4-c12-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - dist.init_process_group('nccl') creates the communication group.</span></span>
+<span id="lst-m4-c12-c01-3"><a href="#lst-m4-c12-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - payload supplies a CUDA device pointer to NCCL. Logs and traces must still confirm whether the</span></span>
+<span id="lst-m4-c12-c01-4"><a href="#lst-m4-c12-c01-4" aria-hidden="true" tabindex="-1"></a><span class="co">#   physical path uses peer access, GPUDirect RDMA, shared memory, sockets, or a staged fallback.</span></span>
+<span id="lst-m4-c12-c01-5"><a href="#lst-m4-c12-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - Warmup keeps initialization outside the measured samples; the barrier aligns ranks before the</span></span>
+<span id="lst-m4-c12-c01-6"><a href="#lst-m4-c12-c01-6" aria-hidden="true" tabindex="-1"></a><span class="co">#   measurement window.</span></span>
+<span id="lst-m4-c12-c01-7"><a href="#lst-m4-c12-c01-7" aria-hidden="true" tabindex="-1"></a><span class="co"># - Reducing the per-rank means with MAX reports the slowest participant, which is the relevant</span></span>
+<span id="lst-m4-c12-c01-8"><a href="#lst-m4-c12-c01-8" aria-hidden="true" tabindex="-1"></a><span class="co">#   collective completion time.</span></span>
+<span id="lst-m4-c12-c01-9"><a href="#lst-m4-c12-c01-9" aria-hidden="true" tabindex="-1"></a><span class="co"># - The reported GB/s uses the ring traffic approximation and is not raw physical-link bandwidth.</span></span>
+<span id="lst-m4-c12-c01-10"><a href="#lst-m4-c12-c01-10" aria-hidden="true" tabindex="-1"></a><span class="co"># - NCCL_DEBUG=INFO can reveal selected transport and topology decisions.</span></span>
+<span id="lst-m4-c12-c01-11"><a href="#lst-m4-c12-c01-11" aria-hidden="true" tabindex="-1"></a><span class="co"># - Compare this elapsed time with Nsight Systems traces before concluding that communication is</span></span>
+<span id="lst-m4-c12-c01-12"><a href="#lst-m4-c12-c01-12" aria-hidden="true" tabindex="-1"></a><span class="co">#   fully exposed.</span></span>
+<span id="lst-m4-c12-c01-13"><a href="#lst-m4-c12-c01-13" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c12-c01-14"><a href="#lst-m4-c12-c01-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Launch example:</span></span>
+<span id="lst-m4-c12-c01-15"><a href="#lst-m4-c12-c01-15" aria-hidden="true" tabindex="-1"></a><span class="co"># NCCL_DEBUG=INFO torchrun --nproc_per_node=4 nccl_probe.py</span></span>
 <span id="lst-m4-c12-c01-16"><a href="#lst-m4-c12-c01-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c12-c01-17"><a href="#lst-m4-c12-c01-17" aria-hidden="true" tabindex="-1"></a>    <span class="ex">samples_ms</span> = []</span>
-<span id="lst-m4-c12-c01-18"><a href="#lst-m4-c12-c01-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> range<span class="er">(</span><span class="ex">20</span><span class="kw">)</span><span class="bu">:</span></span>
-<span id="lst-m4-c12-c01-19"><a href="#lst-m4-c12-c01-19" aria-hidden="true" tabindex="-1"></a>        <span class="ex">start</span> = torch.cuda.Event<span class="er">(</span><span class="va">enable_timing</span><span class="op">=</span>True<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-20"><a href="#lst-m4-c12-c01-20" aria-hidden="true" tabindex="-1"></a>        <span class="ex">stop</span> = torch.cuda.Event<span class="er">(</span><span class="va">enable_timing</span><span class="op">=</span>True<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-21"><a href="#lst-m4-c12-c01-21" aria-hidden="true" tabindex="-1"></a>        <span class="fu">start.record()</span></span>
-<span id="lst-m4-c12-c01-22"><a href="#lst-m4-c12-c01-22" aria-hidden="true" tabindex="-1"></a>        <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">payload,</span> op=dist.ReduceOp.SUM<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-23"><a href="#lst-m4-c12-c01-23" aria-hidden="true" tabindex="-1"></a>        <span class="fu">stop.record()</span></span>
-<span id="lst-m4-c12-c01-24"><a href="#lst-m4-c12-c01-24" aria-hidden="true" tabindex="-1"></a>        <span class="fu">stop.synchronize()</span></span>
-<span id="lst-m4-c12-c01-25"><a href="#lst-m4-c12-c01-25" aria-hidden="true" tabindex="-1"></a>        <span class="ex">samples_ms.append</span><span class="er">(</span><span class="ex">start.elapsed_time</span><span class="er">(</span><span class="ex">stop</span><span class="kw">))</span></span>
-<span id="lst-m4-c12-c01-26"><a href="#lst-m4-c12-c01-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c12-c01-27"><a href="#lst-m4-c12-c01-27" aria-hidden="true" tabindex="-1"></a>    <span class="ex">mean_ms</span> = torch.tensor<span class="er">(</span><span class="fu">sum</span><span class="er">(</span><span class="ex">samples_ms</span><span class="kw">)</span> <span class="ex">/</span> len<span class="er">(</span><span class="ex">samples_ms</span><span class="kw">)</span><span class="ex">,</span> device=device<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-28"><a href="#lst-m4-c12-c01-28" aria-hidden="true" tabindex="-1"></a>    <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">mean_ms,</span> op=dist.ReduceOp.MAX<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-29"><a href="#lst-m4-c12-c01-29" aria-hidden="true" tabindex="-1"></a>    <span class="ex">world</span> = dist.get_world_size<span class="er">(</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-30"><a href="#lst-m4-c12-c01-30" aria-hidden="true" tabindex="-1"></a>    <span class="ex">ring_bytes</span> = 2 <span class="pp">*</span> <span class="er">(</span><span class="ex">world</span> <span class="at">-</span> 1<span class="kw">)</span> <span class="ex">/</span> world <span class="pp">*</span> payload.numel<span class="er">(</span><span class="kw">)</span> <span class="ex">*</span> payload.element_size<span class="er">(</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-31"><a href="#lst-m4-c12-c01-31" aria-hidden="true" tabindex="-1"></a>    <span class="ex">effective_gb_s</span> = ring_bytes / <span class="er">(</span><span class="fu">mean_ms.item()</span> <span class="ex">/</span> 1000<span class="kw">)</span> <span class="ex">/</span> 1e9</span>
+<span id="lst-m4-c12-c01-17"><a href="#lst-m4-c12-c01-17" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> os</span>
+<span id="lst-m4-c12-c01-18"><a href="#lst-m4-c12-c01-18" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> torch</span>
+<span id="lst-m4-c12-c01-19"><a href="#lst-m4-c12-c01-19" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> torch.distributed as dist</span>
+<span id="lst-m4-c12-c01-20"><a href="#lst-m4-c12-c01-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-21"><a href="#lst-m4-c12-c01-21" aria-hidden="true" tabindex="-1"></a><span class="ex">dist.init_process_group</span><span class="er">(</span><span class="st">"nccl"</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-22"><a href="#lst-m4-c12-c01-22" aria-hidden="true" tabindex="-1"></a><span class="ex">try:</span></span>
+<span id="lst-m4-c12-c01-23"><a href="#lst-m4-c12-c01-23" aria-hidden="true" tabindex="-1"></a>    <span class="ex">local_rank</span> = int<span class="er">(</span><span class="ex">os.environ[</span><span class="st">"LOCAL_RANK"</span><span class="ex">]</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-24"><a href="#lst-m4-c12-c01-24" aria-hidden="true" tabindex="-1"></a>    <span class="ex">torch.cuda.set_device</span><span class="er">(</span><span class="ex">local_rank</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-25"><a href="#lst-m4-c12-c01-25" aria-hidden="true" tabindex="-1"></a>    <span class="ex">device</span> = torch.device<span class="er">(</span><span class="st">"cuda"</span><span class="ex">,</span> local_rank<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-26"><a href="#lst-m4-c12-c01-26" aria-hidden="true" tabindex="-1"></a>    <span class="ex">payload</span> = torch.ones<span class="er">(</span><span class="ex">256</span> <span class="pp">*</span> 1024 <span class="pp">*</span> 1024, device=device, dtype=torch.float16<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-27"><a href="#lst-m4-c12-c01-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-28"><a href="#lst-m4-c12-c01-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> range<span class="er">(</span><span class="ex">5</span><span class="kw">)</span><span class="bu">:</span></span>
+<span id="lst-m4-c12-c01-29"><a href="#lst-m4-c12-c01-29" aria-hidden="true" tabindex="-1"></a>        <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">payload,</span> op=dist.ReduceOp.SUM<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-30"><a href="#lst-m4-c12-c01-30" aria-hidden="true" tabindex="-1"></a>    <span class="fu">torch.cuda.synchronize()</span></span>
+<span id="lst-m4-c12-c01-31"><a href="#lst-m4-c12-c01-31" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dist.barrier()</span></span>
 <span id="lst-m4-c12-c01-32"><a href="#lst-m4-c12-c01-32" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c12-c01-33"><a href="#lst-m4-c12-c01-33" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">dist.get_rank()</span> <span class="ex">==</span> 0:</span>
-<span id="lst-m4-c12-c01-34"><a href="#lst-m4-c12-c01-34" aria-hidden="true" tabindex="-1"></a>        <span class="ex">print</span><span class="er">(</span><span class="ex">f</span><span class="st">"slowest_rank_mean_ms={mean_ms.item():.3f}"</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-35"><a href="#lst-m4-c12-c01-35" aria-hidden="true" tabindex="-1"></a>        <span class="ex">print</span><span class="er">(</span><span class="ex">f</span><span class="st">"estimated_ring_payload_GBps={effective_gb_s:.1f}"</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-36"><a href="#lst-m4-c12-c01-36" aria-hidden="true" tabindex="-1"></a><span class="ex">finally:</span></span>
-<span id="lst-m4-c12-c01-37"><a href="#lst-m4-c12-c01-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dist.destroy_process_group()</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m4-c12-c01-33"><a href="#lst-m4-c12-c01-33" aria-hidden="true" tabindex="-1"></a>    <span class="ex">samples_ms</span> = []</span>
+<span id="lst-m4-c12-c01-34"><a href="#lst-m4-c12-c01-34" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> range<span class="er">(</span><span class="ex">20</span><span class="kw">)</span><span class="bu">:</span></span>
+<span id="lst-m4-c12-c01-35"><a href="#lst-m4-c12-c01-35" aria-hidden="true" tabindex="-1"></a>        <span class="ex">start</span> = torch.cuda.Event<span class="er">(</span><span class="va">enable_timing</span><span class="op">=</span>True<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-36"><a href="#lst-m4-c12-c01-36" aria-hidden="true" tabindex="-1"></a>        <span class="ex">stop</span> = torch.cuda.Event<span class="er">(</span><span class="va">enable_timing</span><span class="op">=</span>True<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-37"><a href="#lst-m4-c12-c01-37" aria-hidden="true" tabindex="-1"></a>        <span class="fu">start.record()</span></span>
+<span id="lst-m4-c12-c01-38"><a href="#lst-m4-c12-c01-38" aria-hidden="true" tabindex="-1"></a>        <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">payload,</span> op=dist.ReduceOp.SUM<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-39"><a href="#lst-m4-c12-c01-39" aria-hidden="true" tabindex="-1"></a>        <span class="fu">stop.record()</span></span>
+<span id="lst-m4-c12-c01-40"><a href="#lst-m4-c12-c01-40" aria-hidden="true" tabindex="-1"></a>        <span class="fu">stop.synchronize()</span></span>
+<span id="lst-m4-c12-c01-41"><a href="#lst-m4-c12-c01-41" aria-hidden="true" tabindex="-1"></a>        <span class="ex">samples_ms.append</span><span class="er">(</span><span class="ex">start.elapsed_time</span><span class="er">(</span><span class="ex">stop</span><span class="kw">))</span></span>
+<span id="lst-m4-c12-c01-42"><a href="#lst-m4-c12-c01-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-43"><a href="#lst-m4-c12-c01-43" aria-hidden="true" tabindex="-1"></a>    <span class="ex">mean_ms</span> = torch.tensor<span class="er">(</span><span class="fu">sum</span><span class="er">(</span><span class="ex">samples_ms</span><span class="kw">)</span> <span class="ex">/</span> len<span class="er">(</span><span class="ex">samples_ms</span><span class="kw">)</span><span class="ex">,</span> device=device<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-44"><a href="#lst-m4-c12-c01-44" aria-hidden="true" tabindex="-1"></a>    <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">mean_ms,</span> op=dist.ReduceOp.MAX<span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-45"><a href="#lst-m4-c12-c01-45" aria-hidden="true" tabindex="-1"></a>    <span class="ex">world</span> = dist.get_world_size<span class="er">(</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-46"><a href="#lst-m4-c12-c01-46" aria-hidden="true" tabindex="-1"></a>    <span class="ex">ring_bytes</span> = 2 <span class="pp">*</span> <span class="er">(</span><span class="ex">world</span> <span class="at">-</span> 1<span class="kw">)</span> <span class="ex">/</span> world <span class="pp">*</span> payload.numel<span class="er">(</span><span class="kw">)</span> <span class="ex">*</span> payload.element_size<span class="er">(</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-47"><a href="#lst-m4-c12-c01-47" aria-hidden="true" tabindex="-1"></a>    <span class="ex">effective_gb_s</span> = ring_bytes / <span class="er">(</span><span class="fu">mean_ms.item()</span> <span class="ex">/</span> 1000<span class="kw">)</span> <span class="ex">/</span> 1e9</span>
+<span id="lst-m4-c12-c01-48"><a href="#lst-m4-c12-c01-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-49"><a href="#lst-m4-c12-c01-49" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">dist.get_rank()</span> <span class="ex">==</span> 0:</span>
+<span id="lst-m4-c12-c01-50"><a href="#lst-m4-c12-c01-50" aria-hidden="true" tabindex="-1"></a>        <span class="ex">print</span><span class="er">(</span><span class="ex">f</span><span class="st">"slowest_rank_mean_ms={mean_ms.item():.3f}"</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-51"><a href="#lst-m4-c12-c01-51" aria-hidden="true" tabindex="-1"></a>        <span class="ex">print</span><span class="er">(</span><span class="ex">f</span><span class="st">"estimated_ring_payload_GBps={effective_gb_s:.1f}"</span><span class="kw">)</span></span>
+<span id="lst-m4-c12-c01-52"><a href="#lst-m4-c12-c01-52" aria-hidden="true" tabindex="-1"></a><span class="ex">finally:</span></span>
+<span id="lst-m4-c12-c01-53"><a href="#lst-m4-c12-c01-53" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dist.destroy_process_group()</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The probe isolates one payload and one collective, so it can compare rank placement or transport configurations without model noise. <code>NCCL_DEBUG=INFO</code> can reveal selected interfaces and topology decisions, but only the timed samples and system trace show achieved behavior. Compare the result with a topology-aware theoretical estimate and an Nsight Systems trace before assigning the gap to the fabric.</p>
 <p>PyTorch Profiler can show collective operators in the framework trace. Nsight Systems shows whether collectives overlap kernels or sit on the critical path. NCCL logs help diagnose backend selection, network interface choice, peer-to-peer paths, and failures.</p>
 </section>

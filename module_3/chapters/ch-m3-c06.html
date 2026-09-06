@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -339,12 +339,12 @@ window.Quarto = {
 
 
 <p>How can the system reproduce a multi-step ML result after partial failure, schedule delay, code change, or operator handoff? Chapter 5 established durable artifacts and rebuildable derived state. Dependency graphs replace manual command sequences with tasks that have explicit inputs, outputs, resources, retries, and evidence.</p>
-<p>The three panels connect a pipeline DAG to its execution engine, then to reusable blocks and recorded controls that make the workflow durable.</p>
+<p>The three panels connect a pipeline DAG to its execution engine, then to the reusable and governed components that make the workflow durable.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter map</strong></p>
-<p><strong>6.1–6.3 Pipeline dependencies and task interfaces:</strong> Directed Acyclic Graphs (DAGs) replace brittle manual sequencing. Immutable inputs, outputs, and parameters make each task reproducible.</p>
-<p><strong>6.4–6.5 Airflow control-plane and ML task runs:</strong> Airflow schedules dependency-ready work while isolated Kubernetes task runtimes validate sources, build embeddings, and evaluate a candidate collection.</p>
-<p><strong>6.6–6.9 Safe retries, run manifests, and tenant isolation:</strong> Attempt-scoped outputs and one commit step make retries safe. Run manifests connect execution evidence while shared clusters keep team resources and data access separate.</p>
+<p><strong>6.1–6.3 Pipelines as DAGs &amp; Task Contracts:</strong> Replace brittle manual scripts with Directed Acyclic Graphs (DAGs), and define immutable task inputs, outputs, and parameters.</p>
+<p><strong>6.4–6.5 Airflow Architecture &amp; ML Workflows:</strong> Construct end-to-end Airflow DAGs across data validation, model training, and evaluation using Celery and Kubernetes executors.</p>
+<p><strong>6.6–6.9 Idempotent Tasks, Run Manifests &amp; Multi-Tenancy:</strong> Implement safe retries, atomic state transitions, and execution evidence manifests, while isolating multi-tenant research environments on shared clusters.</p>
 </div>
 <div id="fig-m3-c06-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled Chapter 6 map links a task dependency graph to orchestration, immutable outputs, retries, run manifests, and shared-cluster controls.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -435,7 +435,6 @@ Figure&nbsp;6.2: A DAG makes dependencies and parallel branches explicit.
 <p><span id="eq-m3-c06-e01"><span class="math display">\[
 T_{\mathrm{DAG}} \ge \max_{p \in P} \sum_{i \in p} t_i
 \tag{6.1}\]</span></span></p>
-<p>Here, <span class="math inline">\(T_{\mathrm{DAG}}\)</span> is the observed duration of one DAG run. <span class="math inline">\(P\)</span> is the set of start-to-finish dependency paths, <span class="math inline">\(p\)</span> is one such path, and <span class="math inline">\(t_i\)</span> is the duration of task <span class="math inline">\(i\)</span> on that path. The longest path sets a lower bound because queueing, resource shortages, and retries can make the real run take longer.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation: critical path in a two-branch pipeline</strong></p>
 <p><strong>Shared start:</strong> Validation takes 4 minutes.</p>
@@ -453,10 +452,10 @@ T_{\mathrm{DAG}} \ge \max_{p \in P} \sum_{i \in p} t_i
 </section>
 <section id="sec-m3-c06-s03" class="level2" data-number="6.3">
 <h2 data-number="6.3" class="anchored" data-anchor-id="sec-m3-c06-s03"><span class="header-section-number">6.3</span> Defining immutable task inputs and outputs</h2>
-<p>The DAG states dependency order. A task called ‘train’ is still too vague to retry safely or reproduce after an image, dataset, or configuration changes. Every task has immutable inputs, explicit outputs, resource needs, failure behavior, and validation.</p>
+<p>The DAG states dependency order. A box named ‘train’ is still too vague to retry safely or reproduce after an image, dataset, or configuration changes. Every task has immutable inputs, explicit outputs, resource needs, failure behavior, and validation.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Task specification.</strong></span> the complete contract for one pipeline task: identity, immutable inputs, outputs, runtime, resources, retry behavior, validation, and side effects.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Idempotent task.</strong></span> a task whose repeated execution with the same declared inputs reaches the same externally visible result without corrupting state or duplicating effects.</p>
-<p>Specific task fields make repeatability inspectable by both the scheduler and the next task.</p>
+<p>Named task fields make repeatability inspectable by both the scheduler and the next task.</p>
 <div id="tbl-m3-c06-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c06-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -603,53 +602,50 @@ Figure&nbsp;6.4: The Airflow graph view exposes task state and dependency struct
 </section>
 <section id="sec-m3-c06-s05" class="level2" data-number="6.5">
 <h2 data-number="6.5" class="anchored" data-anchor-id="sec-m3-c06-s05"><span class="header-section-number">6.5</span> Running complete ML workflows in Airflow</h2>
-<p>The control-plane roles and task description are explicit. The abbreviated Python definition describes dependencies without performing expensive work during import. <code>DATASET_MANIFEST</code>, <code>EMBEDDING_VERSION</code>, <code>EVAL_SUITE</code>, and <code>COLLECTION_ID</code> are immutable identities resolved before the run starts. Lightweight DAG parsing leaves domain code to isolated task runtimes.</p>
-<p>The abbreviated <code>pipeline.embed</code> application accepts <code>COLLECTION_ID</code> through its <code>--collection</code> argument, writes that collection, and publishes its completion manifest outside Airflow’s metadata database. The evaluation task reads the same collection identity after the dependency succeeds. The fixed name therefore represents an agreed input/output location, not a large task result passed through Airflow.</p>
+<p>The control-plane roles and task description are explicit. The Python definition describes dependencies without performing expensive work during import. Lightweight DAG parsing leaves domain code to isolated task runtimes.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Airflow DAG that passes immutable artifact identities into isolated Kubernetes task runtimes.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c06-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c06-c01-1"><a href="#lst-m3-c06-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> airflow <span class="im">import</span> DAG</span>
-<span id="lst-m3-c06-c01-2"><a href="#lst-m3-c06-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> airflow.providers.cncf.kubernetes.operators.pod <span class="im">import</span> KubernetesPodOperator</span>
-<span id="lst-m3-c06-c01-3"><a href="#lst-m3-c06-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> datetime <span class="im">import</span> datetime</span>
-<span id="lst-m3-c06-c01-4"><a href="#lst-m3-c06-c01-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c06-c01-5"><a href="#lst-m3-c06-c01-5" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> DAG(</span>
-<span id="lst-m3-c06-c01-6"><a href="#lst-m3-c06-c01-6" aria-hidden="true" tabindex="-1"></a>    dag_id<span class="op">=</span><span class="st">"versioned_rag_release"</span>,</span>
-<span id="lst-m3-c06-c01-7"><a href="#lst-m3-c06-c01-7" aria-hidden="true" tabindex="-1"></a>    start_date<span class="op">=</span>datetime(<span class="dv">2026</span>, <span class="dv">1</span>, <span class="dv">1</span>),</span>
-<span id="lst-m3-c06-c01-8"><a href="#lst-m3-c06-c01-8" aria-hidden="true" tabindex="-1"></a>    schedule<span class="op">=</span><span class="va">None</span>,</span>
-<span id="lst-m3-c06-c01-9"><a href="#lst-m3-c06-c01-9" aria-hidden="true" tabindex="-1"></a>    catchup<span class="op">=</span><span class="va">False</span>,</span>
-<span id="lst-m3-c06-c01-10"><a href="#lst-m3-c06-c01-10" aria-hidden="true" tabindex="-1"></a>    max_active_runs<span class="op">=</span><span class="dv">1</span>,</span>
-<span id="lst-m3-c06-c01-11"><a href="#lst-m3-c06-c01-11" aria-hidden="true" tabindex="-1"></a>    tags<span class="op">=</span>[<span class="st">"mlops"</span>, <span class="st">"rag"</span>],</span>
-<span id="lst-m3-c06-c01-12"><a href="#lst-m3-c06-c01-12" aria-hidden="true" tabindex="-1"></a>) <span class="im">as</span> dag:</span>
-<span id="lst-m3-c06-c01-13"><a href="#lst-m3-c06-c01-13" aria-hidden="true" tabindex="-1"></a>    validate <span class="op">=</span> KubernetesPodOperator(</span>
-<span id="lst-m3-c06-c01-14"><a href="#lst-m3-c06-c01-14" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"validate_sources"</span>,</span>
-<span id="lst-m3-c06-c01-15"><a href="#lst-m3-c06-c01-15" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
-<span id="lst-m3-c06-c01-16"><a href="#lst-m3-c06-c01-16" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.validate"</span>],</span>
-<span id="lst-m3-c06-c01-17"><a href="#lst-m3-c06-c01-17" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[<span class="st">"--manifest"</span>, DATASET_MANIFEST],</span>
-<span id="lst-m3-c06-c01-18"><a href="#lst-m3-c06-c01-18" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m3-c06-c01-19"><a href="#lst-m3-c06-c01-19" aria-hidden="true" tabindex="-1"></a>    embed <span class="op">=</span> KubernetesPodOperator(</span>
-<span id="lst-m3-c06-c01-20"><a href="#lst-m3-c06-c01-20" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"build_embeddings"</span>,</span>
-<span id="lst-m3-c06-c01-21"><a href="#lst-m3-c06-c01-21" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
-<span id="lst-m3-c06-c01-22"><a href="#lst-m3-c06-c01-22" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.embed"</span>],</span>
-<span id="lst-m3-c06-c01-23"><a href="#lst-m3-c06-c01-23" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[</span>
-<span id="lst-m3-c06-c01-24"><a href="#lst-m3-c06-c01-24" aria-hidden="true" tabindex="-1"></a>            <span class="st">"--manifest"</span>, DATASET_MANIFEST,</span>
-<span id="lst-m3-c06-c01-25"><a href="#lst-m3-c06-c01-25" aria-hidden="true" tabindex="-1"></a>            <span class="st">"--embedding-version"</span>, EMBEDDING_VERSION,</span>
-<span id="lst-m3-c06-c01-26"><a href="#lst-m3-c06-c01-26" aria-hidden="true" tabindex="-1"></a>            <span class="st">"--collection"</span>, COLLECTION_ID,</span>
-<span id="lst-m3-c06-c01-27"><a href="#lst-m3-c06-c01-27" aria-hidden="true" tabindex="-1"></a>        ],</span>
-<span id="lst-m3-c06-c01-28"><a href="#lst-m3-c06-c01-28" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m3-c06-c01-29"><a href="#lst-m3-c06-c01-29" aria-hidden="true" tabindex="-1"></a>    evaluate <span class="op">=</span> KubernetesPodOperator(</span>
-<span id="lst-m3-c06-c01-30"><a href="#lst-m3-c06-c01-30" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"evaluate_retrieval"</span>,</span>
-<span id="lst-m3-c06-c01-31"><a href="#lst-m3-c06-c01-31" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
-<span id="lst-m3-c06-c01-32"><a href="#lst-m3-c06-c01-32" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.evaluate"</span>],</span>
-<span id="lst-m3-c06-c01-33"><a href="#lst-m3-c06-c01-33" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[<span class="st">"--suite"</span>, EVAL_SUITE, <span class="st">"--candidate"</span>, COLLECTION_ID],</span>
-<span id="lst-m3-c06-c01-34"><a href="#lst-m3-c06-c01-34" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m3-c06-c01-35"><a href="#lst-m3-c06-c01-35" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c06-c01-36"><a href="#lst-m3-c06-c01-36" aria-hidden="true" tabindex="-1"></a>    validate <span class="op">&gt;&gt;</span> embed <span class="op">&gt;&gt;</span> evaluate</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c06-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c06-c01-1"><a href="#lst-m3-c06-c01-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c06-c01-2"><a href="#lst-m3-c06-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> airflow <span class="im">import</span> DAG</span>
+<span id="lst-m3-c06-c01-3"><a href="#lst-m3-c06-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> airflow.providers.cncf.kubernetes.operators.pod <span class="im">import</span> KubernetesPodOperator</span>
+<span id="lst-m3-c06-c01-4"><a href="#lst-m3-c06-c01-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> datetime <span class="im">import</span> datetime</span>
+<span id="lst-m3-c06-c01-5"><a href="#lst-m3-c06-c01-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c06-c01-6"><a href="#lst-m3-c06-c01-6" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> DAG(</span>
+<span id="lst-m3-c06-c01-7"><a href="#lst-m3-c06-c01-7" aria-hidden="true" tabindex="-1"></a>    dag_id<span class="op">=</span><span class="st">"versioned_rag_release"</span>,</span>
+<span id="lst-m3-c06-c01-8"><a href="#lst-m3-c06-c01-8" aria-hidden="true" tabindex="-1"></a>    start_date<span class="op">=</span>datetime(<span class="dv">2026</span>, <span class="dv">1</span>, <span class="dv">1</span>),</span>
+<span id="lst-m3-c06-c01-9"><a href="#lst-m3-c06-c01-9" aria-hidden="true" tabindex="-1"></a>    schedule<span class="op">=</span><span class="va">None</span>,</span>
+<span id="lst-m3-c06-c01-10"><a href="#lst-m3-c06-c01-10" aria-hidden="true" tabindex="-1"></a>    catchup<span class="op">=</span><span class="va">False</span>,</span>
+<span id="lst-m3-c06-c01-11"><a href="#lst-m3-c06-c01-11" aria-hidden="true" tabindex="-1"></a>    max_active_runs<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="lst-m3-c06-c01-12"><a href="#lst-m3-c06-c01-12" aria-hidden="true" tabindex="-1"></a>    tags<span class="op">=</span>[<span class="st">"mlops"</span>, <span class="st">"rag"</span>],</span>
+<span id="lst-m3-c06-c01-13"><a href="#lst-m3-c06-c01-13" aria-hidden="true" tabindex="-1"></a>) <span class="im">as</span> dag:</span>
+<span id="lst-m3-c06-c01-14"><a href="#lst-m3-c06-c01-14" aria-hidden="true" tabindex="-1"></a>    validate <span class="op">=</span> KubernetesPodOperator(</span>
+<span id="lst-m3-c06-c01-15"><a href="#lst-m3-c06-c01-15" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"validate_sources"</span>,</span>
+<span id="lst-m3-c06-c01-16"><a href="#lst-m3-c06-c01-16" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
+<span id="lst-m3-c06-c01-17"><a href="#lst-m3-c06-c01-17" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.validate"</span>],</span>
+<span id="lst-m3-c06-c01-18"><a href="#lst-m3-c06-c01-18" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[<span class="st">"--manifest"</span>, DATASET_MANIFEST],</span>
+<span id="lst-m3-c06-c01-19"><a href="#lst-m3-c06-c01-19" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m3-c06-c01-20"><a href="#lst-m3-c06-c01-20" aria-hidden="true" tabindex="-1"></a>    embed <span class="op">=</span> KubernetesPodOperator(</span>
+<span id="lst-m3-c06-c01-21"><a href="#lst-m3-c06-c01-21" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"build_embeddings"</span>,</span>
+<span id="lst-m3-c06-c01-22"><a href="#lst-m3-c06-c01-22" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
+<span id="lst-m3-c06-c01-23"><a href="#lst-m3-c06-c01-23" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.embed"</span>],</span>
+<span id="lst-m3-c06-c01-24"><a href="#lst-m3-c06-c01-24" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[<span class="st">"--manifest"</span>, DATASET_MANIFEST,</span>
+<span id="lst-m3-c06-c01-25"><a href="#lst-m3-c06-c01-25" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"--embedding-version"</span>, EMBEDDING_VERSION],</span>
+<span id="lst-m3-c06-c01-26"><a href="#lst-m3-c06-c01-26" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m3-c06-c01-27"><a href="#lst-m3-c06-c01-27" aria-hidden="true" tabindex="-1"></a>    evaluate <span class="op">=</span> KubernetesPodOperator(</span>
+<span id="lst-m3-c06-c01-28"><a href="#lst-m3-c06-c01-28" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"evaluate_retrieval"</span>,</span>
+<span id="lst-m3-c06-c01-29"><a href="#lst-m3-c06-c01-29" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
+<span id="lst-m3-c06-c01-30"><a href="#lst-m3-c06-c01-30" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.evaluate"</span>],</span>
+<span id="lst-m3-c06-c01-31"><a href="#lst-m3-c06-c01-31" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[<span class="st">"--suite"</span>, EVAL_SUITE, <span class="st">"--candidate"</span>, COLLECTION_ID],</span>
+<span id="lst-m3-c06-c01-32"><a href="#lst-m3-c06-c01-32" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m3-c06-c01-33"><a href="#lst-m3-c06-c01-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c06-c01-34"><a href="#lst-m3-c06-c01-34" aria-hidden="true" tabindex="-1"></a>    validate <span class="op">&gt;&gt;</span> embed <span class="op">&gt;&gt;</span> evaluate</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Code walkthrough</strong></p>
 <p>DAG definition: The <code>DAG</code> object stores scheduling and concurrency policy; <code>schedule=None</code> makes release creation externally triggered.</p>
-<p>Concurrency guard: <code>max_active_runs=1</code> prevents overlapping candidate workflows from writing or evaluating the same candidate collection identity. This abbreviated DAG does not promote a production alias; a separate gated promotion task performs that state change.</p>
+<p>Concurrency guard: <code>max_active_runs=1</code> prevents two release workflows from racing to change the same mutable production alias.</p>
 <p>Task runtime: Each <code>KubernetesPodOperator</code> launches domain work in the immutable pipeline image after DAG import.</p>
-<p>Artifact handoff: Task arguments carry dataset, embedding, evaluation-suite, and candidate-collection identities. The embedding task writes its output at <code>COLLECTION_ID</code>; its completion manifest is the evidence that evaluation reads before accepting that collection.</p>
+<p>Artifact lineage: Task arguments carry dataset, embedding, evaluation-suite, and candidate-collection identities.</p>
 <p>Dependency state: The shift operators create validation → embedding → evaluation edges; Airflow records each task instance and attempt.</p>
 <p>Result: The scheduler owns eligibility and task state, while isolated containers own validation, embedding, and evaluation work.</p>
 <p>Limits: A production DAG still needs explicit output manifests, retries by failure class, secrets and service accounts, resource requests, timeouts, alerts, and a separate gated promotion task.</p>
@@ -731,17 +727,17 @@ Table&nbsp;6.4: Re-execution is safe only when time, identity, and side effects 
 <section id="sec-m3-c06-s07" class="level2" data-number="6.7">
 <h2 data-number="6.7" class="anchored" data-anchor-id="sec-m3-c06-s07"><span class="header-section-number">6.7</span> Building reusable task templates</h2>
 <p>Retry behavior and artifact publication are now safe. Teams still lose consistency when every DAG reimplements data validation, distributed training, inference, evaluation, and registration differently. Parameterized task blocks package common responsibilities through stable inputs, outputs, checks, and platform defaults.</p>
-<div id="fig-m3-c06-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled workflow shows how reusable blocks connect inputs, outputs, checks, resources, telemetry, evaluation, and agent results.">
+<div id="fig-m3-c06-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Reusable data, training, inference, agent, and evaluation blocks compose larger pipelines.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c06-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m3-c06-f05.png" class="img-fluid figure-img" alt="A labelled workflow shows how reusable blocks connect inputs, outputs, checks, resources, telemetry, evaluation, and agent results.">
+<img src="../assets/fig-m3-c06-f05.jpg" class="img-fluid figure-img" alt="Reusable data, training, inference, agent, and evaluation blocks compose larger pipelines.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c06-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;6.5: Reusable blocks expose specific inputs, committed outputs, validation checks, resource requests, and telemetry; an evaluation record can select the next model version, and agent tool results return to evaluation.
+Figure&nbsp;6.5: Reusable data, training, inference, agent, and evaluation blocks compose larger pipelines.
 </figcaption>
 </figure>
 </div>
-<p>Each reusable block has specific inputs, committed outputs, and validation checks.</p>
+<p>Each reusable block has named inputs, committed outputs, and validation checks.</p>
 <div id="tbl-m3-c06-t05" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c06-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -805,11 +801,11 @@ Table&nbsp;6.5: Reusable blocks give domain code and platform control a consiste
 </div>
 </figure>
 </div>
-<p>A reusable block standardizes identity, evidence, secrets, resource requests, telemetry, and output publication while allowing task-specific domain parameters. This division lets a model team change architecture without reimplementing cluster scheduling or the links between input and output artifacts.</p>
+<p>A reusable block standardizes identity, evidence, secrets, resource requests, telemetry, and output publication while allowing task-specific domain parameters. This division lets a model team change architecture without reimplementing cluster scheduling or artifact lineage.</p>
 </section>
 <section id="sec-m3-c06-s08" class="level2" data-number="6.8">
 <h2 data-number="6.8" class="anchored" data-anchor-id="sec-m3-c06-s08"><span class="header-section-number">6.8</span> Recording artifact evidence in run manifests</h2>
-<p>The pipeline can produce versioned artifacts through reusable blocks. Five systems record overlapping facts, and copying all data into every system obscures the authoritative record. Each evidence class has one primary system, and stable identifiers connect the records.</p>
+<p>The pipeline can produce versioned artifacts through reusable blocks. Three systems now record overlapping facts, and copying all data into every system obscures the authoritative record. Each evidence class has one primary system, and stable identifiers connect the records.</p>
 <div id="tbl-m3-c06-t06" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c06-t06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -906,7 +902,7 @@ Figure&nbsp;6.7: A training dashboard correlates actor, learner, and trajectory 
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Carry-forward result</strong></p>
 <p>The system now expresses work as a DAG of idempotent task descriptions, stores artifacts outside control-plane metadata, joins orchestration with experiments and telemetry, and supports selective retry and recovery.</p>
-<p>The final chapter connects these layers in a grounded-answer service and follows an illustrative quality regression from detection to verified release.</p>
+<p>The final chapter applies every layer to one grounded-answer evaluator service and follows a real quality regression from detection to verified release.</p>
 </div>
 
 

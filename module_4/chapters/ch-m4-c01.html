@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -111,35 +111,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   }
 }</script>
 
-  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
-  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
-
-<script type="text/javascript">
-const typesetMath = (el) => {
-  if (window.MathJax) {
-    // MathJax Typeset
-    window.MathJax.typeset([el]);
-  } else if (window.katex) {
-    // KaTeX Render
-    var mathElements = el.getElementsByClassName("math");
-    var macros = [];
-    for (var i = 0; i < mathElements.length; i++) {
-      var texText = mathElements[i].firstChild;
-      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
-        window.katex.render(texText.data, mathElements[i], {
-          displayMode: mathElements[i].classList.contains('display'),
-          throwOnError: false,
-          macros: macros,
-          fleqn: false
-        });
-      }
-    }
-  }
-}
-window.Quarto = {
-  typesetMath
-};
-</script>
 
 <link rel="stylesheet" href="../styles.css">
 </head>
@@ -369,8 +340,9 @@ window.Quarto = {
 </header>
 
 
-<p>Training and serving run related model operations, but they keep different tensors in memory and move different bytes during each phase. This chapter shows how to name that live state, measure one phase at a time, and identify the resource and software component that limits it.</p>
-<p>To explain a measured slowdown, first identify the phase, such as training backward or one-token decode. Then list the tensors and buffers that remain live, estimate which bytes move, and measure the compute, memory, launch, communication, and waiting behavior in that phase. These steps narrow the problem to the limiting resource or wait and to the controls that can change it.</p>
+<p>Define LLM workloads as state-movement systems, establish runtime memory objects, and introduce the measurement-driven bottleneck attribution workflow.</p>
+<p>Large Language Model (LLM) performance engineering begins with the work the system is performing, not with an optimization feature. Training and inference serving execute related model operations, but they keep different objects live, repeat different phases, and report success with different measurements.</p>
+<p>A useful performance model connects mathematical tensors to physical storage, accounts for the state that remains live in each execution mode, and separates the major workload phases. Those observations lead to a repeatable method for finding the resource and software layer that limit a measured result.</p>
 <p>A bottleneck is the resource or dependency that currently limits one measured execution region. It is not a permanent label for the whole model: a training forward pass, an optimizer update, prompt prefill, one-token decode, and distributed synchronization can each be limited by a different resource.</p>
 <p>Training and inference serving repeatedly use the same model parameters, but their phases retain different tensors and expose different limits.</p>
 <div id="fig-m4-c01-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Shared model parameters feed separate training and inference-serving paths. Training retains activations, gradients, and optimizer state; serving retains and updates a KV cache across decode steps; both are measured by phase.">
@@ -402,39 +374,53 @@ Figure&nbsp;1.1: Training and inference serving use shared parameters but keep d
 </ul>
 <p>This distinction explains several later performance issues. A transpose can be mathematically cheap while creating a non-contiguous view. A dtype change can halve memory traffic while selecting a different kernel path. A tensor’s device determines whether a copy is required. Autograd metadata can extend a tensor’s lifetime through backward propagation.</p>
 <p>The next section names the persistent and temporary model objects that use this storage. Their lifetimes, rather than their mathematical names alone, determine peak memory and data movement.</p>
-<p><strong>Example: Inspecting tensor identity.</strong> This example requires PyTorch and an available CUDA device. For the contiguous <code>2 x 3</code> FP16 tensor below, expect shape <code>(2, 3)</code>, dtype <code>torch.float16</code>, device <code>cuda:0</code> or another selected CUDA device, stride <code>(3, 1)</code>, <code>True</code> for contiguity, and <code>12 bytes</code> of tensor payload. The device label can vary with the selected GPU.</p>
+<p><strong>Example: Inspecting tensor identity.</strong> This example shows why a tensor is more than its values. The same mathematical array carries shape, dtype, device, stride, and contiguity information that controls dispatch, memory footprint, and layout-sensitive performance.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Inspecting tensor identity</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c01-1"><a href="#lst-m4-c01-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c01-c01-2"><a href="#lst-m4-c01-c01-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c01-3"><a href="#lst-m4-c01-c01-3" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> torch.randn(<span class="dv">2</span>, <span class="dv">3</span>, device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float16)</span>
-<span id="lst-m4-c01-c01-4"><a href="#lst-m4-c01-c01-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c01-5"><a href="#lst-m4-c01-c01-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.shape)</span>
-<span id="lst-m4-c01-c01-6"><a href="#lst-m4-c01-c01-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.dtype)</span>
-<span id="lst-m4-c01-c01-7"><a href="#lst-m4-c01-c01-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.device)</span>
-<span id="lst-m4-c01-c01-8"><a href="#lst-m4-c01-c01-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.stride())</span>
-<span id="lst-m4-c01-c01-9"><a href="#lst-m4-c01-c01-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.is_contiguous())</span>
-<span id="lst-m4-c01-c01-10"><a href="#lst-m4-c01-c01-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.numel() <span class="op">*</span> x.element_size(), <span class="st">"bytes"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c01-1"><a href="#lst-m4-c01-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c01-c01-2"><a href="#lst-m4-c01-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - shape and stride describe logical indexing and physical layout.</span></span>
+<span id="lst-m4-c01-c01-3"><a href="#lst-m4-c01-c01-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - dtype and element_size connect the tensor to byte traffic.</span></span>
+<span id="lst-m4-c01-c01-4"><a href="#lst-m4-c01-c01-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - device determines whether PyTorch dispatches CPU work or CUDA work.</span></span>
+<span id="lst-m4-c01-c01-5"><a href="#lst-m4-c01-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - is_contiguous is often relevant before custom kernels, views, reshapes, and memory-coalescing</span></span>
+<span id="lst-m4-c01-c01-6"><a href="#lst-m4-c01-c01-6" aria-hidden="true" tabindex="-1"></a><span class="co">#   discussions.</span></span>
+<span id="lst-m4-c01-c01-7"><a href="#lst-m4-c01-c01-7" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c01-c01-8"><a href="#lst-m4-c01-c01-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c01-c01-9"><a href="#lst-m4-c01-c01-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c01-10"><a href="#lst-m4-c01-c01-10" aria-hidden="true" tabindex="-1"></a>x <span class="op">=</span> torch.randn(<span class="dv">2</span>, <span class="dv">3</span>, device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float16)</span>
+<span id="lst-m4-c01-c01-11"><a href="#lst-m4-c01-c01-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c01-12"><a href="#lst-m4-c01-c01-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.shape)</span>
+<span id="lst-m4-c01-c01-13"><a href="#lst-m4-c01-c01-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.dtype)</span>
+<span id="lst-m4-c01-c01-14"><a href="#lst-m4-c01-c01-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.device)</span>
+<span id="lst-m4-c01-c01-15"><a href="#lst-m4-c01-c01-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.stride())</span>
+<span id="lst-m4-c01-c01-16"><a href="#lst-m4-c01-c01-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.is_contiguous())</span>
+<span id="lst-m4-c01-c01-17"><a href="#lst-m4-c01-c01-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.numel() <span class="op">*</span> x.element_size(), <span class="st">"bytes"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p><strong>Example: Counting parameter and gradient bytes.</strong> This abbreviated calculation assumes that <code>model</code> already exists. Parameter bytes can be counted immediately; gradient bytes appear only after backward propagation has populated <code>p.grad</code>. The result covers tensor payloads, not allocator reservation, fragmentation, metadata, workspaces, or distributed buffers.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Counting parameter and gradient bytes</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c02-1"><a href="#lst-m4-c01-c02-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c01-c02-2"><a href="#lst-m4-c01-c02-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c02-3"><a href="#lst-m4-c01-c02-3" aria-hidden="true" tabindex="-1"></a>param_bytes <span class="op">=</span> <span class="bu">sum</span>(</span>
-<span id="lst-m4-c01-c02-4"><a href="#lst-m4-c01-c02-4" aria-hidden="true" tabindex="-1"></a>    p.numel() <span class="op">*</span> p.element_size()</span>
-<span id="lst-m4-c01-c02-5"><a href="#lst-m4-c01-c02-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> model.parameters()</span>
-<span id="lst-m4-c01-c02-6"><a href="#lst-m4-c01-c02-6" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="lst-m4-c01-c02-7"><a href="#lst-m4-c01-c02-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c02-8"><a href="#lst-m4-c01-c02-8" aria-hidden="true" tabindex="-1"></a>grad_bytes <span class="op">=</span> <span class="bu">sum</span>(</span>
-<span id="lst-m4-c01-c02-9"><a href="#lst-m4-c01-c02-9" aria-hidden="true" tabindex="-1"></a>    p.grad.numel() <span class="op">*</span> p.grad.element_size()</span>
-<span id="lst-m4-c01-c02-10"><a href="#lst-m4-c01-c02-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> model.parameters()</span>
-<span id="lst-m4-c01-c02-11"><a href="#lst-m4-c01-c02-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> p.grad <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span></span>
-<span id="lst-m4-c01-c02-12"><a href="#lst-m4-c01-c02-12" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="lst-m4-c01-c02-13"><a href="#lst-m4-c01-c02-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c02-14"><a href="#lst-m4-c01-c02-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"parameters: </span><span class="sc">{</span>param_bytes <span class="op">/</span> <span class="dv">2</span><span class="op">**</span><span class="dv">20</span><span class="sc">:.1f}</span><span class="ss"> MiB"</span>)</span>
-<span id="lst-m4-c01-c02-15"><a href="#lst-m4-c01-c02-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"gradients:  </span><span class="sc">{</span>grad_bytes <span class="op">/</span> <span class="dv">2</span><span class="op">**</span><span class="dv">20</span><span class="sc">:.1f}</span><span class="ss"> MiB"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c02-1"><a href="#lst-m4-c01-c02-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c01-c02-2"><a href="#lst-m4-c01-c02-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - Parameter bytes estimate persistent model state.</span></span>
+<span id="lst-m4-c01-c02-3"><a href="#lst-m4-c01-c02-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - Gradient bytes appear after backward propagation and usually mirror parameter shapes.</span></span>
+<span id="lst-m4-c01-c02-4"><a href="#lst-m4-c01-c02-4" aria-hidden="true" tabindex="-1"></a><span class="co"># - Optimizer state is not counted here; Adam-style optimizers can add much more memory.</span></span>
+<span id="lst-m4-c01-c02-5"><a href="#lst-m4-c01-c02-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - Use this calculation as a first budget check, not as a substitute for profiler or allocator</span></span>
+<span id="lst-m4-c01-c02-6"><a href="#lst-m4-c01-c02-6" aria-hidden="true" tabindex="-1"></a><span class="co">#   statistics.</span></span>
+<span id="lst-m4-c01-c02-7"><a href="#lst-m4-c01-c02-7" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c01-c02-8"><a href="#lst-m4-c01-c02-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c01-c02-9"><a href="#lst-m4-c01-c02-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c02-10"><a href="#lst-m4-c01-c02-10" aria-hidden="true" tabindex="-1"></a>param_bytes <span class="op">=</span> <span class="bu">sum</span>(</span>
+<span id="lst-m4-c01-c02-11"><a href="#lst-m4-c01-c02-11" aria-hidden="true" tabindex="-1"></a>    p.numel() <span class="op">*</span> p.element_size()</span>
+<span id="lst-m4-c01-c02-12"><a href="#lst-m4-c01-c02-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> model.parameters()</span>
+<span id="lst-m4-c01-c02-13"><a href="#lst-m4-c01-c02-13" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="lst-m4-c01-c02-14"><a href="#lst-m4-c01-c02-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c02-15"><a href="#lst-m4-c01-c02-15" aria-hidden="true" tabindex="-1"></a>grad_bytes <span class="op">=</span> <span class="bu">sum</span>(</span>
+<span id="lst-m4-c01-c02-16"><a href="#lst-m4-c01-c02-16" aria-hidden="true" tabindex="-1"></a>    p.grad.numel() <span class="op">*</span> p.grad.element_size()</span>
+<span id="lst-m4-c01-c02-17"><a href="#lst-m4-c01-c02-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> model.parameters()</span>
+<span id="lst-m4-c01-c02-18"><a href="#lst-m4-c01-c02-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> p.grad <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span></span>
+<span id="lst-m4-c01-c02-19"><a href="#lst-m4-c01-c02-19" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="lst-m4-c01-c02-20"><a href="#lst-m4-c01-c02-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c02-21"><a href="#lst-m4-c01-c02-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"parameters: </span><span class="sc">{</span>param_bytes <span class="op">/</span> <span class="dv">2</span><span class="op">**</span><span class="dv">20</span><span class="sc">:.1f}</span><span class="ss"> MiB"</span>)</span>
+<span id="lst-m4-c01-c02-22"><a href="#lst-m4-c01-c02-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"gradients:  </span><span class="sc">{</span>grad_bytes <span class="op">/</span> <span class="dv">2</span><span class="op">**</span><span class="dv">20</span><span class="sc">:.1f}</span><span class="ss"> MiB"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The same tensor properties produce two distinct execution regimes. Training changes parameters and retains backward state; inference serving keeps parameters fixed while maintaining request and cache state. The comparison below names the goal, live objects, phases, and measurements for each regime.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Training:</strong></span> Repeated execution that updates model parameters from data.
@@ -449,29 +435,25 @@ Figure&nbsp;1.1: Training and inference serving use shared parameters but keep d
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Goal:</strong></span> Meet latency, throughput, quality, and cost targets under a service workload.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Live objects:</strong></span> Parameters, temporary activations, KV cache, scheduler metadata, request queues, sampling state, and sometimes communication buffers.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Phases:</strong></span> Tokenization, request admission, prefill, decode, post-processing, and streaming.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measurements:</strong></span> Serving measurements describe waiting, streaming speed, and completed work. Chapter 8 develops these quantities and their measurement boundaries.
-<ul>
-<li><em>Time To First Token (TTFT)</em>: elapsed time from request arrival to the first emitted token.</li>
-<li><em>Inter-Token Latency (ITL)</em>: the gap between two consecutive emitted tokens.</li>
-<li><em>Time Per Output Token (TPOT)</em>: for one request with <span class="math inline">\(n&gt;1\)</span> output tokens, the mean of its <span class="math inline">\(n-1\)</span> ITL gaps. It excludes first-token latency. When combining requests, state whether each request or each token gap has equal weight.</li>
-<li><em>End-to-end latency</em>: elapsed time from arrival to completion.</li>
-<li><em>Throughput</em>: completed requests or tokens per second for the stated workload.</li>
-<li><em>Goodput</em>: completed work per second that meets the specified service targets, such as latency and quality limits in a Service-Level Agreement (SLA).</li>
-</ul></li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measurements:</strong></span> Time To First Token (TTFT), Time Per Output Token (TPOT), Inter-Token Latency (ITL), end-to-end latency, goodput, cost per token, and Service Level Agreement (SLA) compliance.</li>
 </ul></li>
 </ul>
 <p>Training and inference now have concrete meanings: each mode is a sequence of phases operating on named state objects. The next section follows the objects that remain live as those phases execute.</p>
 </section>
 <section id="sec-m4-c01-s02" class="level2" data-number="1.2">
 <h2 data-number="1.2" class="anchored" data-anchor-id="sec-m4-c01-s02"><span class="header-section-number">1.2</span> Live state and memory</h2>
-<p>Section 1.1 defined the individual objects. Memory pressure depends on which of those objects overlap in time. Parameters and optimizer buffers may stay live for the whole training step; saved activations accumulate during forward; gradients appear during backward; and temporary workspaces can raise the peak even though they exist briefly. In serving, model weights remain fixed while admitted requests grow and release KV-cache blocks.</p>
+<p>Section 1.1 described how a tensor’s shape, dtype, layout, and device connect a mathematical value to physical storage. Live state is the subset of tensors, buffers, and scheduler records that coexist while a workload phase runs. Its composition and lifetime determine memory capacity, transfer traffic, reuse opportunities, and synchronization requirements.</p>
+<p>Three related memory questions must be kept separate. Live footprint is the number of bytes occupied by objects that coexist. Capacity pressure occurs when that footprint approaches the available memory. Memory traffic is the number and rate of bytes read, written, or transferred while the phase runs. A workload can fit in memory yet remain slow because it repeatedly moves too many bytes.</p>
+<p>The following definitions name the state objects whose size and lifetime must be tracked in a memory report.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Parameters:</strong></span> Learned weights. They are used in both training and inference. Footprint scales with parameter count and dtype; for example, a 7B-parameter model in FP16 or BF16 is roughly 14 GB before metadata, fragmentation, and engine overhead.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Logits:</strong></span> Unnormalized output scores produced by the model, usually one score per vocabulary item for each predicted token position. Training passes them to a loss function; inference passes them to a sampling or selection rule.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Loss:</strong></span> The training objective computed from model outputs and targets. Backward propagation starts from this value and follows the recorded computation to produce gradients.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Activations:</strong></span> Intermediate tensors produced by forward propagation. Training often saves them for backward propagation; inference usually releases most of them quickly. Footprint scales with batch size, sequence length, hidden dimension, layer count, precision, and checkpointing policy.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradients:</strong></span> Derivatives of the loss with respect to parameters. They are training state. Their footprint is often parameter-sized before sharding, accumulation strategy, or reduced-precision storage changes it.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Optimizer state:</strong></span> Extra buffers used by optimizers such as Adam or AdamW. Adam-style first and second moments can exceed the parameter footprint when stored in FP32, which is why optimizer state becomes a training memory wall.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Temporary workspaces:</strong></span> Short-lived buffers allocated by kernels, vendor libraries, compilers, or serving engines. They affect peak memory and can cause out-of-memory failures.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Key-value (KV) cache:</strong></span> Inference-serving attention state that stores previous keys and values so decode does not recompute the full prefix.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Key-value (KV) cache:</strong></span> Inference-serving attention state that stores previous keys and values so decode does not recompute the full prefix. It scales with active sequences, context length, layer count, key-value heads, head dimension, and dtype.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Communication buffers:</strong></span> Intermediate tensors used for all-reduce, all-gather, reduce-scatter, all-to-all, or point-to-point transfers. They appear in distributed training and distributed inference and can create memory spikes as well as network traffic.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Request and scheduler metadata:</strong></span> Serving-engine state that tracks request IDs, token positions, sampling constraints, KV block tables, prefix-cache entries, queue state, and admission decisions. It is smaller than tensor state but can affect launch gaps, queueing, and cache correctness.</li>
 </ul>
@@ -484,14 +466,15 @@ Figure&nbsp;1.1: Training and inference serving use shared parameters but keep d
 <p><strong>During optimizer step:</strong> Adam-style optimizers read parameters, gradients, first moments, and second moments, then write updated state. This phase can be memory-bandwidth-bound even if the forward pass was tensor-core-heavy.</p>
 <p><strong>After step:</strong> Gradients may be set to <code>None</code> and activations are released, but allocator-reserved memory can remain high because the caching allocator keeps blocks for reuse.</p>
 </div>
-<p>In a transformer with the same attention layout in every layer, each retained token stores one key vector and one value vector per layer and KV head. Without cross-request prefix sharing, a first payload estimate is</p>
-<p><span class="math display">\[ M_{\mathrm{KV}}=2NLH_{\mathrm{KV}}d_hs. \]</span></p>
-<p>Here <span class="math inline">\(N\)</span> is the total number of retained token positions across admitted requests, <span class="math inline">\(L\)</span> is layer count, <span class="math inline">\(H_{\mathrm{KV}}\)</span> is KV-head count, <span class="math inline">\(d_h\)</span> is head dimension, and <span class="math inline">\(s\)</span> is bytes per cache element. Allocator blocks and engine metadata add overhead. Mixed attention layouts require a layer-by-layer sum instead. Chapter 8 applies this estimate to concurrency and capacity, while Chapter 9 explains how the cache is laid out and accessed.</p>
+<p>The KV cache is persistent inference-time attention state. Each decode step stores new keys and values, then later decode steps read that prefix instead of recomputing it.</p>
 </section>
 <section id="sec-m4-c01-s03" class="level2" data-number="1.3">
 <h2 data-number="1.3" class="anchored" data-anchor-id="sec-m4-c01-s03"><span class="header-section-number">1.3</span> Workload phases and limits</h2>
-<p>Footprint asks whether the live objects fit. Traffic asks how many bytes the phase reads and writes. Throughput asks how quickly the hardware can perform those transfers or calculations. Diagnose a phase by measuring these separately; fitting in HBM does not show that HBM bandwidth is sufficient.</p>
+<p>Performance describes how quickly and efficiently a specific workload phase processes its live state. The useful measurements depend on the phase: training uses step time, tokens per second, memory headroom, and scaling efficiency; serving uses latency, token rate, goodput, cache capacity, and cost.</p>
 <ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Live footprint:</strong></span> The bytes occupied by parameters, activations, gradients, optimizer state, workspaces, KV cache, communication buffers, and metadata that coexist during the measured phase.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Capacity pressure:</strong></span> The risk that the live footprint and allocator headroom approach the capacity of GPU High Bandwidth Memory (HBM), CPU memory, or another storage tier.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Memory traffic:</strong></span> The bytes read, written, or transferred while the phase runs. Traffic can limit performance even when the live footprint fits comfortably.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Bandwidth and locality:</strong></span> The rate and distance at which bytes must reach the computation. Reuse in registers, shared memory, or cache reduces traffic to slower memory tiers.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Compute throughput:</strong></span> The rate of useful arithmetic work for the phase, interpreted together with tensor shapes, precision, and hardware utilization.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Launch and control overhead:</strong></span> Time spent in Python dispatch, framework dispatch, kernel launches, compiler transitions, or scheduler decisions.</li>
@@ -524,32 +507,38 @@ Figure&nbsp;1.1: Training and inference serving use shared parameters but keep d
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Minimal training loop</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c03-1"><a href="#lst-m4-c01-c03-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m4-c01-c03-2"><a href="#lst-m4-c01-c03-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
-<span id="lst-m4-c01-c03-3"><a href="#lst-m4-c01-c03-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c03-4"><a href="#lst-m4-c01-c03-4" aria-hidden="true" tabindex="-1"></a>device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, <span class="dv">0</span>)</span>
-<span id="lst-m4-c01-c03-5"><a href="#lst-m4-c01-c03-5" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> model.to(device)</span>
-<span id="lst-m4-c01-c03-6"><a href="#lst-m4-c01-c03-6" aria-hidden="true" tabindex="-1"></a>loss_fn <span class="op">=</span> nn.CrossEntropyLoss()</span>
-<span id="lst-m4-c01-c03-7"><a href="#lst-m4-c01-c03-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c03-8"><a href="#lst-m4-c01-c03-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> batch <span class="kw">in</span> loader:</span>
-<span id="lst-m4-c01-c03-9"><a href="#lst-m4-c01-c03-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Pinned source buffers plus non_blocking copies can overlap input transfer with GPU work.</span></span>
-<span id="lst-m4-c01-c03-10"><a href="#lst-m4-c01-c03-10" aria-hidden="true" tabindex="-1"></a>    input_ids <span class="op">=</span> batch[<span class="st">"input_ids"</span>].to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c01-c03-11"><a href="#lst-m4-c01-c03-11" aria-hidden="true" tabindex="-1"></a>    labels <span class="op">=</span> batch[<span class="st">"labels"</span>].to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c01-c03-12"><a href="#lst-m4-c01-c03-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c03-13"><a href="#lst-m4-c01-c03-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Releasing old gradient storage avoids writing a full tensor of zeros each step.</span></span>
-<span id="lst-m4-c01-c03-14"><a href="#lst-m4-c01-c03-14" aria-hidden="true" tabindex="-1"></a>    optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m4-c01-c03-15"><a href="#lst-m4-c01-c03-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c03-16"><a href="#lst-m4-c01-c03-16" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Forward execution reads parameters, creates activations, and may retain them for backward.</span></span>
-<span id="lst-m4-c01-c03-17"><a href="#lst-m4-c01-c03-17" aria-hidden="true" tabindex="-1"></a>    logits <span class="op">=</span> model(input_ids)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c03-1"><a href="#lst-m4-c01-c03-1" aria-hidden="true" tabindex="-1"></a><span class="co"># What this code shows:</span></span>
+<span id="lst-m4-c01-c03-2"><a href="#lst-m4-c01-c03-2" aria-hidden="true" tabindex="-1"></a><span class="co"># - The comments connect each code line to the state it moves, retains, creates, or updates.</span></span>
+<span id="lst-m4-c01-c03-3"><a href="#lst-m4-c01-c03-3" aria-hidden="true" tabindex="-1"></a><span class="co"># - Peak memory includes model weights, saved forward state, gradients, optimizer buffers, and</span></span>
+<span id="lst-m4-c01-c03-4"><a href="#lst-m4-c01-c03-4" aria-hidden="true" tabindex="-1"></a><span class="co">#   temporary workspaces that overlap in time.</span></span>
+<span id="lst-m4-c01-c03-5"><a href="#lst-m4-c01-c03-5" aria-hidden="true" tabindex="-1"></a><span class="co"># - A distributed wrapper adds gradient or sharded-state communication around the same local step.</span></span>
+<span id="lst-m4-c01-c03-6"><a href="#lst-m4-c01-c03-6" aria-hidden="true" tabindex="-1"></a><span class="co">#</span></span>
+<span id="lst-m4-c01-c03-7"><a href="#lst-m4-c01-c03-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c01-c03-8"><a href="#lst-m4-c01-c03-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="lst-m4-c01-c03-9"><a href="#lst-m4-c01-c03-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-10"><a href="#lst-m4-c01-c03-10" aria-hidden="true" tabindex="-1"></a>device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, <span class="dv">0</span>)</span>
+<span id="lst-m4-c01-c03-11"><a href="#lst-m4-c01-c03-11" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> model.to(device)</span>
+<span id="lst-m4-c01-c03-12"><a href="#lst-m4-c01-c03-12" aria-hidden="true" tabindex="-1"></a>loss_fn <span class="op">=</span> nn.CrossEntropyLoss()</span>
+<span id="lst-m4-c01-c03-13"><a href="#lst-m4-c01-c03-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-14"><a href="#lst-m4-c01-c03-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> batch <span class="kw">in</span> loader:</span>
+<span id="lst-m4-c01-c03-15"><a href="#lst-m4-c01-c03-15" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Pinned source buffers plus non_blocking copies can overlap input transfer with GPU work.</span></span>
+<span id="lst-m4-c01-c03-16"><a href="#lst-m4-c01-c03-16" aria-hidden="true" tabindex="-1"></a>    input_ids <span class="op">=</span> batch[<span class="st">"input_ids"</span>].to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c01-c03-17"><a href="#lst-m4-c01-c03-17" aria-hidden="true" tabindex="-1"></a>    labels <span class="op">=</span> batch[<span class="st">"labels"</span>].to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
 <span id="lst-m4-c01-c03-18"><a href="#lst-m4-c01-c03-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c03-19"><a href="#lst-m4-c01-c03-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Loss often reduces over batch, sequence, and vocabulary dimensions.</span></span>
-<span id="lst-m4-c01-c03-20"><a href="#lst-m4-c01-c03-20" aria-hidden="true" tabindex="-1"></a>    loss <span class="op">=</span> loss_fn(logits, labels)</span>
+<span id="lst-m4-c01-c03-19"><a href="#lst-m4-c01-c03-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Releasing old gradient storage avoids writing a full tensor of zeros each step.</span></span>
+<span id="lst-m4-c01-c03-20"><a href="#lst-m4-c01-c03-20" aria-hidden="true" tabindex="-1"></a>    optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span>
 <span id="lst-m4-c01-c03-21"><a href="#lst-m4-c01-c03-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c03-22"><a href="#lst-m4-c01-c03-22" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Backward reads saved activations, writes gradients, and may trigger distributed collectives.</span></span>
-<span id="lst-m4-c01-c03-23"><a href="#lst-m4-c01-c03-23" aria-hidden="true" tabindex="-1"></a>    loss.backward()</span>
+<span id="lst-m4-c01-c03-22"><a href="#lst-m4-c01-c03-22" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Forward execution reads parameters, creates activations, and may retain them for backward.</span></span>
+<span id="lst-m4-c01-c03-23"><a href="#lst-m4-c01-c03-23" aria-hidden="true" tabindex="-1"></a>    logits <span class="op">=</span> model(input_ids)</span>
 <span id="lst-m4-c01-c03-24"><a href="#lst-m4-c01-c03-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c01-c03-25"><a href="#lst-m4-c01-c03-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># The optimizer reads and writes parameters, gradients, and optimizer-state buffers.</span></span>
-<span id="lst-m4-c01-c03-26"><a href="#lst-m4-c01-c03-26" aria-hidden="true" tabindex="-1"></a>    optimizer.step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m4-c01-c03-25"><a href="#lst-m4-c01-c03-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Loss often reduces over batch, sequence, and vocabulary dimensions.</span></span>
+<span id="lst-m4-c01-c03-26"><a href="#lst-m4-c01-c03-26" aria-hidden="true" tabindex="-1"></a>    loss <span class="op">=</span> loss_fn(logits, labels)</span>
+<span id="lst-m4-c01-c03-27"><a href="#lst-m4-c01-c03-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-28"><a href="#lst-m4-c01-c03-28" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Backward reads saved activations, writes gradients, and may trigger distributed collectives.</span></span>
+<span id="lst-m4-c01-c03-29"><a href="#lst-m4-c01-c03-29" aria-hidden="true" tabindex="-1"></a>    loss.backward()</span>
+<span id="lst-m4-c01-c03-30"><a href="#lst-m4-c01-c03-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-31"><a href="#lst-m4-c01-c03-31" aria-hidden="true" tabindex="-1"></a>    <span class="co"># The optimizer reads and writes parameters, gradients, and optimizer-state buffers.</span></span>
+<span id="lst-m4-c01-c03-32"><a href="#lst-m4-c01-c03-32" aria-hidden="true" tabindex="-1"></a>    optimizer.step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>What the training step makes measurable</strong></p>
 <p><strong>Input transfer:</strong> The <code>.to(device, non_blocking=True)</code> calls are only asynchronous when the source path and stream dependencies permit it; pinned host memory is commonly needed for useful overlap.</p>
@@ -567,16 +556,22 @@ Figure&nbsp;1.1: Training and inference serving use shared parameters but keep d
 <p>Finding a bottleneck connects a measured phase and its live state to the software or hardware layer that controls the limiting resource. The result is a targeted change with a measurable end-to-end effect.</p>
 <section id="sec-m4-c01-s06" class="level3" data-number="1.5.1">
 <h3 data-number="1.5.1" class="anchored" data-anchor-id="sec-m4-c01-s06"><span class="header-section-number">1.5.1</span> Measurement workflow</h3>
-<p>Start with the slow phase and find the code, library, or setting that could change the work being measured. More than one change may help. For example, a compiler option can select a different GPU kernel, and a faster kernel can reduce both execution time and waiting in the request queue.</p>
+<p>The workflow starts from evidence and moves in a fixed order from the measured phase to the smallest responsible layer and change.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Layer that can fix it:</strong></span> The software or hardware layer that controls the decision causing the bottleneck. Examples include model code, PyTorch tensor/runtime behavior, compiler capture, kernel implementation, serving-engine scheduling, distributed communication, and hardware topology.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>What the measurement shows:</strong></span> Evidence from a benchmark, profiler trace, memory report, serving metric, or distributed log.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Targeted change:</strong></span> A change aimed at the layer that controls the bottleneck: shape change, kernel rewrite, compiler repair, CUDA Graph capture, cache policy, batching policy, quantization, sharding, or topology-aware placement.</li>
+</ul>
+<p>These three labels connect evidence to a change. The following sequence applies them in order, from defining the measured region to verifying the user-facing result.</p>
 <ol type="1">
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Identify the phase:</strong></span> Name the measured region: training forward, backward, optimizer step, prefill, decode, scheduler work, or distributed synchronization.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Name the live objects:</strong></span> List the parameters, activations, gradients, optimizer state, workspaces, KV cache, communication buffers, or metadata involved.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>State the metric:</strong></span> Choose the metric that defines success: step time, tokens per second, TTFT, TPOT, ITL, goodput, cost, memory headroom, or scaling efficiency.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measure the result:</strong></span> Use the appropriate evidence source: PyTorch Profiler, Nsight Systems, Nsight Compute, memory statistics, serving metrics, or NVIDIA Collective Communications Library (NCCL) logs.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measure the result:</strong></span> Use the appropriate evidence source: PyTorch Profiler, Nsight Systems, Nsight Compute, memory statistics, serving metrics, or NCCL logs.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Classify the bottleneck:</strong></span> Decide whether the region is compute-bound, memory-bound, launch-bound, scheduler-bound, communication-bound, or capacity-bound.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Identify a component you can change:</strong></span> Map the bottleneck to model structure, framework runtime, compiler/runtime, kernel library, serving scheduler, distributed backend, or hardware fabric.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Choose the change:</strong></span> State what measurement should change if the explanation is right. Pick the smallest change controlled by that layer, such as improving locality, changing precision, repairing graph breaks, paging KV cache, changing batch limits, or altering parallelism.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Verify correctness and end-to-end improvement:</strong></span> Compare that measurement and the end-to-end result. Check numerical correctness, model quality, cache correctness, and the user-facing metric. Accept the change when it preserves the required quality and improves the target service or training measurement.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Find the layer that can fix it:</strong></span> Map the bottleneck to model structure, framework runtime, compiler/runtime, kernel library, serving scheduler, distributed backend, or hardware fabric.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Choose the change:</strong></span> Pick the smallest change controlled by that layer, such as improving locality, changing precision, repairing graph breaks, paging KV cache, changing batch limits, or altering parallelism.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Verify correctness and end-to-end improvement:</strong></span> Check numerical correctness, model quality, cache correctness, and the user-facing metric. Accept the change when it preserves the required quality and improves the target service or training measurement.</li>
 </ol>
 <p>Later chapters specialize this same loop for matrix kernels, runtime capture, quantization, inference scheduling, and distributed communication.</p>
 </section>
@@ -607,7 +602,7 @@ Figure&nbsp;1.1: Training and inference serving use shared parameters but keep d
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Unexpected memory exhaustion:</strong></span> Separate model weights, activations, temporary workspaces, allocator reservation, KV-cache blocks, and fragmentation before assuming the checkpoint is too large.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Multi-GPU waiting:</strong></span> Inspect <code>torch.distributed</code>, NCCL logs, rank placement, process groups, collective timelines, and the physical fabric. Chapter 12 develops this layer in detail.</li>
 </ul>
-<p>For each proposed change, name the component that interprets it and trace the effect to the measured result. A Triton rewrite changes one kernel’s instructions and memory traffic. It does not set the serving scheduler’s admission policy, but a faster kernel can raise the service rate and thereby reduce later queueing under load. NCCL executes collectives chosen by the distributed strategy; an NCCL transport or scheduling change can shorten communication, but it does not choose which tensors the model shards. A serving engine controls admission and batching and may also change compiler, capture, or backend integration. It does not edit the model code that caused a graph break, but it can alter whether that path is compiled, captured, avoided, or replaced. Measure the changed kernel, collective, capture path, or queue as well as the end-to-end metric so the causal path is explicit.</p>
+<p>The playbook prevents the common failure mode of applying a correct tool to the wrong layer. A custom Triton kernel cannot fix scheduler queueing. NCCL cannot choose a sharding strategy. A serving engine cannot repair a graph break in local Python code unless its serving-engine execution backend avoids that code path.</p>
 <p>This workload view identifies what is slow and which component can change it, but it does not yet explain the device limits behind the symptom. Chapter 2 connects the live tensors and operations to GPU compute units, memory tiers, and interconnects.</p>
 
 

@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -474,6 +474,7 @@ window.Quarto = {
 <p>The equations introduced so far run on arrays stored in computer memory. Tensor layout, dtype, device, and autograd determine how the same mathematical operation behaves in PyTorch.</p>
 <p>The mathematical arrays used throughout the guide become tensors in code. Storage layout, views, devices, dtypes, autograd, and optimizer state explain why mathematically equivalent operations can have different memory and speed costs.</p>
 <p>In code, <code>torch.Tensor</code>, <code>dtype</code>, <code>device</code>, <code>view</code>, <code>reshape</code>, <code>transpose</code>, autograd, and <code>torch.optim</code> are the concrete APIs behind the mathematical objects already used in the guide.</p>
+<p>Chapter 23 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c23-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 23 opener for PyTorch mapping of the mathematics, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c23-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -484,6 +485,7 @@ Figure&nbsp;23.1: Tensor metadata, operations, autograd, and devices turn the gu
 </figcaption>
 </figure>
 </div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c23-s01" class="level2" data-number="23.1">
 <h2 data-number="23.1" class="anchored" data-anchor-id="sec-m2-c23-s01"><span class="header-section-number">23.1</span> Structuring Contiguous Tensor Memory and Strides for GPU Cache Locality</h2>
 <p>A PyTorch tensor combines numerical values with dimensions, dtype, device, storage layout, and optional gradient history.</p>
@@ -494,8 +496,8 @@ Figure&nbsp;23.1: Tensor metadata, operations, autograd, and devices turn the gu
 </ul>
 <p>Module 2 uses tensors first in PyTorch basics, then returns to them in embeddings, attention, and inference. A model bug is often a tensor-dimension bug: the wrong rank, the wrong device, or an unintended dtype.</p>
 <p>The most useful habit is to name axes in prose before writing code. For example, logits in a language model commonly have dimensions [batch, sequence, vocabulary].</p>
-<p>A PyTorch tensor describes a multidimensional array over storage that may live in CPU memory or GPU memory. Its dimensions, strides, and storage offset determine how logical coordinates map to stored values. Some view and transpose operations can share storage without copying; whether that is possible depends on the existing layout.</p>
-<p>Calling <code>.contiguous()</code> creates contiguous storage when the tensor is not already contiguous. This copy is useful only when a later operation requires that layout or runs enough faster to repay the allocation cost.</p>
+<p>A PyTorch tensor represents continuous memory in GPU VRAM defined by dimension and stride tuples. View and transpose operations modify strides without copying data.</p>
+<p>Calling .contiguous() reallocates memory to match logical layout when non-contiguous strides would impede fused CUDA kernel execution.</p>
 <p>The number of stored values in a dense tensor is the product of its dimension sizes.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Tensor element count:</strong></span></p>
 <p><span id="eq-m2-c23-e01"><span class="math display">\[
@@ -520,7 +522,6 @@ Figure&nbsp;23.1: Tensor metadata, operations, autograd, and devices turn the gu
 <p><strong>Example: Tensor storage bytes</strong></p>
 <p>For dimensions 2 x 3 x 4 with float32 values, <span class="math inline">\(storage = 24\)</span>·4 = 96 bytes.</p>
 </div>
-<p>The code creates a random tensor with dimensions [batch, sequence, hidden] and prints its dimensions, dtype, and device. The values are unimportant; the output establishes the metadata needed before later operations.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> PyTorch tensors carry dimensions, dtype, and device metadata.</p>
 </div>
@@ -544,12 +545,12 @@ Figure&nbsp;23.1: Tensor metadata, operations, autograd, and devices turn the gu
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Vocabulary axis:</strong></span> The axis of token scores in a language model output.</li>
 </ul>
 <p>A linear layer maps the last dimension by multiplying with a weight matrix. A classifier may map [batch, hidden] to [batch, classes]. A decoder language model maps [batch, sequence, hidden] to [batch, sequence, vocabulary].</p>
-<p>Attention adds a head axis. Common internal dimensions are [batch, heads, sequence, <span class="math inline">\(d_h\)</span>], where the number of heads times the per-head width <span class="math inline">\(d_h\)</span> equals the model width.</p>
+<p>Attention adds an additional head axis. Common internal dimensions are [batch, heads, sequence, <span class="math inline">\(head_{dim}\)</span>], where heads · <span class="math inline">\(head_{dim}\)</span> equals the model width.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Linear layer dimensions:</strong></span></p>
 <p><span id="eq-m2-c23-e03"><span class="math display">\[
-X\in\mathbb{R}^{B\times D_{\mathrm{in}}},\quad W\in\mathbb{R}^{D_{\mathrm{in}}\times D_{\mathrm{out}}},\quad Y=XW+b\in\mathbb{R}^{B\times D_{\mathrm{out}}}
+X\,[B,D_{\mathrm{in}}]\mathbin{@}W\,[D_{\mathrm{in}},D_{\mathrm{out}}]+b\,[D_{\mathrm{out}}]\to Y\,[B,D_{\mathrm{out}}]
 \tag{23.3}\]</span></span></p>
-<p>Here, <span class="math inline">\(X\in\mathbb{R}^{B\times D_{\mathrm{in}}}\)</span> is the batch input, <span class="math inline">\(W\in\mathbb{R}^{D_{\mathrm{in}}\times D_{\mathrm{out}}}\)</span> is the mathematical weight matrix, <span class="math inline">\(b\in\mathbb{R}^{D_{\mathrm{out}}}\)</span> is broadcast across rows, and <span class="math inline">\(Y\in\mathbb{R}^{B\times D_{\mathrm{out}}}\)</span> is the output. PyTorch <code>nn.Linear</code> stores the same weights with dimensions [<span class="math inline">\(D_{\mathrm{out}}\)</span>,<span class="math inline">\(D_{\mathrm{in}}\)</span>] and therefore evaluates <span class="math inline">\(XW^{T}+b\)</span>.</p>
+<p>where X is batch input matrix; W is linear-layer weight matrix; b is output bias.</p>
 <p>The inner dimensions contract in matrix multiplication, leaving one output row per example and one column per output unit.</p>
 <p>Dimension agreement is a mathematical precondition for the corresponding PyTorch operation.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
@@ -570,12 +571,14 @@ X\in\mathbb{R}^{B\times D_{\mathrm{in}}},\quad W\in\mathbb{R}^{D_{\mathrm{in}}\t
 <p>The PyTorch notebooks emphasize basic creation, reshaping, and GPU movement. In LLM work, the same ideas scale up: embeddings, activations, attention scores, and KV cache blocks all have concrete storage and placement.</p>
 <p>Moving a tensor to the GPU preserves the values and changes where the bytes live. The values are the same, but latency, memory limits, and valid operations change.</p>
 <p>Moving a tensor from CPU to a CUDA GPU changes where its values and any following computation reside. A CPU input cannot be multiplied with a GPU parameter matrix, and a CUDA tensor cannot be passed directly to a CPU-only NumPy operation. Checking <code>tensor.device</code> beside dimensions and dtype makes this placement explicit before a matrix operation fails or forces an unintended copy.</p>
+<p>Distributed training keeps a replica or a partition of model state on more than one accelerator. In data-parallel training, each GPU processes a different mini-batch. A communication step averages gradients across devices before each replica updates its weights. The mathematical gradient is still the average over the enlarged batch, but synchronization adds communication time and makes the parameter update depend on every participating device.</p>
+<p>Mixed precision stores or computes selected tensors in lower precision to reduce memory traffic and increase throughput. It does not remove the need to preserve numerically sensitive operations: reductions, loss scaling, normalization statistics, and optimizer state may use a higher-precision representation. The dtype attached to each tensor is therefore part of the numerical method, not merely a storage preference.</p>
 <p>A view can read the same storage with different dimensions and stride rule.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Strided address:</strong></span></p>
 <p><span id="eq-m2-c23-e04"><span class="math display">\[
-\operatorname{offset}(i,j)=i s_0+j s_1
+\operatorname{offset}(i,j)=i\cdot\mathrm{stride}_0+j\cdot\mathrm{stride}_1
 \tag{23.4}\]</span></span></p>
-<p>Here, <span class="math inline">\(s_0\)</span> and <span class="math inline">\(s_1\)</span> are the storage jumps for the two axes, measured in elements.</p>
+<p>where <span class="math inline">\(stride_{0}\)</span>,<span class="math inline">\(stride_{1}\)</span> is storage jumps for the two axes.</p>
 <p>The logical coordinate is converted into a storage offset using strides.</p>
 <p>A transpose can change strides without copying values.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
@@ -601,7 +604,7 @@ X\in\mathbb{R}^{B\times D_{\mathrm{in}}},\quad W\in\mathbb{R}^{D_{\mathrm{in}}\t
 <p>At inference time, parameters and some activations are still needed, but gradients and optimizer state usually disappear. During training, activations may be retained so the backward pass can compute gradients.</p>
 <p>Embeddings, logits, loss, and KV cache are also tensors, but they play different roles. An embedding is a learned lookup table, logits are unnormalized scores, loss is a scalar objective, and KV cache stores reusable attention keys and values during decoding.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Computation map</strong></span></p>
-<p>Training starts with persistent parameters. The forward pass creates activations, the backward pass uses those activations to fill parameter-gradient buffers, and Adam keeps first- and second-moment buffers for the update. Inference uses the parameters and request-specific state such as activations or a key-value cache, but it normally does not keep gradients or optimizer state.</p>
+<p>The computation starts with persistent and produces serving state through the intermediate objects shown below.</p>
 <div id="fig-m2-c23-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Native computation diagram: Training retains gradients and optimizer state; inference retains request-specific serving state instead.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c23-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -612,21 +615,21 @@ Figure&nbsp;23.2: Training retains gradients and optimizer state; inference reta
 </figcaption>
 </figure>
 </div>
-<p>The figure separates storage by lifetime: parameters persist across requests, training-only tensors survive until an update, and serving state survives only for the active request or cached prefix.</p>
+<p>The output of persistent is the input required by serving state; the intermediate stages name the stored objects that make the transition possible.</p>
 <p>PyTorch stores a parameter gradient in a tensor with the same dimensions as the parameter.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient buffer dimensions:</strong></span></p>
 <p><span id="eq-m2-c23-e05"><span class="math display">\[
-\operatorname{shape}(G_{\theta})=\operatorname{shape}(\theta)
+\operatorname{dims}(\mathrm{param.grad})=\operatorname{dims}(\mathrm{param})
 \tag{23.5}\]</span></span></p>
-<p>Here, <span class="math inline">\(\theta\)</span> is a trainable parameter tensor and <span class="math inline">\(G_{\theta}\)</span> is its accumulated gradient buffer. Each entry of <span class="math inline">\(G_{\theta}\)</span> stores the derivative of the scalar loss with respect to the matching entry of <span class="math inline">\(\theta\)</span>.</p>
+<p>where param is trainable parameter tensor; param.grad is accumulated gradient buffer.</p>
 <p>Each parameter value needs one derivative of the scalar loss with respect to that value.</p>
 <p>The optimizer can update parameters coordinate by coordinate because dimensions match.</p>
 <p>Adam stores two moving-average tensors for each parameter tensor.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Adam state tensors:</strong></span></p>
 <p><span id="eq-m2-c23-e06"><span class="math display">\[
-\operatorname{state}_{\mathrm{Adam}}(\theta)=\{m_{\theta},v_{\theta}\},\quad\operatorname{shape}(m_{\theta})=\operatorname{shape}(v_{\theta})=\operatorname{shape}(\theta)
+\operatorname{state}_{\mathrm{Adam}}(\mathrm{param})=\{m,v\},\quad\operatorname{dims}(m)=\operatorname{dims}(v)=\operatorname{dims}(\mathrm{param})
 \tag{23.6}\]</span></span></p>
-<p>Here, <span class="math inline">\(m_{\theta}\)</span> and <span class="math inline">\(v_{\theta}\)</span> are Adam’s first- and second-moment buffers for parameter tensor <span class="math inline">\(\theta\)</span>.</p>
+<p>where m is first-moment buffer; v is second-moment buffer.</p>
 <p>Adam tracks a mean-like and square-mean-like statistic for every parameter coordinate.</p>
 <p>Optimizer state can exceed the parameter memory during training.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
@@ -635,7 +638,7 @@ Figure&nbsp;23.2: Training retains gradients and optimizer state; inference reta
 </div>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Adam state tensors</strong></p>
-<p>One million float32 parameter values occupy 4 MB. A float32 gradient adds 4 MB, and Adam’s two float32 moment buffers add 8 MB, for 16 MB across these four arrays. Mixed-precision training may also keep a higher-precision parameter copy, so the complete training allocation can be larger.</p>
+<p>A parameter with 1M values needs 2M additional Adam state values.</p>
 </div>
 <p>Autograd and optimizer state provide the code-level form of the chain rule and parameter updates. Library APIs package those operations without changing the underlying mathematics.</p>
 </section>
@@ -659,7 +662,6 @@ Figure&nbsp;23.2: Training retains gradients and optimizer state; inference reta
 <p>The first device invariant is simple: model parameters, input tensors, and tensors created during the forward pass must be on compatible devices. Moving only the input to a GPU leaves a CPU model behind; moving only the model leaves CPU inputs behind. A device choice should therefore be made at the boundary where a batch enters the model and applied consistently to both objects.</p>
 <p>Data-parallel training repeats the forward and backward pass on separate mini-batches. Each device obtains a gradient for the same parameter names, then an all-reduce operation averages or sums the gradient tensors before the optimizer updates the replicas. It raises effective batch size and throughput when compute is the bottleneck, but communication can dominate when gradients are large or each local batch is too small.</p>
 <p>Mixed precision is most useful when activations and matrix multiplications consume substantial memory bandwidth. Lower-precision values reduce storage and can use specialized hardware, while selected reductions, optimizer state, and numerically sensitive calculations remain in a safer dtype. The practical check is not merely that a program runs, but that loss values, gradients, and evaluation behavior remain stable.</p>
-<p>The code selects an available device, moves both a linear model and its input batch there, and verifies that their devices match. Moving only one object would cause the linear operation to fail with a device mismatch.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Moving a model and its batch to one device</p>
 </div>
@@ -681,7 +683,7 @@ Figure&nbsp;23.2: Training retains gradients and optimizer state; inference reta
 <section id="sec-m2-c23-s07" class="level2" data-number="23.7">
 <h2 data-number="23.7" class="anchored" data-anchor-id="sec-m2-c23-s07"><span class="header-section-number">23.7</span> Tensor storage and autograd trace</h2>
 <p>A PyTorch tensor is a small object that describes a block of numerical storage. The numbers matter, but so do the metadata: dimensions, dtype, device, stride, storage offset, and autograd state. Most implementation bugs in later chapters are tensor-dimension bugs: the numbers might be reasonable, but the axes, dtype, or device are not what the operation expects.</p>
-<p>The useful habit is to inspect tensors as they move. After each operation, check whether the dimensions, dtype, device, or storage relationship changed and whether autograd attached a <code>grad_fn</code>. A leaf parameter can have <code>requires_grad=True</code> while <code>grad_fn</code> remains <code>None</code>; tensors produced by recorded differentiable operations usually point to the operation that created them.</p>
+<p>The useful habit is to inspect tensors as they move. After each operation, ask what changed: did the dimensions change, did the dtype change, did the tensor move between CPU and GPU, did it become a view, and did it acquire a <span class="math inline">\(\nabla_{fn}\)</span>? That is the practical object model behind the course notebooks.</p>
 <p>A tensor is both numerical data and metadata: dimensions, dtype, device, layout, and gradient tracking travel with the values.</p>
 <div id="fig-m2-c23-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram showing a PyTorch tensor as values plus dimensions, dtype, device, layout, grad function, gradient buffer, and optimizer state.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -706,11 +708,11 @@ Figure&nbsp;23.3: Values share a tensor with metadata that determines storage, e
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Strided access:</strong></span></p>
 <p><span id="eq-m2-c23-e07"><span class="math display">\[
-a(i,j)=a_0+i s_0+j s_1
+\mathrm{storage\,index}=\mathrm{storage\,offset}+i\cdot\mathrm{stride}_0+j\cdot\mathrm{stride}_1
 \tag{23.7}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Matrix multiplication dimension rule:</strong></span></p>
 <p><span id="eq-m2-c23-e08"><span class="math display">\[
-X\in\mathbb{R}^{B\times D},\quad W\in\mathbb{R}^{D\times H}\quad\to\quad XW\in\mathbb{R}^{B\times H}
+[B,D]\mathbin{@}[D,H]\to[B,H]
 \tag{23.8}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
 <p>These dimensions appear in the computation in order.</p>
@@ -719,7 +721,7 @@ X\in\mathbb{R}^{B\times D},\quad W\in\mathbb{R}^{D\times H}\quad\to\quad XW\in\m
 <li>Batch matrix: [B, D], B examples with D features.</li>
 <li>Token batch: [B, T], B tokenized sequences of length T.</li>
 <li>Embedding batch: [B, T, E], one E-dimensional vector per token.</li>
-<li>Mathematical parameter matrix: [<span class="math inline">\(D_{\mathrm{in}}\)</span>,<span class="math inline">\(D_{\mathrm{out}}\)</span>]. PyTorch <code>nn.Linear.weight</code> stores the transpose, [<span class="math inline">\(D_{\mathrm{out}}\)</span>,<span class="math inline">\(D_{\mathrm{in}}\)</span>].</li>
+<li>Parameter matrix: <span class="math inline">\([\mathrm{input\,features},\mathrm{output\,features}]\)</span>, or its framework-specific transpose.</li>
 </ul>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
 <ul>
@@ -727,6 +729,9 @@ X\in\mathbb{R}^{B\times D},\quad W\in\mathbb{R}^{D\times H}\quad\to\quad XW\in\m
 <li>Use <code>x.to(device)</code> consistently; CPU tensors and GPU tensors cannot participate in the same arithmetic operation.</li>
 <li>Do not assume reshape is free or that view can always work; layout determines whether a view is possible.</li>
 </ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>It should now be clear how to explain why two tensors with the same printed values can behave differently because of dtype, device, layout, or autograd metadata.</strong></p>
+</div>
 <p>PyTorch is the storage and execution layer for the mathematical objects already introduced.</p>
 <p>Notebook labs check the math, tensor dimensions, code paths, and performance consequences.</p>
 

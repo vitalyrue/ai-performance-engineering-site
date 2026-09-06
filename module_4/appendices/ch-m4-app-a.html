@@ -47,7 +47,7 @@ ul.task-list li input[type="checkbox"] {
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -330,6 +330,7 @@ window.Quarto = {
 </header>
 
 
+<p>Provide compact formulas, software controls, compatibility checks, practice checks, and source traceability.</p>
 <p>This appendix collects quantities and controls that are useful during implementation. The main chapters remain the source for mechanisms and trade-offs; the entries here provide a compact way to recover a formula, locate the software component that exposes a setting, or trace a topic to the course material that introduced it.</p>
 <section id="sec-m4-app-a-s01" class="level2" data-number="A.1">
 <h2 data-number="A.1" class="anchored" data-anchor-id="sec-m4-app-a-s01"><span class="header-section-number">A.1</span> Core formulas</h2>
@@ -368,10 +369,10 @@ window.Quarto = {
 \text{training activation bytes} \approx B \times T \times d \times L \times k_{\text{act}} \times \text{bytes}_{\text{per element}}
 \tag{A.11}\]</span></span></p>
 <p><span id="eq-m4-app-a-e12"><span class="math display">\[
-\text{expected speculative advance} = \sum_{i=0}^{\gamma} \alpha^i
+\text{expected speculative advance} = \frac{1 - \alpha^{\gamma + 1}}{1 - \alpha}
 \tag{A.12}\]</span></span></p>
 <p><span id="eq-m4-app-a-e13"><span class="math display">\[
-\text{speculative speedup estimate} = \frac{\sum_{i=0}^{\gamma} \alpha^i}{\gamma c + 1}
+\text{speculative speedup estimate} = \frac{1 - \alpha^{\gamma + 1}}{(1 - \alpha)(\gamma c + 1)}
 \tag{A.13}\]</span></span></p>
 <p>The symbols below use the same meanings and units as their first derivations in the main chapters.</p>
 <div id="tbl-m4-app-a-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -474,8 +475,8 @@ Table&nbsp;A.1: Formula symbols, units, and first derivations.
 </div>
 </figure>
 </div>
-<p>The pipeline expression is a balanced GPipe-style fill/drain estimate. The activation expression uses <span class="math inline">\(k_{\text{act}}\)</span> as an architecture- and implementation-dependent count of saved activation-sized tensors per layer. The speculative expressions assume constant independent acceptance and a simple sequential draft-cost model, with <span class="math inline">\(0 \leq \alpha \leq 1\)</span> and <span class="math inline">\(c \geq 0\)</span>. Writing the geometric series as a finite sum also covers perfect acceptance: at <span class="math inline">\(\alpha=1\)</span>, expected advance is <span class="math inline">\(\gamma+1\)</span> tokens and estimated speedup is <span class="math inline">\((\gamma+1)/(\gamma c+1)\)</span>. Return to the corresponding chapters before using any of them for capacity or performance decisions.</p>
-<p>Each formula answers a limited question. The roofline estimate compares arithmetic work with memory traffic; the KV-cache formula estimates storage; and the latency and communication formulas estimate time for the stated workload. None accounts for every delay in a running system. Use profiles to check for waiting between launches, competing work, and transfers that overlap with computation.</p>
+<p>The pipeline expression is a balanced GPipe-style fill/drain estimate. The activation expression uses k_act as an architecture- and implementation-dependent count of saved activation-sized tensors per layer. The speculative expressions assume constant independent acceptance and a simple sequential draft-cost model. Return to the corresponding chapters before using any of them for capacity or performance decisions.</p>
+<p>The formulas separate useful questions rather than producing a complete performance prediction. Roofline bounds local arithmetic and HBM traffic; the KV estimate checks capacity; latency models expose repeated decode cost; communication models estimate remote data movement. Profiling is still required to measure cache effects, launch gaps, overlap, fragmentation, contention, and rank skew.</p>
 </section>
 <section id="sec-m4-app-a-s02" class="level2" data-number="A.2">
 <h2 data-number="A.2" class="anchored" data-anchor-id="sec-m4-app-a-s02"><span class="header-section-number">A.2</span> Software layers and controls</h2>
@@ -522,7 +523,7 @@ Table&nbsp;A.1: Formula symbols, units, and first derivations.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong><code>NCCL_IB_DISABLE</code>:</strong></span> Disables InfiniBand/RDMA paths for a controlled fallback comparison.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong><code>NCCL_P2P_DISABLE</code>:</strong></span> Disables direct peer-to-peer GPU paths for a controlled topology comparison.</li>
 </ul></li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measurement layer:</strong></span> Choose the profiler according to what you need to inspect: PyTorch operations, gaps in the CPU/GPU timeline, or the instructions and memory accesses of one kernel. The tools below provide these different views; Perfetto is a viewer for exported traces.
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measurement layer:</strong></span> Profilers answer different questions and should be selected by evidence depth.
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch Profiler:</strong></span> Maps framework operations to CPU and CUDA activity and can export a trace.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Nsight Systems:</strong></span> Shows process, CUDA, copy, kernel, and collective timing on a system timeline.</li>
@@ -534,7 +535,7 @@ Table&nbsp;A.1: Formula symbols, units, and first derivations.
 </section>
 <section id="sec-m4-app-a-s03" class="level2" data-number="A.3">
 <h2 data-number="A.3" class="anchored" data-anchor-id="sec-m4-app-a-s03"><span class="header-section-number">A.3</span> Compatibility checks</h2>
-<p>A package can install successfully and the program can run without using the optimized kernel you expected. Check which attention kernel, compiled region or communication path actually ran. The runtime may have selected a slower supported alternative.</p>
+<p>Compatibility is an execution-path question, not only an installation question. A program may run while silently selecting a slower kernel, a different attention backend, a host-staged communication path, or an eager fallback around a graph break.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Hardware and driver:</strong></span> Record the GPU model, memory capacity, driver, framework-visible CUDA runtime, and interconnect topology.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Framework and kernel stack:</strong></span> Record PyTorch, Triton, attention backend, Transformers, quantization library, and serving-engine versions.</li>
@@ -550,14 +551,14 @@ Table&nbsp;A.1: Formula symbols, units, and first derivations.
 <p>The twelve questions below mix numerical estimates, conceptual explanations, and code reading. Work each problem without the answer key, state assumptions and units, and name the measurement that would confirm the result.</p>
 <ol type="1">
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P1 KV-cache budget:</strong></span> For 4 active sequences, 2,048 stored tokens, 32 layers, 8 key-value heads, head dimension 128, and 2-byte elements, compute the raw KV-cache size in GiB.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>P2 Model-scale units:</strong></span> Using the Llama 3.3 70B configuration in Section 8.6, compare one sequence at 32,000 tokens with one sequence at 32,768 tokens. Report both cache sizes in GiB. Explain why writing only “32K tokens” can make the estimate ambiguous, and distinguish GB from GiB.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>P2 Model-scale units:</strong></span> Using the Llama 3.3 70B configuration in Section 8.6, compare one sequence at 32,000 tokens with one sequence at 32,768 tokens. Explain why the values should not be reported with the same unit label.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P3 Roofline:</strong></span> A kernel performs 2e12 FLOPs, moves 1e12 bytes, and runs in 0.020 seconds on a device rated at 200 TFLOP/s and 3 TB/s. Compute arithmetic intensity, the memory ceiling, and achieved throughput; then explain the result.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P4 Ring all-reduce:</strong></span> Eight ranks run ring all-reduce on a 1 GiB tensor. Use the first-order traffic formula to estimate bytes transferred per rank, then list two reasons a trace can differ from the estimate.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P5 Pipeline bubble:</strong></span> A pipeline has four stages and eight micro-batches. Use the bubble-fraction formula to estimate the idle fraction before considering load imbalance or communication.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P6 Prefill and decode:</strong></span> Explain why transformer projections can be GEMM-like during prefill and GEMV-like during small-batch decode. Name one metric that may improve and one that may worsen when batching increases.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P7 FlashAttention:</strong></span> State the mathematical result FlashAttention preserves, the intermediate it avoids materializing in HBM, and the performance resource it targets. Name one serving concern it does not solve.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P8 PagedAttention:</strong></span> A request maps logical KV blocks [0, 1, 2] to physical blocks [7, 2, 15]. Explain what remains ordered, what becomes non-contiguous, and why this helps admission capacity.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>P9 Software ownership:</strong></span> For each setting, identify the component that interprets it and describe the work or data it can change: <code>torch.compile(...)</code>, <code>--kv-cache-dtype</code>, <code>tl.load(..., cache_modifier=...)</code>, and <code>NCCL_DEBUG=INFO</code>.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>P9 Software ownership:</strong></span> Assign each setting to its controlling layer: <code>torch.compile(...)</code>, <code>--kv-cache-dtype</code>, <code>tl.load(..., cache_modifier=...)</code>, and <code>NCCL_DEBUG=INFO</code>. Explain why a setting cannot change behavior outside that layer.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P10 Speculative decoding:</strong></span> Give two conditions that can reduce latency and two conditions that can erase the gain. Include target-model verification and rejected-token correction.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P11 Triton GEMV:</strong></span> In the GEMV template, explain what <code>tl.program_id(0)</code>, the masked <code>tl.load</code>, the reduction, and <code>tl.store</code> each control. Identify one layout or tile choice that could make the kernel slower.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P12 Distributed Data Parallel:</strong></span> In the DDP template, explain the roles of <code>DistributedSampler</code>, <code>loss.backward()</code>, and NCCL. Identify one single-GPU cause and one cross-rank cause of a slow step.</li>
@@ -576,7 +577,7 @@ Table&nbsp;A.1: Formula symbols, units, and first derivations.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P6 Prefill and decode:</strong></span> Prefill exposes many token positions and reuses weights across larger matrix operations, so it can raise compute use and mainly affects TTFT. Small-batch decode adds one token per request while rereading weights and KV history; batching can improve throughput while increasing queueing or TPOT.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P7 FlashAttention:</strong></span> It preserves the attention result while avoiding a full quadratic score or probability matrix in HBM. It reduces off-chip memory traffic; it does not allocate KV blocks, admit requests, or choose a serving schedule.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P8 PagedAttention:</strong></span> Logical token order remains [0, 1, 2], while physical blocks can be [7, 2, 15]. On-demand fixed-size allocation reduces reserved waste and fragmentation at the cost of block-table lookup and scheduler/kernel complexity.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>P9 Software ownership:</strong></span> <code>torch.compile(...)</code> belongs to the PyTorch compiler/runtime; <code>--kv-cache-dtype</code> to the serving engine; <code>tl.load(..., cache_modifier=...)</code> to Triton kernel code; and <code>NCCL_DEBUG=INFO</code> to NCCL. A setting is interpreted by a specific component, but its effects may extend to other parts of the system. For example, a serving engine’s cache precision setting changes how many bytes the cache occupies and may change which attention kernel can run. Use logs or traces to confirm the actual effect rather than assuming it from the setting’s name.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>P9 Software ownership:</strong></span> <code>torch.compile(...)</code> belongs to the PyTorch compiler/runtime; <code>--kv-cache-dtype</code> to the serving engine; <code>tl.load(..., cache_modifier=...)</code> to Triton kernel code; and <code>NCCL_DEBUG=INFO</code> to NCCL. A component cannot react to a setting it never reads.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P10 Speculative decoding:</strong></span> It helps when the draft is cheap, acceptance is high, and target verification is efficient. Low acceptance, a costly draft, a saturated target batch, or rollback, cache, sampling, and scheduling overhead can erase the gain.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P11 Triton GEMV:</strong></span> The program ID selects an output row, masked loads protect the final partial tile, the reduction accumulates the row dot product, and the store writes one output. Poor coalescing, oversized tiles, register spilling, or too little parallelism can slow it down.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>P12 Distributed Data Parallel:</strong></span> The sampler partitions input across ranks, backward makes gradients ready, and NCCL performs the collective reduction. A slow local kernel is a single-GPU cause; topology contention, rank skew, or exposed all-reduce time are cross-rank causes.</li>
@@ -584,7 +585,7 @@ Table&nbsp;A.1: Formula symbols, units, and first derivations.
 </section>
 <section id="sec-m4-app-a-s06" class="level2" data-number="A.6">
 <h2 data-number="A.6" class="anchored" data-anchor-id="sec-m4-app-a-s06"><span class="header-section-number">A.6</span> Source map</h2>
-<p>The source map records where lecture, summary, notebook, and externally researched material contributes to the guide. A source unit is a notebook cell, a PDF page, a paragraph in a summary, or a whole document where the source has not been divided further. Notebook exercises are integrated into the chapters that teach roofline reasoning, decode and cache behavior, compilation, CUDA Graphs, and experimental practice rather than being isolated as homework appendices.</p>
+<p>The source map records where lecture, summary, notebook, and externally researched material contributes to the guide. Notebook exercises are integrated into the chapters that teach roofline reasoning, decode and cache behavior, compilation, CUDA Graphs, and experimental practice rather than being isolated as homework appendices.</p>
 <div id="tbl-m4-app-a-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-app-a-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -610,127 +611,127 @@ Table&nbsp;A.2: Source files, mapped unit ranges, coverage status, and guide loc
 <tr class="odd">
 <td>[Py4DP-L3] [Optional] PyTorch on GPU.ipynb</td>
 <td>cell 1-58 (58 mapped)</td>
-<td>58 cells combined into the explanation</td>
+<td>intentional-consolidation: 58</td>
 <td>3.1</td>
 </tr>
 <tr class="even">
 <td>[Py4DP-L3] Gradients &amp; Logistic regression in PyTorch.ipynb</td>
 <td>cell 1-56 (56 mapped)</td>
-<td>56 cells combined into the explanation</td>
+<td>intentional-consolidation: 56</td>
 <td>1.4</td>
 </tr>
 <tr class="odd">
 <td>[Py4DP-L3] PyTorch basics.ipynb</td>
 <td>cell 1-78 (78 mapped)</td>
-<td>78 cells combined into the explanation</td>
+<td>intentional-consolidation: 78</td>
 <td>1.1</td>
 </tr>
 <tr class="even">
 <td>04 _ Performance Engineering - Week 01 _ Systems, GPUs &amp; Networking - Summary.docx</td>
 <td>unit 1-82 (74 mapped)</td>
-<td>70 units covered; 4 omitted</td>
+<td>covered: 70; intentional-omission: 4</td>
 <td>1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.2, 3.3, 3.5, 3.6, 5.1, 5.2, 5.3, 5.4, 5.4.3, 5.5, 8.2, 8.3, 11.1, 11.1.6, 12.3, 12.5, 12.12</td>
 </tr>
 <tr class="odd">
 <td>04 _ Performance Engineering - Week 02 _ Efficient Inference- Architecture, Quantization &amp; Compilers - Summary.docx</td>
 <td>unit 1-57 (53 mapped)</td>
-<td>51 units covered; 2 omitted</td>
+<td>covered: 51; intentional-omission: 2</td>
 <td>1.5, 8.2, 8.3, 8.6, 9.4, 9.5, 10.2, 10.2.1, 10.2.2</td>
 </tr>
 <tr class="even">
 <td>hw1_roofline.ipynb</td>
 <td>unit 1-18 (18 mapped)</td>
-<td>18 units covered</td>
+<td>covered: 18</td>
 <td>5.1, 5.2, 5.3, 5.4, 11.1, 11.2</td>
 </tr>
 <tr class="odd">
 <td>hw2_decode_optimization.ipynb</td>
 <td>unit 1-17 (17 mapped)</td>
-<td>17 units covered</td>
+<td>covered: 17</td>
 <td>9.1, 9.2, 9.3, 11.1, 11.2</td>
 </tr>
 <tr class="even">
 <td>hw3_compile_cuda_graphs.ipynb</td>
 <td>unit 1-21 (21 mapped)</td>
-<td>21 units covered</td>
+<td>covered: 21</td>
 <td>6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 11.1, 11.2</td>
 </tr>
 <tr class="odd">
 <td>lecture 1 - foundations of supervised training [Autosaved].pptx.pdf</td>
 <td>unit 1-35 (35 mapped)</td>
-<td>14 units covered; 21 omitted</td>
+<td>covered: 14; intentional-omission: 21</td>
 <td>1.3, 1.4, 8.5, 13.4</td>
 </tr>
 <tr class="even">
 <td>lecture 2 - Data Parallel Training (DDP) [Autosaved].pptx.pdf</td>
 <td>unit 1-41 (41 mapped)</td>
-<td>32 units covered; 9 omitted</td>
+<td>covered: 32; intentional-omission: 9</td>
 <td>11.1, 11.1.9, 12.6, 12.8, 12.9, 13.1, 13.2, 13.3</td>
 </tr>
 <tr class="odd">
 <td>lecture 3 - Modern Large-Model Training Techniques.pptx.pdf</td>
 <td>unit 1-61 (61 mapped)</td>
-<td>34 units covered; 27 omitted</td>
+<td>covered: 34; intentional-omission: 27</td>
 <td>2.7, 8.4, 8.5, 12.8, 13.4, 13.5, 13.5.1, 13.5.2</td>
 </tr>
 <tr class="even">
 <td>Performance Engineering - L1.pdf</td>
 <td>unit 1-89 (89 mapped)</td>
-<td>83 units covered; 6 omitted</td>
+<td>covered: 83; intentional-omission: 6</td>
 <td>1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.2, 3.3, 3.5, 3.6, 5.1, 5.2, 5.3, 5.4, 5.4.3, 5.5, 8.2, 8.3, 11.1, 11.1.6, 12.3, 12.5, 12.12</td>
 </tr>
 <tr class="odd">
 <td>Performance Engineering - L2-2.pptx.pdf</td>
 <td>unit 1-139 (139 mapped)</td>
-<td>133 units covered; 6 omitted</td>
+<td>covered: 133; intentional-omission: 6</td>
 <td>6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.7.2, 8.2, 8.3, 8.6, 9.4, 9.5, 9.6, 10.1, 10.2, 10.2.1, 10.2.2, 10.3, 10.4, 10.5, 10.5.1, 10.5.2, 10.5.3, 10.7, 10.8, 10.9, 12.2, 12.5, 13.6, A.2</td>
 </tr>
 <tr class="even">
 <td>Performance Engineering - L4.pdf</td>
 <td>unit 1-61 (61 mapped)</td>
-<td>56 units covered; 5 omitted</td>
+<td>covered: 56; intentional-omission: 5</td>
 <td>3.2, 3.5, 3.6, 3.7, 4.1, 4.1.1, 4.2, 4.3, 4.5, 4.6, 4.7, 5.4, 6.4, 11.2, 11.2.3, 11.2.5</td>
 </tr>
 <tr class="odd">
 <td>Performance Engineering - L6.pdf</td>
 <td>unit 1-81 (81 mapped)</td>
-<td>79 units covered; 2 omitted</td>
+<td>covered: 79; intentional-omission: 2</td>
 <td>7.4, 7.5, 7.6, 7.7, 9.6, 10.4, 10.5, 10.5.1, 10.5.2, 10.5.3, 10.7, 10.8, 10.9, 12.2, 12.5, 13.6</td>
 </tr>
 <tr class="even">
 <td>solution_1.1.ipynb</td>
 <td>unit 1-13 (13 mapped)</td>
-<td>11 units covered; 2 omitted</td>
+<td>covered: 11; intentional-omission: 2</td>
 <td>10.6, 10.6.1, 11.2, 11.2.10</td>
 </tr>
 <tr class="odd">
 <td>solution_1.4.ipynb</td>
 <td>unit 1-28 (28 mapped)</td>
-<td>27 units covered; 1 omitted</td>
+<td>covered: 27; intentional-omission: 1</td>
 <td>10.6, 10.6.1, 11.2, 11.2.10, 11.2.11</td>
 </tr>
 <tr class="even">
 <td>Speculative Decoding Paper Summary.docx</td>
 <td>unit 1-58 (54 mapped)</td>
-<td>45 units covered; 9 omitted</td>
+<td>covered: 45; intentional-omission: 9</td>
 <td>8.2, 9.1, 10.6, 10.6.1, 11.2, 11.2.10</td>
 </tr>
 <tr class="odd">
 <td>Speculative Decoding Workshop - Nebius Academy 260619.pptx.pdf</td>
 <td>unit 1-25 (25 mapped)</td>
-<td>9 units covered; 16 omitted</td>
+<td>covered: 9; intentional-omission: 16</td>
 <td>10.6, 10.6.1, 11.2, 11.2.10</td>
 </tr>
 <tr class="even">
 <td>workshop.ipynb</td>
 <td>unit 1-8 (8 mapped)</td>
-<td>7 units covered; 1 omitted</td>
+<td>covered: 7; intentional-omission: 1</td>
 <td>10.6, 10.6.1, 11.2, 11.2.10</td>
 </tr>
 <tr class="odd">
 <td>master_outline.txt</td>
 <td>document 1</td>
-<td>1 omitted</td>
+<td>intentional-omission: 1</td>
 <td>No mapped guide section; see source notes</td>
 </tr>
 </tbody>

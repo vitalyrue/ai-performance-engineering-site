@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -424,7 +424,7 @@ window.Quarto = {
 </header>
 
 
-<p>An application prepares a request, calls a model, checks the answer, and decides whether that answer may trigger an action. The model generates text in small pieces called <strong>tokens</strong>. At each step it predicts which token could come next; training changes the continuations it tends to produce. Following a request from text to tokens, through generation and back to application code, shows where instructions, training, and software checks each affect the result.</p>
+<p>An application does more than call a model. It puts information into the request, checks the answer, and decides whether the answer may trigger an action. Start by separating the model’s job from the application’s job. The model predicts the next token. Training changes the kinds of answers it tends to produce. Application code prepares the input and decides how to use the output. This chapter follows that path step by step: text becomes tokens, the model scores possible next tokens, alignment and chat formatting shape the reply, decoding picks a reply, and the application checks it.</p>
 <div id="fig-m1-c01-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A request moves from a shared model through alignment, request setup, decoding choices, and model selection.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m1-c01-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -438,12 +438,12 @@ Figure&nbsp;1.1: A request moves from a shared model through alignment, request 
 <p>Read the visual as a request path: the model predicts a continuation, while application code prepares the input, checks the response, and controls any external action.</p>
 <section id="sec-m1-c01-s01" class="level2" data-number="1.1">
 <h2 data-number="1.1" class="anchored" data-anchor-id="sec-m1-c01-s01"><span class="header-section-number">1.1</span> General language models can perform different text tasks</h2>
-<p>Many earlier language systems were trained for one job: one classifier might label reviews as positive or negative, while another system extracted names from documents. Adapting them to a different task usually required task-specific training data. A general language model can instead attempt different tasks using the same trained network, with the request specifying the task and, when useful, showing examples.</p>
-<p>A <strong>transformer</strong> is a neural-network design that processes relationships among tokens in a request. It made training large models on broad text practical. <strong>GPT-3</strong> is a large language model introduced in 2020. Its researchers tested tasks such as translation and question answering by changing the instructions and examples supplied as text, without retraining the model for each task. The results showed both useful task transfer and important failures; this flexibility still has to be tested on an application’s own inputs. <a href="https://arxiv.org/abs/2005.14165">Language Models are Few-Shot Learners</a></p>
+<p>A model does not understand a new task simply because we give the task a name. It produces patterns that its training and the current request make likely. Older language systems were usually built for one narrow job. A new job meant new training data and another training run. Large language models made one useful change: the same model can try many jobs when the request explains the job and shows examples. We still need to test whether it works for our particular inputs.</p>
+<p>Earlier systems were usually built for one job. For example, one system could label a review as positive or negative, while another could pull names from a document. Each system needed its own training data. A <strong>transformer</strong> is a neural-network design that can process relationships among many tokens in one request. Transformers made it practical to train one much larger model on broad text. GPT-3, released in 2020, showed the practical result: one pre-trained model could often try a new job when the request included an instruction and a few examples.</p>
 <p>A <strong>foundation model</strong> is trained on broad data before it is used for a particular product. A <strong>large language model (LLM)</strong> is a foundation model that reads and writes text tokens. The same LLM may classify, extract, summarize, translate, or generate code. It cannot, by itself, fetch current facts, remember earlier calls, decide whether a user has permission, or verify an important answer. Application code must do those jobs.</p>
 <ul>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>In-context learning:</strong></span> Changing what the model does by putting instructions or examples in this request. The model’s stored weights stay the same.</p></li>
-<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Parameter:</strong></span> A number learned during training and stored in the model; parameters are also called weights. During ordinary inference these numbers stay fixed. Training updates them, while loading a different saved model version, or checkpoint, replaces the set used for inference.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Parameter:</strong></span> A number learned during training and stored in the model. It remains unchanged until the application loads another saved model version, called a checkpoint.</p></li>
 </ul>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Product consequence</strong></p>
@@ -456,7 +456,7 @@ Figure&nbsp;1.1: A request moves from a shared model through alignment, request 
 <section id="sec-m1-c01-s02" class="level2" data-number="1.2">
 <h2 data-number="1.2" class="anchored" data-anchor-id="sec-m1-c01-s02"><span class="header-section-number">1.2</span> Tokens as model input</h2>
 <p>The text you type is not the form the model uses internally. The model does not receive a neat list of words or individual characters. Before inference, a <strong>tokenizer</strong> splits the request into pieces and gives each piece an identifying number. These pieces are <strong>tokens</strong>. Their count affects the cost of a request, the amount of text that fits, and common failures with code, spelling, and non-English text.</p>
-<p>Modern LLMs commonly use <strong>subword tokens</strong>: a common string may receive one token, while a rare word, punctuation, code, or non-English text may split into several. The same visible text can therefore produce different counts for different models.</p>
+<p>A <strong>tokenizer</strong> maps text to a sequence of token identifiers. Modern LLMs commonly use subword tokens: a common string may receive one token, while a rare word, punctuation, code, or non-English text may split into several. The same visible text can therefore produce different counts for different models.</p>
 <p>The token number is only an identifier. An embedding table turns it into a learned vector: a row of numbers the transformer can process. The transformer also receives position information, so it sees numeric representations of token pieces in an order, not a clean list of dictionary words. This is why exact character counts, spelling, and unusual separators can behave unexpectedly when the relevant characters sit inside a larger token.</p>
 <ul>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Vocabulary:</strong></span> The finite set of token identifiers a tokenizer and model share. Its entries may represent complete words, word fragments, punctuation, bytes, or other subword units.</p></li>
@@ -471,7 +471,7 @@ Figure&nbsp;1.1: A request moves from a shared model through alignment, request 
 <p><span id="eq-m1-c01-e01"><span class="math display">\[
 C=r_{in}N_{in}+r_{out}N_{out}
 \tag{1.1}\]</span></span></p>
-<p><span class="math inline">\(N_{\mathrm{in}}\)</span> and <span class="math inline">\(N_{\mathrm{out}}\)</span> are the input and output token counts. <span class="math inline">\(r_{\mathrm{in}}\)</span> and <span class="math inline">\(r_{\mathrm{out}}\)</span> are their respective prices per token, so <span class="math inline">\(C\)</span> is the charge for one call in the same currency. Divide a quoted price per million tokens by one million before using it as a rate in this formula. Multiply each count by its rate, then add the charges. Discounts, batch pricing, tool calls, evaluation calls, and infrastructure affect the cost of the full workflow.</p>
+<p><span class="math inline">\(N_{\mathrm{in}}\)</span> and <span class="math inline">\(N_{\mathrm{out}}\)</span> are the measured input and output token counts. <span class="math inline">\(r_{\mathrm{in}}\)</span> and <span class="math inline">\(r_{\mathrm{out}}\)</span> are the current rates for the chosen provider and model. Multiply each count by its own rate, then add the two charges. Discounts, batch pricing, tool calls, evaluation calls, and infrastructure add further costs to the full workflow.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation - token pricing at product scale</strong></p>
 <p>Assume one turn uses 1,800 input tokens and 300 output tokens. Input costs $0.20 per million tokens and output costs $0.80 per million tokens.</p>
@@ -480,21 +480,20 @@ C=r_{in}N_{in}+r_{out}N_{out}
 <li>Output cost per turn is 300 / 1,000,000 x $0.80 = $0.00024.</li>
 <li>Total cost per turn is $0.00060; one million turns cost about $600 before retries, retrieval, or tool calls.</li>
 </ol>
-<p><strong>Result:</strong> Output makes up about 14% of the tokens but contributes 40% of the token bill.</p>
+<p><strong>Result:</strong> Output is only one sixth of the tokens but contributes 40 percent of this example’s token bill.</p>
 <p><strong>Interpretation:</strong> Small per-turn numbers become material at product traffic. Measure the complete workflow because agent retries and judge calls multiply the model-call count.</p>
 </div>
 <p>Token counting tells us how much of a request fits and what it costs. It does not yet explain how those token pieces become an answer. The next section follows one generation step.</p>
 </section>
 <section id="sec-m1-c01-s03" class="level2" data-number="1.3">
 <h2 data-number="1.3" class="anchored" data-anchor-id="sec-m1-c01-s03"><span class="header-section-number">1.3</span> Generating an answer one token at a time</h2>
-<p>After tokenization, the model receives a sequence of token identifiers. The tokens already present form the <strong>prefix</strong>. At each generation step, the model computes one score, called a <strong>logit</strong>, for every token in its vocabulary. A logit can be positive or negative and has no fixed range.</p>
-<p>To turn these scores into next-token probabilities, <strong>softmax</strong> first raises the number e (approximately 2.718) to each score, producing a positive weight. It then divides each weight by the sum of all the weights. The resulting probabilities add up to 1 across the vocabulary: they describe the model’s prediction of which token comes next. For example, in a toy vocabulary with three tokens, scores of 2, 1, and 0 become probabilities of about 0.665, 0.245, and 0.090.</p>
-<p>The generation software then chooses a token: it can take the one with the highest probability or sample a token using those probabilities. This selection procedure is called a <strong>decoding strategy</strong>. The chosen token is added to the prefix, and the model computes scores for the next position. Generation stops at an end token, a specified stop sequence, or a limit set by the application.</p>
+<p>After tokenization, the model receives a sequence of token numbers. It must now turn the tokens already present into an answer. The existing tokens are called the <strong>prefix</strong>. The model scores possible next tokens one at a time. The decoder picks one, adds it to the prefix, and repeats until generation stops.</p>
+<p>At each generation step, the model looks at the current prefix. It computes one score for every token it could write next. This score is a <strong>logit</strong>. Softmax turns the scores into probabilities. A decoder picks or samples one token, adds it to the prefix, and starts the next step. Generation stops at an end token, a stop sequence, or an application limit.</p>
 <p>The probability assigned to a complete token sequence is the product of the conditional probabilities assigned at each position.</p>
 <p><span id="eq-m1-c01-e02"><span class="math display">\[
-P(x_{1:T} \mid c) = \prod_{t=1}^{T} P(x_t \mid c, x_{&lt;t})
+P(x_{1:T}) = \prod_{t=1}^{T} P(x_t \mid x_{&lt;t})
 \tag{1.2}\]</span></span></p>
-<p>Here, <span class="math inline">\(c\)</span> is the input context, <span class="math inline">\(T\)</span> is the number of generated tokens, <span class="math inline">\(x_t\)</span> is the token at position <span class="math inline">\(t\)</span>, and <span class="math inline">\(x_{&lt;t}\)</span> means the generated tokens before that position. The symbol <span class="math inline">\(\prod\)</span> means to multiply the terms for positions 1 through <span class="math inline">\(T\)</span>. Each term conditions on the same input context and all earlier generated tokens. Their product is the probability of that particular continuation under the model. It predicts text, not whether the resulting answer is true or useful.</p>
+<p>The sequence in the formula is the complete generated answer. Each term is the probability of one token after the tokens before it. Multiplying the terms gives the model’s score for the whole sequence. That score measures what the model expects to write, not whether the answer is true or useful.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation - probability of a three-token continuation</strong></p>
 <p>Suppose the model assigns probabilities 0.50, 0.40, and 0.25 to the selected tokens at three successive positions.</p>
@@ -632,7 +631,6 @@ Table&nbsp;1.1: Different components set or check API fields, and each field add
 </div>
 <p>An OpenAI-compatible client can send requests to a Nebius-hosted endpoint. Record the provider configuration, model identifier, token counts, and latency with the result. The endpoint and model below are dated examples; check current provider documentation before using them in production.</p>
 <p><strong>Code example 1.1 - a Nebius-compatible call records token usage and elapsed time.</strong></p>
-<p>This is an abbreviated Python client example using the <code>openai</code> package’s Chat Completions interface. It assumes <code>model_id</code>, <code>system_instructions</code>, and <code>user_request</code> are supplied by the application, and that the environment contains a valid credential. The result is a dictionary containing the returned text, token counts, and elapsed milliseconds. Authentication, rate-limit, timeout, and missing-usage errors must be handled by the caller before a record is accepted; no live provider call is required to understand the accounting pattern.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 1.1 - a Nebius-compatible call records token usage and elapsed time.</p>
 </div>
@@ -666,16 +664,16 @@ Table&nbsp;1.1: Different components set or check API fields, and each field add
 <span id="lst-m1-c01-c01-28"><a href="#lst-m1-c01-c01-28" aria-hidden="true" tabindex="-1"></a>    <span class="st">"latency_ms"</span>: <span class="dv">1000</span> <span class="op">*</span> (time.perf_counter() <span class="op">-</span> started),</span>
 <span id="lst-m1-c01-c01-29"><a href="#lst-m1-c01-c01-29" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Record <code>model_id</code>, endpoint configuration, prompt versions, and returned usage with each evaluation run. Before a build or release decision, check current official documentation for prices, model availability, usage-field meanings, retention behaviour, and rate limits.</p>
-<p>The example sets <code>temperature=0.2</code>. This changes how the system chooses from the model’s possible next tokens. The next section explains how that choice affects variation between answers.</p>
+<p>The example sets <code>temperature=0.2</code>. That is not a quality setting by itself; it changes how the system chooses from the model’s possible next tokens. The next section makes that choice explicit.</p>
 </section>
 <section id="sec-m1-c01-s06" class="level2" data-number="1.6">
 <h2 data-number="1.6" class="anchored" data-anchor-id="sec-m1-c01-s06"><span class="header-section-number">1.6</span> Token generation parameters</h2>
-<p>Section 1.3 followed logits through softmax to a selected token. Generation parameters adjust this process. <strong>Temperature</strong> changes how concentrated the probabilities are; <strong>top-k</strong> and <strong>top-p</strong> remove some candidates before sampling. The final selection rule then takes the most probable token or samples from the remaining distribution. These settings help explain why identical requests can produce different answers. Most chat APIs return the chosen text rather than the full score vector.</p>
+<p>Inside inference, the model computes a logit for every possible next token. A logit is an internal score, not a word shown to the user. Most chat APIs return the selected text, not these scores. The decoder uses these scores to choose one next token. That choice explains why identical requests can sometimes produce different outputs. Temperature changes how spread out the probabilities are. Top-k and top-p remove some candidate tokens. The final selection rule decides whether the run always picks the top candidate or samples from several candidates.</p>
 <p>Temperature divides logits before softmax. A smaller positive temperature makes the highest-scoring tokens more likely; a larger temperature spreads probability more widely. At temperature zero, runtimes normally use greedy or near-greedy selection rather than dividing by zero.</p>
 <p><span id="eq-m1-c01-e03"><span class="math display">\[
 p_i = \frac{\exp(z_i / \tau)}{\sum_{j=1}^{V} \exp(z_j / \tau)}
 \tag{1.3}\]</span></span></p>
-<p><span class="math inline">\(z_i\)</span> is the logit for vocabulary item <span class="math inline">\(i\)</span>; <span class="math inline">\(\tau\)</span> is the positive temperature; <span class="math inline">\(V\)</span> is vocabulary size; and <span class="math inline">\(p_i\)</span> is the resulting probability. The index <span class="math inline">\(j\)</span> runs over all vocabulary entries, and <span class="math inline">\(\exp(a)\)</span> means e raised to the power <span class="math inline">\(a\)</span>. Dividing the logits by temperature changes the ratios between the positive weights; dividing by their sum again makes the probabilities add up to one. This changes which continuations are likely, without adding evidence or verifying claims.</p>
+<p><span class="math inline">\(z_i\)</span> is the logit for vocabulary item <span class="math inline">\(i\)</span>; <span class="math inline">\(\tau\)</span> is the positive temperature; <span class="math inline">\(V\)</span> is vocabulary size; and <span class="math inline">\(p_i\)</span> is the resulting probability. Exponentiation turns score differences into positive ratios, and the denominator makes the probabilities sum to one. Temperature changes how much the decoder explores; it does not add missing evidence or make claims true.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation - temperature changes a two-token choice</strong></p>
 <p>Use logits 2 and 1 for two candidate tokens.</p>
@@ -686,7 +684,7 @@ p_i = \frac{\exp(z_i / \tau)}{\sum_{j=1}^{V} \exp(z_j / \tau)}
 <p><strong>Result:</strong> Lower temperature increases concentration on the already higher-scored token.</p>
 <p><strong>Interpretation:</strong> Extraction and routing often benefit from low variation, while ideation may benefit from sampling. Choose the setting from evaluation results on the task, not from a general preference for creativity or determinism.</p>
 </div>
-<p><strong>Top-k</strong> keeps the k highest-probability tokens before sampling. <strong>Top-p</strong> sorts tokens by probability and keeps the smallest leading set whose total reaches the chosen threshold. The remaining probabilities are then rescaled to sum to one. For probabilities 0.60, 0.25, 0.10, and 0.05, top-k with k = 2 keeps the first two; top-p with p = 0.90 needs the first three because 0.60 + 0.25 is only 0.85. Thus top-k fixes a count, while top-p adjusts the count to the distribution.</p>
+<p><strong>Top-k</strong> keeps the k highest-probability tokens before sampling. <strong>Top-p</strong> keeps the smallest set whose cumulative probability reaches a threshold. Both remove low-probability candidates, but their effective set size changes differently as the distribution becomes sharper or flatter.</p>
 <div id="fig-m1-c01-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Decoder controls reshape, truncate, and finally select from the same model score vector.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m1-c01-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -722,8 +720,9 @@ Figure&nbsp;1.7: Generation controls belong to the request and should be chosen 
 <li><strong>Economic fit:</strong> What is total workflow cost after retries, tool calls, retrieval, judge-model calls, and human review?</li>
 <li><strong>Reversibility:</strong> Can the application switch checkpoints without rewriting state, prompts, schemas, and evals?</li>
 </ul>
+<p>A model call predicts tokens from a supplied prefix. Application code builds that prefix, sets token-generation parameters, checks the result, and controls every external action. Chapter 2 starts from that boundary: it turns a task requirement into a prompt, examples, and an output shape the application can check repeatedly.</p>
+<p>Bring the checklist together in three groups. Capability asks whether the model does the required work. Operational fit asks whether it meets the latency, throughput, context, tool-support, deployment, and cost limits. Data and legal fit asks whether data handling, licensing, version changes, and result reproducibility are acceptable.</p>
 <p>A selection study keeps the task set and output specification fixed while it compares checkpoints under realistic request settings. Inspect error slices to learn whether a larger model reduces the need for prompt scaffolding. Also test whether retrieval or constrained decoding makes a smaller model adequate. Finally, compare the quality gain with the added latency and cost. The right answer depends on the application because an unsupported answer, a slow response, and a false tool action have different costs in different products.</p>
-<p>A model call predicts tokens from a supplied prefix. Application code builds that prefix, sets token-generation parameters, checks the result, and controls every external action. Chapter 2 develops the request itself: the task instructions, examples, and output shape the application can check repeatedly.</p>
 
 
 </section>

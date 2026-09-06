@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -475,6 +475,7 @@ window.Quarto = {
 <p>The calculations become reliable only when they can be reproduced in code. These labs expose the inputs, intermediate tensors, losses, gradients, and outputs of the main workflows.</p>
 <p>The course notebooks turn the preceding calculations into complete workflows: linear classification, text classification, attention, QLoRA, character-level recurrence, n-gram modeling, and vision-language inference.</p>
 <p>In code, each lab begins with the imports used by its source notebook, then adds <code>assert</code>, <code>torch.allclose</code>, plots, or printed tensor metadata to verify the computation.</p>
+<p>Chapter 24 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c24-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 24 opener for Worked labs and computation traces, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c24-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -485,38 +486,39 @@ Figure&nbsp;24.1: The course notebooks connect inputs, intermediate values, metr
 </figcaption>
 </figure>
 </div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c24-s01" class="level2" data-number="24.1">
 <h2 data-number="24.1" class="anchored" data-anchor-id="sec-m2-c24-s01"><span class="header-section-number">24.1</span> Lab: Building Logistic Regression and SGD from Scratch</h2>
-<p>This lab reproduces the two-feature classifier from the PyTorch notebook, verifies the decision boundary, and compares manual gradients with PyTorch autograd.</p>
+<p>Reproduce the two-feature classifier from the PyTorch notebook, verify the decision boundary, and compare manual and autograd gradients.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Trace:</strong></span> A step-by-step path from input object through computation to output, loss, gradient, or cache state.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Implementation mapping:</strong></span> The connection between mathematical notation, tensor dimensions, dtype, and code object.</li>
 </ul>
 <p>Start with two-feature examples so the forward pass can be checked by hand. Record the feature batch, logits, binary loss, gradients, and one SGD update before comparing the manual result with PyTorch autograd.</p>
 <p>Then vary learning rate or weight decay while keeping the data split fixed. The comparison should show how an update setting changes training loss and held-out classification errors.</p>
-<p>A binary logistic-regression lab should produce one scalar logit for each example in the batch.</p>
+<p>A causal-language-model lab should produce one vocabulary-logit vector per batch row and token position.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Lab logits dimensions:</strong></span></p>
 <p><span id="eq-m2-c24-e01"><span class="math display">\[
-X\in\mathbb{R}^{B\times D},\quad w\in\mathbb{R}^{D},\quad z=Xw+b\in\mathbb{R}^{B}
+\operatorname{dims}(\mathrm{logits})=[B,T,V]
 \tag{24.1}\]</span></span></p>
-<p>Here, <span class="math inline">\(X\in\mathbb{R}^{B\times D}\)</span> contains <span class="math inline">\(B\)</span> examples with <span class="math inline">\(D\)</span> features, <span class="math inline">\(w\in\mathbb{R}^{D}\)</span> and <span class="math inline">\(b\in\mathbb{R}\)</span> are trainable parameters, and <span class="math inline">\(z\in\mathbb{R}^{B}\)</span> contains one logit per example.</p>
-<p>Each row of <span class="math inline">\(X\)</span> contributes one affine score before the sigmoid or binary cross-entropy calculation.</p>
-<p>Checking these dimensions prevents accidental broadcasting between examples and features.</p>
-<p>The binary loss averages the positive- and negative-class log losses across the batch.</p>
+<p>where B is batch size; T is sequence length; V is vocabulary size.</p>
+<p>Every supervised token position is a multiclass prediction over the vocabulary.</p>
+<p>These dimensions should be checked before flattening logits for token cross-entropy.</p>
+<p>Notebook loss calculations should average only the token positions included by the mask.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Masked lab loss:</strong></span></p>
 <p><span id="eq-m2-c24-e02"><span class="math display">\[
-L=-\frac{1}{B}\sum_{i=1}^{B}\left[y_i\log p_i+(1-y_i)\log(1-p_i)\right],\quad p_i=\sigma(z_i)
+\mathrm{loss}=\frac{\sum_t\mathrm{mask}_t\,\mathrm{CE}_t}{\sum_t\mathrm{mask}_t}
 \tag{24.2}\]</span></span></p>
-<p>Here, <span class="math inline">\(y_i\in\{0,1\}\)</span> is the label for example <span class="math inline">\(i\)</span>, <span class="math inline">\(p_i=\sigma(z_i)\)</span> is its predicted positive-class probability, and <span class="math inline">\(B\)</span> is the batch size.</p>
-<p>Each example contributes the log loss for its observed class, and division by <span class="math inline">\(B\)</span> forms the batch mean.</p>
-<p>The stable PyTorch implementation computes this expression directly from logits with <code>binary_cross_entropy_with_logits</code>.</p>
+<p>where <span class="math inline">\(mask_{t}\)</span> is indicator that position t contributes to the loss; <span class="math inline">\(CE_{t}\)</span> is cross-entropy at position t.</p>
+<p>The numerator accumulates supervised losses and the denominator counts supervised positions.</p>
+<p>This is the arithmetic students should verify when padding or ignored labels are present.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Example: Logistic-regression dimensions</strong></p>
-<p>With <span class="math inline">\(B=2\)</span> examples and <span class="math inline">\(D=5\)</span> features, <span class="math inline">\(X\)</span> has dimensions <span class="math inline">\([2,5]\)</span>, <span class="math inline">\(w\)</span> has dimensions <span class="math inline">\([5]\)</span>, and <span class="math inline">\(z=Xw+b\)</span> has dimensions <span class="math inline">\([2]\)</span>.</p>
+<p><strong>Example: Lab logits dimensions</strong></p>
+<p>With <span class="math inline">\(B=2\)</span>, <span class="math inline">\(T=5\)</span>, and <span class="math inline">\(V=1000\)</span>, the logits have dimensions <span class="math inline">\([2,5,1000]\)</span>.</p>
 </div>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Example: Binary cross-entropy</strong></p>
-<p>For labels <span class="math inline">\(y=(1,0)\)</span> and probabilities <span class="math inline">\(p=(0.8,0.25)\)</span>, the mean loss is <span class="math inline">\([-\log 0.8-\log(1-0.25)]/2\approx0.255\)</span> nats.</p>
+<p><strong>Example: Masked lab loss</strong></p>
+<p>For CE values 1, 3, 9 and mask [1,1,0], the loss is <span class="math inline">\((1+3)/2=2\)</span>.</p>
 </div>
 <ul>
 <li>Train a binary linear classifier with BCE-with-logits or a multi-class classifier with cross-entropy.</li>
@@ -524,7 +526,6 @@ L=-\frac{1}{B}\sum_{i=1}^{B}\left[y_i\log p_i+(1-y_i)\log(1-p_i)\right],\quad p_
 <li>Verify that gradients are cleared between optimizer updates.</li>
 <li>Plot training loss beside one held-out metric and inspect one false positive and one false negative.</li>
 </ul>
-<p>The code takes a two-row feature matrix and binary labels, then produces logits, one scalar loss, and gradients for <span class="math inline">\(w\)</span> and <span class="math inline">\(b\)</span>. The assertions catch a missing batch axis or a gradient with the wrong dimensions.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Logistic-regression forward, loss, and backward checks</p>
 </div>
@@ -550,7 +551,7 @@ L=-\frac{1}{B}\sum_{i=1}^{B}\left[y_i\log p_i+(1-y_i)\log(1-p_i)\right],\quad p_
 </section>
 <section id="sec-m2-c24-s02" class="level2" data-number="24.2">
 <h2 data-number="24.2" class="anchored" data-anchor-id="sec-m2-c24-s02"><span class="header-section-number">24.2</span> Lab: End-to-End Text Classification and Evaluation Pipeline</h2>
-<p>This lab builds the assignment pipeline from news text through subword tokens and Word2Vec pooling to four-class multilayer-perceptron (MLP) logits and error analysis.</p>
+<p>Build the assignment pipeline from news text through subword tokens and Word2Vec pooling to four-class MLP logits and error analysis.</p>
 <p>This workflow carries one text dataset from raw examples to a held-out decision. Tokenization creates IDs, the embedding table creates token vectors, pooling creates one vector per document, and an MLP produces four class logits.</p>
 <p>Report both an intermediate representation and an evaluation result. Inspecting nearest neighbors may help diagnose embeddings, but the lab result is the classifier’s held-out predictions and error pattern.</p>
 <ul>
@@ -559,7 +560,6 @@ L=-\frac{1}{B}\sum_{i=1}^{B}\left[y_i\log p_i+(1-y_i)\log(1-p_i)\right],\quad p_
 <li>Train a four-class MLP head and record validation loss and F1 or accuracy.</li>
 <li>Inspect several incorrect predictions and connect each error to the tokenized input or representation.</li>
 </ul>
-<p>The abbreviated code accepts two batches of token vectors, mean-pools each document, and returns four class logits and a scalar cross-entropy loss. The real assignment must learn the vectors from the training split; fixed toy vectors only verify the dimensions and library calls.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Pooled token vectors and four-class MLP logits</p>
 </div>
@@ -586,7 +586,7 @@ L=-\frac{1}{B}\sum_{i=1}^{B}\left[y_i\log p_i+(1-y_i)\log(1-p_i)\right],\quad p_
 </section>
 <section id="sec-m2-c24-s03" class="level2" data-number="24.3">
 <h2 data-number="24.3" class="anchored" data-anchor-id="sec-m2-c24-s03"><span class="header-section-number">24.3</span> Lab: Tracing Scaled Dot-Product Attention and Causal Masks</h2>
-<p>This lab implements scaled dot-product attention, verifies row normalization, and shows how a changed token alters the attention matrix.</p>
+<p>Implement scaled dot-product attention, verify row normalization, and visualize how a changed token alters the attention matrix.</p>
 <p>Save four aligned arrays for one short sequence: unmasked scores, masked scores, row-wise softmax weights, and weighted value outputs. Label the query and key axes with token positions so a masked score cannot be mistaken for a usable attention weight.</p>
 <p>Run the calculation again after replacing one content token. Compare its input vector, projected query/key/value vectors, affected score row and column, and output context vectors. This separates a changed tensor value from an interpretation of a heatmap.</p>
 <p>An attention lab should match the hand-computed attention output and the library output.</p>
@@ -607,33 +607,27 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 <li>Check that every visible attention row sums to one.</li>
 <li>Compare the one-head arrays before extending the display to multiple heads.</li>
 </ul>
-<p>The code uses two query positions, applies a causal mask before softmax, and multiplies the resulting weights by two scalar values. It verifies the score and output dimensions, zero probability on the masked future position, and a row sum of one.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Scaled attention values and row-normalization checks</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c24-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c24-c03-1"><a href="#lst-m2-c24-c03-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
 <span id="lst-m2-c24-c03-2"><a href="#lst-m2-c24-c03-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c24-c03-3"><a href="#lst-m2-c24-c03-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Two query positions, two key positions, and scalar values.</span></span>
-<span id="lst-m2-c24-c03-4"><a href="#lst-m2-c24-c03-4" aria-hidden="true" tabindex="-1"></a>Q <span class="op">=</span> torch.tensor([[<span class="fl">1.0</span>, <span class="fl">0.0</span>], [<span class="fl">0.0</span>, <span class="fl">1.0</span>]])</span>
+<span id="lst-m2-c24-c03-3"><a href="#lst-m2-c24-c03-3" aria-hidden="true" tabindex="-1"></a><span class="co"># One query, two keys, and scalar values.</span></span>
+<span id="lst-m2-c24-c03-4"><a href="#lst-m2-c24-c03-4" aria-hidden="true" tabindex="-1"></a>Q <span class="op">=</span> torch.tensor([[<span class="fl">1.0</span>, <span class="fl">0.0</span>]])</span>
 <span id="lst-m2-c24-c03-5"><a href="#lst-m2-c24-c03-5" aria-hidden="true" tabindex="-1"></a>K <span class="op">=</span> torch.tensor([[<span class="fl">1.0</span>, <span class="fl">0.0</span>], [<span class="fl">0.0</span>, <span class="fl">1.0</span>]])</span>
 <span id="lst-m2-c24-c03-6"><a href="#lst-m2-c24-c03-6" aria-hidden="true" tabindex="-1"></a>V <span class="op">=</span> torch.tensor([[<span class="fl">2.0</span>], [<span class="fl">6.0</span>]])</span>
-<span id="lst-m2-c24-c03-7"><a href="#lst-m2-c24-c03-7" aria-hidden="true" tabindex="-1"></a>scale <span class="op">=</span> Q.shape[<span class="op">-</span><span class="dv">1</span>] <span class="op">**</span> <span class="fl">0.5</span></span>
-<span id="lst-m2-c24-c03-8"><a href="#lst-m2-c24-c03-8" aria-hidden="true" tabindex="-1"></a>scores <span class="op">=</span> Q <span class="op">@</span> K.T <span class="op">/</span> scale</span>
-<span id="lst-m2-c24-c03-9"><a href="#lst-m2-c24-c03-9" aria-hidden="true" tabindex="-1"></a>causal_mask <span class="op">=</span> torch.triu(torch.full_like(scores, <span class="bu">float</span>(<span class="st">"-inf"</span>)), diagonal<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="lst-m2-c24-c03-10"><a href="#lst-m2-c24-c03-10" aria-hidden="true" tabindex="-1"></a>masked_scores <span class="op">=</span> scores <span class="op">+</span> causal_mask</span>
-<span id="lst-m2-c24-c03-11"><a href="#lst-m2-c24-c03-11" aria-hidden="true" tabindex="-1"></a>weights <span class="op">=</span> torch.softmax(masked_scores, dim<span class="op">=-</span><span class="dv">1</span>)</span>
-<span id="lst-m2-c24-c03-12"><a href="#lst-m2-c24-c03-12" aria-hidden="true" tabindex="-1"></a>output <span class="op">=</span> weights <span class="op">@</span> V</span>
-<span id="lst-m2-c24-c03-13"><a href="#lst-m2-c24-c03-13" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> scores.shape <span class="op">==</span> (<span class="dv">2</span>, <span class="dv">2</span>)</span>
-<span id="lst-m2-c24-c03-14"><a href="#lst-m2-c24-c03-14" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> output.shape <span class="op">==</span> (<span class="dv">2</span>, <span class="dv">1</span>)</span>
-<span id="lst-m2-c24-c03-15"><a href="#lst-m2-c24-c03-15" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> weights[<span class="dv">0</span>, <span class="dv">1</span>].item() <span class="op">==</span> <span class="fl">0.0</span></span>
-<span id="lst-m2-c24-c03-16"><a href="#lst-m2-c24-c03-16" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> torch.allclose(weights.<span class="bu">sum</span>(dim<span class="op">=-</span><span class="dv">1</span>), torch.ones(<span class="dv">2</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m2-c24-c03-7"><a href="#lst-m2-c24-c03-7" aria-hidden="true" tabindex="-1"></a>scores <span class="op">=</span> Q <span class="op">@</span> K.T</span>
+<span id="lst-m2-c24-c03-8"><a href="#lst-m2-c24-c03-8" aria-hidden="true" tabindex="-1"></a>weights <span class="op">=</span> torch.softmax(scores, dim<span class="op">=-</span><span class="dv">1</span>)</span>
+<span id="lst-m2-c24-c03-9"><a href="#lst-m2-c24-c03-9" aria-hidden="true" tabindex="-1"></a>output <span class="op">=</span> weights <span class="op">@</span> V</span>
+<span id="lst-m2-c24-c03-10"><a href="#lst-m2-c24-c03-10" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> scores.shape <span class="op">==</span> (<span class="dv">1</span>, <span class="dv">2</span>)</span>
+<span id="lst-m2-c24-c03-11"><a href="#lst-m2-c24-c03-11" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> output.shape <span class="op">==</span> (<span class="dv">1</span>, <span class="dv">1</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The output dimensions and row sums verify the core attention calculation.</p>
 <p>A complete lab also plots the matrix and repeats the calculation after changing one token.</p>
 <p>The saved score, mask, weight, and context tensors make attention a calculation that can be checked position by position.</p>
 </section>
 <section id="sec-m2-c24-s04" class="level2" data-number="24.4">
 <h2 data-number="24.4" class="anchored" data-anchor-id="sec-m2-c24-s04"><span class="header-section-number">24.4</span> Lab: Executing QLoRA Fine-Tuning on a Transformer Checkpoint</h2>
-<p>This lab prepares instruction-answer examples, configures four-bit loading and Quantized Low-Rank Adaptation (QLoRA) adapters, and reports trainable parameters and evaluation changes.</p>
+<p>Prepare instruction-answer examples, configure four-bit loading and LoRA adapters, and report trainable parameters and evaluation changes.</p>
 <p>Use instruction-answer examples to inspect a four-bit base model with low-rank adapter matrices. The base weights remain frozen; the optimizer tracks only the adapter parameters and their state.</p>
 <p>A small run is sufficient when hardware is limited. The report should distinguish trainable parameter count, base-weight storage, training loss, and behavior on held-out prompts rather than treating a generated answer as the only result.</p>
 <ul>
@@ -642,7 +636,6 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 <li>Reconstruct one quantized value from a code and its stored scale.</li>
 <li>Compare the same prompt before and after adaptation, then note one overfitting or safety risk.</li>
 </ul>
-<p>The local code checks the parameter count for one Low-Rank Adaptation (LoRA) update and reconstructs one affine-quantized value. It does not load or fine-tune a checkpoint; the full lab must add the model, data, optimizer, and held-out evaluation.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> LoRA parameter count and affine dequantization checks</p>
 </div>
@@ -665,8 +658,8 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 </section>
 <section id="sec-m2-c24-s05" class="level2" data-number="24.5">
 <h2 data-number="24.5" class="anchored" data-anchor-id="sec-m2-c24-s05"><span class="header-section-number">24.5</span> Lab: Implementing a Character-Level RNN and Generation Loop</h2>
-<p>This lab creates sequence batches, trains a character-level long short-term memory (LSTM) network, and compares greedy, random, and top-k generation.</p>
-<p>A character recurrent neural network (RNN) receives one character ID at a time, updates its hidden state, and predicts the next character. Training uses shifted character sequences; generation feeds each selected character back into the next recurrent step.</p>
+<p>Create sequence batches, train the character LSTM, and compare greedy, random, and top-k generation.</p>
+<p>A character RNN receives one character ID at a time, updates its hidden state, and predicts the next character. Training uses shifted character sequences; generation feeds each selected character back into the next recurrent step.</p>
 <p>Compare greedy decoding with a sampled run from the same prefix. Keep generated text beside the training loss so repeated or incoherent output can be related to the state model and decoding rule.</p>
 <ul>
 <li>Create shifted character-input and target sequences.</li>
@@ -675,7 +668,6 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 <li>Generate from one fixed prefix with greedy decoding and one sampling setting.</li>
 <li>Identify one dependency the recurrent state retains poorly or one repeated-generation failure.</li>
 </ul>
-<p>The abbreviated code sends one three-character sequence through an untrained LSTM, maps the final state to vocabulary logits, and normalizes only the three highest-scoring candidates. It verifies tensor dimensions, not learned language behavior.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Character LSTM state and top-k sampling</p>
 </div>
@@ -704,7 +696,7 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 </section>
 <section id="sec-m2-c24-s06" class="level2" data-number="24.6">
 <h2 data-number="24.6" class="anchored" data-anchor-id="sec-m2-c24-s06"><span class="header-section-number">24.6</span> Lab: Training an N-Gram Language Model and Perplexity Evaluator</h2>
-<p>This lab uses the Natural Language Toolkit (NLTK) to build padded n-grams and a vocabulary, fit maximum-likelihood counts, inspect unknown tokens, and generate text.</p>
+<p>Build padded n-grams and a vocabulary with NLTK, fit maximum-likelihood counts, inspect unknown tokens, and generate text.</p>
 <p>An n-gram model estimates the next token from counts over a fixed preceding history. This lab makes the count table, conditional probability, unknown-token rule, and perplexity calculation explicit before comparing them with learned sequence models.</p>
 <p>Use the same small corpus for every stage: pad sentence boundaries, build a vocabulary, replace rare tokens with an unknown token, count histories and continuations, then generate from the resulting conditional distribution.</p>
 <ul>
@@ -714,7 +706,6 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 <li>Generate a short continuation and calculate held-out perplexity.</li>
 <li>Explain the fixed-context limitation exposed by a sparse or unseen history.</li>
 </ul>
-<p>The code counts bigrams in two short sentences and computes <span class="math inline">\(P(\text{cat}\mid\text{the})\)</span>. It has no smoothing, so an unseen history has no usable probability estimate; the full notebook adds unknown-token handling and compares smoothing choices.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Padded bigram counts and maximum-likelihood probability</p>
 </div>
@@ -739,13 +730,12 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 <h2 data-number="24.7" class="anchored" data-anchor-id="sec-m2-c24-s07"><span class="header-section-number">24.7</span> Lab: End-to-End Multimodal Vision-Language Inference Trace</h2>
 <p>A vision-language inference pipeline converts pixels and text prompts into tensors, generates output token IDs, and decodes those IDs into a caption or answer.</p>
 <p>A vision-language pipeline converts pixels and a text prompt into processor outputs, then generates token IDs and decodes them into a caption or answer. The model has the same broad structure as a language system, but its first representation is an image tensor or patch sequence.</p>
-<p>Keep the input image, prompt, output IDs, decoded text, and error category together in the result. Captioning and visual question answering (VQA) should be evaluated separately because they ask for different outputs from the same visual evidence.</p>
+<p>Keep the input image, prompt, output IDs, decoded text, and error category together in the result. Captioning and visual question answering should be evaluated separately because they ask for different outputs from the same visual evidence.</p>
 <ul>
 <li>Identify the image processor, visual encoder, projection or fusion step, language decoder, and decoding rule.</li>
 <li>Print image, patch or visual-feature, prompt-token, and output-token dimensions.</li>
 <li>Compare one correct and one incorrect output, naming whether the failure concerns objects, attributes, counting, or the question condition.</li>
 </ul>
-<p>The local code converts a four-by-four grayscale image into four two-by-two patches and projects every flattened patch from four values to width three. It verifies only the visual representation step; a complete vision-language run must also process the prompt and decode model outputs.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Patch tokens as inputs to a vision-language pipeline</p>
 </div>

@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -343,9 +343,9 @@ window.Quarto = {
 <p>The three panels connect durable storage to embedding and index state, then to the retrieval path that balances relevance, latency, and reproducibility.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter map</strong></p>
-<p><strong>5.1–5.5 Storage interfaces and data movement:</strong> File, object, and block storage fit different access patterns; buffered loading and GPUDirect Storage address transfer costs, while complete-generation publication makes checkpoints recoverable.</p>
-<p><strong>5.6–5.8 Vector identity and retrieval:</strong> Versioned embeddings define comparable scores; exact and approximate indexes select candidates, while lexical and dense rankings contribute complementary evidence.</p>
-<p><strong>5.9–5.10 Updates, recovery, and measured quality:</strong> Versioned collections preserve the query/build pairing during migration, and recall, ranking quality, freshness, and tail latency determine an acceptable retrieval configuration.</p>
+<p><strong>5.1–5.5 Storage Semantics &amp; Benchmarking:</strong> Contrast POSIX, object storage (S3), and block storage access patterns, optimize data loading with GPUDirect Storage, and ensure atomic two-phase checkpoint writes.</p>
+<p><strong>5.6–5.8 Vector Indexing &amp; Hybrid Search:</strong> Manage versioned embedding migrations, compare Flat, IVF, and HNSW graph indexing algorithms, and combine BM25 sparse lexical search with dense vector retrieval.</p>
+<p><strong>5.9–5.10 Stateful Operations &amp; Quality Metrics:</strong> Operate vector databases with replication, persistence, and pre/post-filtering, and measure Recall@k, MRR, NDCG, and p99 query latency.</p>
 </div>
 <div id="fig-m3-c05-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled Chapter 5 map links durable storage and embedding versions to vector indexes, hybrid retrieval, and quality-latency evidence.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -353,14 +353,13 @@ window.Quarto = {
 <img src="../assets/fig-m3-c05-f01.png" class="img-fluid figure-img" alt="A labelled Chapter 5 map links durable storage and embedding versions to vector indexes, hybrid retrieval, and quality-latency evidence.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c05-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;5.1: Durable source records and paired embedding/index versions make retrieval state recoverable and its quality measurements reproducible.
+Figure&nbsp;5.1: How durable data becomes reproducible retrieval state. The three panels connect durable storage to embedding and index state, then to the retrieval path that balances relevance, latency, and reproducibility.
 </figcaption>
 </figure>
 </div>
 <section id="sec-m3-c05-s01" class="level2" data-number="5.1">
 <h2 data-number="5.1" class="anchored" data-anchor-id="sec-m3-c05-s01"><span class="header-section-number">5.1</span> Matching storage to AI access patterns</h2>
-<p>Checkpoints, training samples, request logs, and retrieval indexes need different storage behavior. Some need partial file updates, others shared paths, immutable object identities, or low-latency local reads. Object size, concurrency, durability, and access pattern determine the suitable storage category.</p>
-<p>POSIX-style interfaces expose file operations such as opening a path, reading bytes at an offset, and renaming a file. An object interface instead reads or replaces a value identified by a key, often through an S3-compatible API. NVMe is a storage interface commonly used by fast local solid-state drives. These names describe different layers: an interface, an object API, and a device access technology are not interchangeable storage guarantees.</p>
+<p>The system now has many persistent artifacts. Calling all of them ‘data’ hides whether they need byte-addressable updates, shared POSIX paths, immutable object identities, or low-latency local reads. Object size, concurrency, durability, and access pattern determine the suitable storage category.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Access pattern.</strong></span> the combination of object size, operation mix, concurrency, locality, sharing, durability, consistency, latency, throughput, and lifecycle requirements for a dataset or artifact.</p>
 <div id="fig-m3-c05-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="AI storage becomes cooler, cheaper, and farther from the GPU as data moves down the hierarchy.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -514,15 +513,13 @@ Figure&nbsp;5.4: Each pipeline stage uses storage according to durability, shari
 </figure>
 </div>
 <p>The path usually includes durable source objects, a conversion or sharding stage, shared or local cache, CPU workers, pinned host memory, host-to-device transfer, and the accelerator. The slowest sustained stage bounds throughput. Prefetching hides latency only while downstream consumption does not outrun the buffer.</p>
-<p>Pinned host memory cannot be paged out while a transfer uses it, allowing the accelerator to copy from a stable host buffer. Backpressure occurs when a downstream queue fills and slows the workers supplying it. For example, fast storage does not prevent GPU idle time when CPU decompression cannot prepare the next batch; increasing the read queue then consumes memory without raising training throughput.</p>
 <ol type="1">
 <li><strong>Sequential-read shards.</strong> Moderately large immutable shards reduce metadata operations and produce longer reads.</li>
-<li><strong>Deterministic partitioning.</strong> Each data-parallel rank receives a reproducible sample stream whose seed, epoch, padding, and sharding policy are recorded.</li>
+<li><strong>Deterministic partitioning.</strong> Each data-parallel rank receives a unique sample stream whose seed, epoch, and sharding policy are recorded.</li>
 <li><strong>Parallel decoding.</strong> Worker processes overlap parsing and augmentation within CPU, memory, and open-file limits.</li>
 <li><strong>Identity-based caching.</strong> Immutable dataset or shard identities connect cache hit rate, capacity, and eviction behavior to a specific input version.</li>
 <li><strong>Queue measurements.</strong> Batch-fetch time, GPU idle gaps, bytes/s, IOPS, cache hit rate, and failed reads reveal backpressure.</li>
 </ol>
-<p>This abbreviated loop assumes a map-style dataset, an initialized distributed process group, the same seed on every rank, and <code>workers &gt; 0</code>. <code>move_to_device</code> recursively transfers the batch tensors; <code>train_step</code> performs the training update described in Chapter 2.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Deterministic distributed data loading with prefetched host-to-device transfer.</p>
 </div>
@@ -544,15 +541,13 @@ Figure&nbsp;5.4: Each pipeline stage uses storage according to durability, shari
 <span id="lst-m3-c05-c01-16"><a href="#lst-m3-c05-c01-16" aria-hidden="true" tabindex="-1"></a>        loss <span class="op">=</span> train_step(batch)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Code walkthrough</strong></p>
-<p>Rank partition: <code>DistributedSampler</code> shuffles indices reproducibly and divides them among ranks. Its default padding repeats some indices when the dataset size is not divisible by the number of ranks, keeping rank step counts equal.</p>
+<p>Rank partition: <code>DistributedSampler</code> assigns a disjoint deterministic sample stream to each data-parallel rank.</p>
 <p>Epoch state: <code>set_epoch</code> changes the reproducible shuffle order between epochs.</p>
 <p>Host pipeline: Worker processes, persistence, and prefetching prepare future batches while the accelerator executes the current batch.</p>
 <p>Transfer path: Pinned host memory and <code>non_blocking=True</code> permit asynchronous transfer when tensor layout and CUDA stream usage support overlap.</p>
 <p>Result: Correct partitioning protects statistical semantics, while buffering and transfer overlap protect accelerator utilization.</p>
 <p>Limits: More workers or prefetch slots can exhaust CPU, host memory, file descriptors, or storage bandwidth. Fetch time and queue depth reveal the limit; larger values are not automatically better.</p>
 </div>
-<p>For five samples and two ranks, an unshuffled default sampler extends <code>[0, 1, 2, 3, 4]</code> to <code>[0, 1, 2, 3, 4, 0]</code>. Rank 0 reads <code>[0, 2, 4]</code> and rank 1 reads <code>[1, 3, 0]</code>: index 0 repeats. Setting the sampler’s <code>drop_last=True</code> instead drops the tail so each rank receives two samples. The choice changes which examples contribute to an epoch; it is especially important when counting evaluation cases, where padded duplicates can bias a metric.</p>
-<p>GPUDirect Storage (GDS) provides a different transfer path: compatible storage software transfers bytes directly to GPU memory without an intermediate CPU-memory bounce buffer. This can reduce host-memory traffic and CPU transfer overhead when GPU-side processing consumes the data. The CPU still sets up the operation. GDS requires a supported storage/filesystem and transfer configuration; a fallback may still use host memory. It does not remove CPU decoding that the application still performs, and <code>pin_memory=True</code> alone does not enable it. A useful comparison measures end-to-end batch readiness, not only storage-to-GPU copy bandwidth.</p>
 </section>
 <section id="sec-m3-c05-s04" class="level2" data-number="5.4">
 <h2 data-number="5.4" class="anchored" data-anchor-id="sec-m3-c05-s04"><span class="header-section-number">5.4</span> Writing recoverable checkpoints atomically</h2>
@@ -568,8 +563,6 @@ Figure&nbsp;5.5: A fast checkpoint lands locally, copies asynchronously to share
 </figure>
 </div>
 <p>A distributed checkpoint is a set of shards plus metadata, not merely a directory. Each writer first saves to a temporary generation. A coordinator verifies the expected world size, file hashes, byte counts, and training-state metadata. Only then does it publish a small completion manifest or pointer. Restore clients ignore generations without that commit marker.</p>
-<p>For a file-system implementation, generation <code>g42</code> first contains all completed shards. Writers finish the required flush/durability operations, and the coordinator writes a temporary manifest containing their identities and checksums. A same-filesystem atomic rename publishes that manifest; directory durability also depends on the filesystem’s persistence protocol. A crash before publication leaves an ignored incomplete generation, while a crash afterward leaves a complete manifest pointing to durable shards. An object-store implementation uses completed immutable shard objects followed by a final manifest PUT, relying on the store’s documented visibility and durability behavior rather than a directory rename.</p>
-<p>A completed local generation is not yet protected against loss of that node. The durable recovery point advances only when the required copy in the other failure domain is complete and verified. While an asynchronous copy is pending, recovery from node loss may still use the preceding durable generation.</p>
 <div id="tbl-m3-c05-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c05-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -623,7 +616,7 @@ Table&nbsp;5.3: A checkpoint becomes trustworthy only after completeness, durabi
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation: checkpoint interval versus failure loss</strong></p>
 <p><strong>Given:</strong> A job produces 18 minutes of useful work between checkpoints and needs 2 minutes to write each checkpoint.</p>
-<p><strong>Failure position:</strong> In a simplified model where failure is uniformly distributed within the 18-minute useful-work interval, expected lost useful work is half that interval: 9 minutes. Failure during a checkpoint write needs separate accounting because the new generation may not yet be committed.</p>
+<p><strong>Failure position:</strong> With failures uniformly distributed, the expected lost work is approximately half the interval: 9 minutes.</p>
 <p><strong>Recovery work:</strong> A node replacement and restore take 6 minutes.</p>
 <p><strong>Expected interruption:</strong> The 9 minutes of expected lost work plus 6 minutes for replacement and restore produce about 15 minutes of interruption, excluding recurring checkpoint overhead.</p>
 <p><strong>Decision:</strong> A shorter interval is justified only when reduced expected loss exceeds the added write load and pause.</p>
@@ -633,20 +626,19 @@ Table&nbsp;5.3: A checkpoint becomes trustworthy only after completeness, durabi
 <section id="sec-m3-c05-s05" class="level2" data-number="5.5">
 <h2 data-number="5.5" class="anchored" data-anchor-id="sec-m3-c05-s05"><span class="header-section-number">5.5</span> Measuring storage performance for AI workloads</h2>
 <p>The correct storage category and protocol are now selected. Performance claims still fail when a benchmark uses a different block size, operation mix, cache state, or client count than the ML workload. A representative benchmark relates I/O operations to transferred bytes and includes the intended concurrency and tail behavior.</p>
-<div id="fig-m3-c05-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled comparison shows how block size changes bandwidth demand at the same IOPS.">
+<div id="fig-m3-c05-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Bandwidth, IOPS, and block size form one storage-performance relationship.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c05-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m3-c05-f06.png" class="img-fluid figure-img" alt="A labelled comparison shows how block size changes bandwidth demand at the same IOPS.">
+<img src="../assets/fig-m3-c05-f06.png" class="img-fluid figure-img" alt="Bandwidth, IOPS, and block size form one storage-performance relationship.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c05-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;5.6: At the same 25,000 operations/s, 4 KiB transfers produce about 97.7 MiB/s, while 1 MiB transfers would require 25,000 MiB/s; in practice, larger transfers can hit a byte-rate ceiling and reduce achievable IOPS.
+Figure&nbsp;5.6: Bandwidth, IOPS, and block size form one storage-performance relationship.
 </figcaption>
 </figure>
 </div>
 <p><span id="eq-m3-c05-e01"><span class="math display">\[
 B = \mathrm{IOPS} \cdot S_{\mathrm{block}}
 \tag{5.1}\]</span></span></p>
-<p>Here <span class="math inline">\(B\)</span> is transferred bytes per second, IOPS is completed input/output operations per second, and <span class="math inline">\(S_{\mathrm{block}}\)</span> is bytes transferred per operation. For mixed transfer sizes, it is the mean size over completed operations in the same measurement window. Multiplying the operation count by the bytes per operation gives the transferred bytes.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation: the same IOPS with two transfer sizes</strong></p>
 <p><strong>Operation rate:</strong> The storage path completes 25,000 read operations per second.</p>
@@ -656,12 +648,18 @@ B = \mathrm{IOPS} \cdot S_{\mathrm{block}}
 <p><strong>Conclusion:</strong> IOPS is meaningful only with transfer size, concurrency, latency, cache state, and operation mix.</p>
 </div>
 <p>The equality is descriptive, not a promise that either term remains constant. Increasing block size may reduce achievable IOPS; increasing clients may expose network, metadata, or server limits. A complete result includes read/write mix, direct-versus-cached mode, queue depth, client count, object or file size distribution, warm-up, duration, percentiles, and failure rate.</p>
-<p>Synthetic storage tests can omit application parsing, metadata work, temporary burst credits, and competing clients. Comparing them with an actual data-loader or checkpoint trace shows whether the measured storage rate translates into less GPU idle time or a shorter recoverable save.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Storage benchmark: purpose and limits</strong></p>
+<p>Works on: a specified client topology, operation mix, block-size distribution, and dataset size</p>
+<p>Helps when: selecting a tier or diagnosing an input, checkpoint, or retrieval bottleneck</p>
+<p>How it works: replays intended sequential and random operations while recording throughput, IOPS, latency percentiles, CPU, network, cache state, and errors</p>
+<p>Other limits: synthetic tests miss application parsing, metadata behavior, burst credits, and noisy-neighbor effects unless modeled</p>
+<p>Why it matters: a defined workload makes benchmark numbers comparable and interpretable</p>
+</div>
 </section>
 <section id="sec-m3-c05-s06" class="level2" data-number="5.6">
 <h2 data-number="5.6" class="anchored" data-anchor-id="sec-m3-c05-s06"><span class="header-section-number">5.6</span> Migrating safely between embedding versions</h2>
 <p>Durable source records and efficient movement are established. Semantic retrieval needs a derived numerical representation whose model, preprocessing, and distance convention remain consistent. Embeddings, chunk identities, metadata, and score direction define the index inputs.</p>
-<p>An embedding migration preserves those identities in a new collection. Backfill, validation, and the traffic switch then put the new collection into service, as described in Section 5.9.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Embedding.</strong></span> a fixed-length numeric vector produced by a specified model and preprocessing pipeline to represent an item for comparison.</p>
 <div id="fig-m3-c05-f07" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Embeddings place heterogeneous items into one numerical vector space.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -677,7 +675,6 @@ Figure&nbsp;5.7: Embeddings place heterogeneous items into one numerical vector 
 <p><span id="eq-m3-c05-e02"><span class="math display">\[
 \cos\left(q,x\right) = \frac{q^{T}x}{\left\lVert q\right\rVert \cdot \left\lVert x\right\rVert}
 \tag{5.2}\]</span></span></p>
-<p>The query vector <span class="math inline">\(q\)</span> and candidate vector <span class="math inline">\(x\)</span> have the same dimension and nonzero length. The transpose in <span class="math inline">\(q^T x\)</span> forms their dot product, and <span class="math inline">\(\lVert q\rVert\)</span> and <span class="math inline">\(\lVert x\rVert\)</span> are Euclidean lengths. Dividing by both lengths leaves the angle-dependent score. For real vectors, cosine similarity lies between −1 and 1; larger values mean more aligned directions. A zero vector has no defined direction.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation: cosine similarity of two vectors</strong></p>
 <p><strong>Vectors:</strong> The query is (1, 2) and the candidate is (2, 1).</p>
@@ -689,20 +686,19 @@ Figure&nbsp;5.7: Embeddings place heterogeneous items into one numerical vector 
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Reference cosine-similarity implementation with dimensionality and zero-vector checks.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c05-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c05-c02-1"><a href="#lst-m3-c05-c02-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="lst-m3-c05-c02-2"><a href="#lst-m3-c05-c02-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c05-c02-3"><a href="#lst-m3-c05-c02-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> cosine_similarity(query: np.ndarray, candidate: np.ndarray) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
-<span id="lst-m3-c05-c02-4"><a href="#lst-m3-c05-c02-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> query.ndim <span class="op">!=</span> <span class="dv">1</span> <span class="kw">or</span> candidate.ndim <span class="op">!=</span> <span class="dv">1</span> <span class="kw">or</span> query.shape <span class="op">!=</span> candidate.shape:</span>
-<span id="lst-m3-c05-c02-5"><a href="#lst-m3-c05-c02-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"vectors must be one-dimensional with equal shapes"</span>)</span>
-<span id="lst-m3-c05-c02-6"><a href="#lst-m3-c05-c02-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> np.isfinite(query).<span class="bu">all</span>() <span class="kw">or</span> <span class="kw">not</span> np.isfinite(candidate).<span class="bu">all</span>():</span>
-<span id="lst-m3-c05-c02-7"><a href="#lst-m3-c05-c02-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"vectors must contain finite values"</span>)</span>
-<span id="lst-m3-c05-c02-8"><a href="#lst-m3-c05-c02-8" aria-hidden="true" tabindex="-1"></a>    denominator <span class="op">=</span> np.linalg.norm(query) <span class="op">*</span> np.linalg.norm(candidate)</span>
-<span id="lst-m3-c05-c02-9"><a href="#lst-m3-c05-c02-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> denominator <span class="op">==</span> <span class="dv">0</span>:</span>
-<span id="lst-m3-c05-c02-10"><a href="#lst-m3-c05-c02-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"cosine similarity is undefined for a zero vector"</span>)</span>
-<span id="lst-m3-c05-c02-11"><a href="#lst-m3-c05-c02-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">float</span>(np.dot(query, candidate) <span class="op">/</span> denominator)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c05-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c05-c02-1"><a href="#lst-m3-c05-c02-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c05-c02-2"><a href="#lst-m3-c05-c02-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="lst-m3-c05-c02-3"><a href="#lst-m3-c05-c02-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c05-c02-4"><a href="#lst-m3-c05-c02-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> cosine_similarity(query: np.ndarray, candidate: np.ndarray) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="lst-m3-c05-c02-5"><a href="#lst-m3-c05-c02-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> query.shape <span class="op">!=</span> candidate.shape:</span>
+<span id="lst-m3-c05-c02-6"><a href="#lst-m3-c05-c02-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"vectors must have the same dimensionality"</span>)</span>
+<span id="lst-m3-c05-c02-7"><a href="#lst-m3-c05-c02-7" aria-hidden="true" tabindex="-1"></a>    denominator <span class="op">=</span> np.linalg.norm(query) <span class="op">*</span> np.linalg.norm(candidate)</span>
+<span id="lst-m3-c05-c02-8"><a href="#lst-m3-c05-c02-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> denominator <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="lst-m3-c05-c02-9"><a href="#lst-m3-c05-c02-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"cosine similarity is undefined for a zero vector"</span>)</span>
+<span id="lst-m3-c05-c02-10"><a href="#lst-m3-c05-c02-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">float</span>(np.dot(query, candidate) <span class="op">/</span> denominator)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Code walkthrough</strong></p>
-<p>Schema check: The function accepts finite one-dimensional arrays of equal shape before computing a score.</p>
+<p>Schema check: Equal array shapes enforce one embedding dimensionality before any score is computed.</p>
 <p>Domain check: A zero norm is rejected because the cosine denominator would be zero and direction is undefined.</p>
 <p>Numerator: <code>np.dot</code> measures aligned component magnitude.</p>
 <p>Normalization: Dividing by both Euclidean norms removes vector magnitude and returns a scalar direction score.</p>
@@ -797,9 +793,6 @@ Table&nbsp;5.4: ANN families make different compromises among recall, latency, b
 </div>
 </figure>
 </div>
-<p>Hierarchical Navigable Small World (HNSW) links nearby vectors in a graph with progressively sparser upper layers. A query first moves through these upper layers to find a useful entry region, then explores more candidates in the dense base layer. Graph links avoid scanning every stored vector, but a limited search can miss the true nearest neighbor.</p>
-<p>An inverted-file (IVF) index assigns vectors to coarse clusters during construction. At query time it compares the query with cluster representatives and scans only the selected lists. For eight clusters and <code>nprobe=2</code>, six lists remain unsearched. Increasing the probe count exposes more vectors and costs more distance calculations; a close vector just across an unprobed cluster boundary explains a recall miss.</p>
-<p>Product quantization (PQ) splits each vector into subvectors and stores the nearest codebook entry ID for each part. For example, <code>(1, 2, 8, 9)</code> can be split into <code>(1, 2)</code> and <code>(8, 9)</code>, approximated by entries <code>(1, 1)</code> and <code>(8, 10)</code>. Two 8-bit IDs occupy two bytes rather than sixteen bytes for four FP32 values, excluding the shared codebooks. Lookup tables combine query-to-entry distances; the approximation can change close rankings. IVF-PQ first selects coarse lists and then scores compressed vectors, often encoding each vector’s difference from its cluster representative. It therefore has both missed-list and compressed-distance errors.</p>
 <div id="fig-m3-c05-f10" class="quarto-float quarto-figure quarto-figure-center anchored" alt="IVF-PQ combines coarse partitioning with compressed residual codes.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c05-f10-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -810,19 +803,19 @@ Figure&nbsp;5.10: IVF-PQ combines coarse partitioning with compressed residual c
 </figcaption>
 </figure>
 </div>
-<p>HNSW’s <code>efSearch</code> and IVF’s probe count control query search effort. Graph connectivity and quantization code size are construction choices that affect the resulting index and usually require rebuilding to change. Higher query effort usually improves recall and consumes more latency or compute. Index build time, memory amplification, background compaction, and update lag belong in capacity planning.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>An HNSW query trace</strong></p>
-<p><strong>Entry:</strong> Starting from the graph’s stored entry point, the query greedily follows closer neighbors in the upper layers and descends to the base layer.</p>
-<p><strong>Expansion:</strong> Base-layer search keeps a queue of unexplored candidates and a retained nearest-candidate set whose width is controlled by <code>efSearch</code>. This is not a hard cap on visited nodes or distance calculations.</p>
-<p><strong>Termination:</strong> Search stops when the closest queued candidate cannot improve the retained set under the algorithm’s stopping rule. The best k retained identities are returned; an unexplored region can still contain a true nearer neighbor.</p>
+<p>HNSW query controls such as <code>efSearch</code>, IVF probe count, graph connectivity, and quantization code size are tuning settings, not universal defaults. Higher search effort usually improves recall and consumes more latency or compute. Index build time, memory amplification, background compaction, and update lag belong in capacity planning.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: an HNSW query trace</strong></p>
+<p><strong>Entry:</strong> The query starts at the graph’s upper layer and selects the closest entry point under the configured distance.</p>
+<p><strong>Expansion:</strong> The search keeps a candidate queue and expands up to <code>efSearch</code> promising neighbors, comparing each vector under the collection’s metric.</p>
+<p><strong>Termination:</strong> When the candidate queue no longer contains a better unexplored path, the best k identities are returned.</p>
 <p><strong>Trade-off:</strong> Increasing <code>efSearch</code> expands more candidates and generally raises recall while increasing tail latency and CPU work; the chosen value is measured on the target corpus and filter mix.</p>
 <p><strong>Conclusion:</strong> The trace makes HNSW’s quality–latency control visible instead of treating <code>efSearch</code> as a universal constant.</p>
 </div>
 </section>
 <section id="sec-m3-c05-s08" class="level2" data-number="5.8">
 <h2 data-number="5.8" class="anchored" data-anchor-id="sec-m3-c05-s08"><span class="header-section-number">5.8</span> Combining dense and sparse retrieval</h2>
-<p>ANN search retrieves semantically close vectors. Dense similarity can miss exact identifiers, rare names, or domain-specific lexical matches. Access-control and date constraints are separate rules that ranking scores cannot enforce. A staged retriever gives each component a specific candidate, filtering, scoring, or packing role.</p>
+<p>ANN search retrieves semantically close vectors. Dense similarity can miss exact identifiers, rare names, recency constraints, access-control rules, or domain-specific lexical matches. A staged retriever gives each component an explicit candidate, filtering, scoring, or packing role.</p>
 <div id="fig-m3-c05-f11" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Hybrid retrieval merges dense and sparse candidates before cross-encoder reranking.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c05-f11-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -841,14 +834,9 @@ Figure&nbsp;5.11: Hybrid retrieval merges dense and sparse candidates before cro
 <li><strong>Reranking.</strong> A more expensive cross-encoder or domain scorer evaluates the reduced candidate set.</li>
 <li><strong>Context assembly.</strong> Deduplication, ordering, token-budget fitting, and retained source IDs produce the final evidence context.</li>
 </ol>
-<p>BM25 is a lexical ranking method: matching query terms contribute more when they are uncommon in the collection, repeated occurrences have diminishing additional value, and document-length normalization reduces the advantage of long documents. An exact error code such as <code>ERR-1842</code> can therefore retrieve a precise troubleshooting paragraph that a dense model ranks poorly. A cross-encoder then reads the query and each candidate together to produce a relevance score. That joint computation captures interactions a separately stored vector may miss, but repeats model work for every candidate.</p>
-<p>Pre-filtering restricts eligible records before nearest-neighbor selection; post-filtering removes ineligible results afterward. If a top-10 search returns only two documents the caller may access, post-filtering leaves two results even when many eligible documents exist elsewhere. Overfetching or filter-aware search can improve coverage, with additional work. Permission checks still occur before unauthorized text reaches a reranker or prompt, regardless of the index’s filtering implementation.</p>
 <p><span id="eq-m3-c05-e03"><span class="math display">\[
 \operatorname{RRF}\left(d\right) = \sum_{r \in \left\{\mathrm{dense},\mathrm{sparse}\right\}} \frac{1}{k+\operatorname{rank}_r\left(d\right)}
 \tag{5.3}\]</span></span></p>
-<p>Reciprocal rank fusion (RRF) adds rank-based contributions for document <span class="math inline">\(d\)</span> from each list <span class="math inline">\(r\)</span>. Ranks start at 1; a document absent from a list contributes zero. The positive smoothing constant <span class="math inline">\(k\)</span> reduces the dominance of the very first ranks and is distinct from the number of results requested in top-k search. Raw dense and lexical scores never need to share a numeric scale.</p>
-<p>With smoothing constant 60, document A at dense rank 1 and sparse rank 3 scores <span class="math inline">\(1/61+1/63\approx0.03227\)</span>. Document B at dense rank 2 and sparse rank 1 scores <span class="math inline">\(1/62+1/61\approx0.03252\)</span>, so B ranks first after fusion. The candidate-window sizes matter: a document omitted by both first-stage retrievers cannot be recovered by fusion.</p>
-<p>The following abbreviated pipeline assumes that both indexes enforce <code>acl_filter</code> before returning text and that fusion deduplicates records by stable document/chunk identity. Each helper returns candidates with their source IDs intact.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Hybrid retrieval pipeline with versioned embedding, authorization, fusion, reranking, and citation packing.</p>
 </div>
@@ -962,14 +950,12 @@ Figure&nbsp;5.14: Embedding versions require controlled upserts, reindexing, rol
 </figure>
 </div>
 <p>An embedding-model change creates a new vector space. Mixing old and new vectors in one index usually makes scores meaningless. A versioned collection receives the backfill, count and quality checks, shadow or canary queries, and then an alias switch; the previous collection remains available for rollback. Tombstones or source-version reconciliation keep deleted content out of retrieval.</p>
-<p>An alias is a stable application-facing name pointing to a particular collection. The switch must update the query-embedding configuration together with that collection choice; new query vectors against old document vectors would break the pairing even if both have the same dimension.</p>
 <ol type="1">
 <li><strong>Freeze the source.</strong> Record the source snapshot, chunking revision, access-control metadata, and deletion watermark that define the migration input.</li>
 <li><strong>Build beside production.</strong> Write embeddings and the ANN index into a new versioned collection; leave the current alias untouched while workers retry.</li>
 <li><strong>Reconcile.</strong> Compare expected and actual source, chunk, vector, tenant, dimension, and delete counts; sample retrieval cases against the prior collection.</li>
 <li><strong>Switch and retain.</strong> Promote the alias only after the gates pass, keep the previous collection for rollback, and record the immutable alias transition in the manifest.</li>
 </ol>
-<p>If ingestion continues during backfill, the source snapshot also records a change-log position. Suppose document D is updated after the snapshot and E is deleted. The backfill initially writes the old D and E; a catch-up pass then applies the new D version and E’s tombstone before the switch. A short ingestion pause or an agreed cutover watermark closes the final gap while counts and versions are checked. Rollback also reconciles later deletions and permission changes; retaining an old collection does not authorize serving content whose access was revoked.</p>
 </section>
 <section id="sec-m3-c05-s10" class="level2" data-number="5.10">
 <h2 data-number="5.10" class="anchored" data-anchor-id="sec-m3-c05-s10"><span class="header-section-number">5.10</span> Balancing retrieval quality and latency</h2>
@@ -977,7 +963,6 @@ Figure&nbsp;5.14: Embedding versions require controlled upserts, reindexing, rol
 <p><span id="eq-m3-c05-e04"><span class="math display">\[
 \mathrm{Recall}@k = \frac{\lvert R_k \cap G \rvert}{\lvert G \rvert}
 \tag{5.4}\]</span></span></p>
-<p>Here <span class="math inline">\(R_k\)</span> is the set of retrieved top-k document identities, <span class="math inline">\(G\)</span> is the reference set judged relevant, <span class="math inline">\(\cap\)</span> selects shared identities, and vertical bars count set members. Queries with no known relevant documents have a zero denominator and need a separate stated reporting policy. This task-relevance measure differs from ANN recall, which compares an approximate index’s neighbors with an exact-search top-k reference. An index can closely reproduce exact neighbors while the embedding itself retrieves poor task evidence.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation: recall at five for one query</strong></p>
 <p><strong>Reference set:</strong> Human labels identify four relevant documents.</p>
@@ -986,9 +971,6 @@ Figure&nbsp;5.14: Embedding versions require controlled upserts, reindexing, rol
 <p><strong>Recall:</strong> Dividing 3 by 4 gives recall@5 of 0.75.</p>
 <p><strong>Conclusion:</strong> The score measures evidence coverage, not ranking quality or whether the generator cites and uses the evidence correctly.</p>
 </div>
-<p>Precision@k instead divides relevant retrieved documents by the number returned at the stated cutoff. Mean reciprocal rank (MRR) measures how soon the first relevant result appears: each query contributes <span class="math inline">\(1/r\)</span> for its first relevant rank <span class="math inline">\(r\)</span>, or zero when none appears within the measured list, and the mean is taken over queries.</p>
-<p>Normalized discounted cumulative gain (nDCG) also distinguishes degrees of relevance. One common convention gives rank <span class="math inline">\(j\)</span> a gain <span class="math inline">\((2^{g_j}-1)/\log_2(j+1)\)</span>, where <span class="math inline">\(g_j\)</span> is its nonnegative relevance grade. Summing gives DCG; dividing by the DCG of the ideal grade ordering at the same cutoff gives nDCG. The gain convention, cutoff, and treatment of queries with no positive grades must be recorded.</p>
-<p>For a three-document ranking with grades <code>[0, 3, 1]</code>, both positively graded documents appear: precision@3 is <span class="math inline">\(2/3\)</span>, recall@3 is 1 if those are the only relevant documents, and reciprocal rank is <span class="math inline">\(1/2\)</span>. Using exponential gain, DCG is <span class="math inline">\(0+7/\log_2 3+1/2\approx4.917\)</span>. The ideal order <code>[3, 1, 0]</code> has DCG <span class="math inline">\(7+1/\log_2 3\approx7.631\)</span>, giving nDCG@3 about 0.644. Recall does not change when the irrelevant first result moves to the end, but the ranking metrics improve.</p>
 <div id="fig-m3-c05-f15" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Recall, latency, and memory pull vector search in different directions.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c05-f15-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -1081,7 +1063,7 @@ Table&nbsp;5.6: A vector-system benchmark joins retrieval quality with tail late
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Carry-forward result</strong></p>
-<p>Durable source records, recoverable checkpoints, and a versioned retriever now have explicit update and recovery paths. Chapter 6 connects these operations through retryable tasks.</p>
+<p>The system now owns durable source artifacts, recoverable checkpoints, and a versioned retriever. Chapter 6 turns those responsibilities into retryable task descriptions.</p>
 </div>
 
 

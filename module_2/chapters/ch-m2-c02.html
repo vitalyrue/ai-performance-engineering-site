@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -441,7 +441,7 @@ window.Quarto = {
   <ul>
   <li><a href="#sec-m2-c02-s01" id="toc-sec-m2-c02-s01" class="nav-link active" data-scroll-target="#sec-m2-c02-s01"><span class="header-section-number">2.1</span> Discretizing Strings into Fixed Vocabulary Indices</a></li>
   <li><a href="#sec-m2-c02-s02" id="toc-sec-m2-c02-s02" class="nav-link" data-scroll-target="#sec-m2-c02-s02"><span class="header-section-number">2.2</span> Formatting Ragged Sequences for Batch Processing</a></li>
-  <li><a href="#sec-m2-c02-s03" id="toc-sec-m2-c02-s03" class="nav-link" data-scroll-target="#sec-m2-c02-s03"><span class="header-section-number">2.3</span> Padded ID Batches and Masks as Rectangular Inputs</a></li>
+  <li><a href="#sec-m2-c02-s03" id="toc-sec-m2-c02-s03" class="nav-link" data-scroll-target="#sec-m2-c02-s03"><span class="header-section-number">2.3</span> Visualizing Token Batches and Padding Masks</a></li>
   </ul>
 </nav>
     </div>
@@ -470,6 +470,7 @@ window.Quarto = {
 <p>Models calculate with numbers rather than character strings. A tokenizer and vocabulary provide the integer IDs that make text available to later tensor operations.</p>
 <p>A tokenizer turns text into integer addresses, and batching turns several unequal sequences into one rectangular array. Padding and attention masks preserve the difference between real tokens and added empty positions.</p>
 <p>In code, <code>transformers.AutoTokenizer</code> returns <code>input_ids</code> and <code>attention_mask</code>; <code>torch.tensor</code> stores the padded integer batches used by later models.</p>
+<p>Chapter 2 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c02-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 2 opener for Tokens, vocabularies, and token IDs, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c02-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -480,13 +481,14 @@ Figure&nbsp;2.1: Vocabulary lookup, padding, and masks turn variable text into r
 </figcaption>
 </figure>
 </div>
+<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c02-s01" class="level2" data-number="2.1">
 <h2 data-number="2.1" class="anchored" data-anchor-id="sec-m2-c02-s01"><span class="header-section-number">2.1</span> Discretizing Strings into Fixed Vocabulary Indices</h2>
 <p>The vocabulary is the finite set of symbols that the model can name directly. It is the first place where language becomes a discrete mathematical object.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Token:</strong></span> A symbol emitted by a tokenizer: a character, word, subword, special marker, or domain token.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Vocabulary:</strong></span> The set of tokens with assigned integer IDs.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Special token:</strong></span> A control symbol such as beginning-of-sequence (BOS), end-of-sequence (EOS), padding (PAD), mask (MASK), unknown (UNK), or a chat-role marker.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Special token:</strong></span> A control symbol such as BOS, EOS, PAD, MASK, UNK, or a chat-role marker.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Unknown token:</strong></span> A fallback symbol for an item not represented by the vocabulary.</li>
 </ul>
 <p>A vocabulary fixes the output dimension of a language model. If |V| is 50,000, the final language-model head produces 50,000 logits at each predicted position.</p>
@@ -558,31 +560,29 @@ label_{b,t}=-100\quad\text{when }x_{b,t}=\mathrm{PAD}
 </div>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Ignored padding label</strong></p>
-<p>If the last position is PAD, its label is set to -100 so <code>CrossEntropyLoss(ignore_index=-100)</code> skips it.</p>
+<p>If the last position is PAD, its label is set to -100 so CrossEntropyLoss(<span class="math inline">\(ignore_{index}=-100\)</span>) skips it.</p>
 </div>
-<p>This runnable <code>transformers</code> example uses a decoder tokenizer and returns <code>input_ids</code> and <code>attention_mask</code> with dimensions <span class="math inline">\([B,T_{\max}]\)</span>. The EOS token also serves as padding for this small GPT-2 example; the attention mask, rather than the token value alone, identifies the inserted positions.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Tokenizer batch with padding and mask</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c02-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c02-c01-1"><a href="#lst-m2-c02-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> transformers <span class="im">import</span> AutoTokenizer</span>
 <span id="lst-m2-c02-c01-2"><a href="#lst-m2-c02-c01-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="lst-m2-c02-c01-3"><a href="#lst-m2-c02-c01-3" aria-hidden="true" tabindex="-1"></a>texts <span class="op">=</span> [<span class="st">"the cat sat"</span>, <span class="st">"the dog ran"</span>]</span>
-<span id="lst-m2-c02-c01-4"><a href="#lst-m2-c02-c01-4" aria-hidden="true" tabindex="-1"></a>tokenizer <span class="op">=</span> AutoTokenizer.from_pretrained(<span class="st">"gpt2"</span>)</span>
-<span id="lst-m2-c02-c01-5"><a href="#lst-m2-c02-c01-5" aria-hidden="true" tabindex="-1"></a>tokenizer.pad_token <span class="op">=</span> tokenizer.eos_token</span>
-<span id="lst-m2-c02-c01-6"><a href="#lst-m2-c02-c01-6" aria-hidden="true" tabindex="-1"></a>batch <span class="op">=</span> tokenizer(texts, padding<span class="op">=</span><span class="va">True</span>, return_tensors<span class="op">=</span><span class="st">"pt"</span>)</span>
-<span id="lst-m2-c02-c01-7"><a href="#lst-m2-c02-c01-7" aria-hidden="true" tabindex="-1"></a>input_ids <span class="op">=</span> batch[<span class="st">"input_ids"</span>]            <span class="co"># [B, T_max]</span></span>
-<span id="lst-m2-c02-c01-8"><a href="#lst-m2-c02-c01-8" aria-hidden="true" tabindex="-1"></a>attention_mask <span class="op">=</span> batch[<span class="st">"attention_mask"</span>]  <span class="co"># [B, T_max]</span></span>
-<span id="lst-m2-c02-c01-9"><a href="#lst-m2-c02-c01-9" aria-hidden="true" tabindex="-1"></a>labels <span class="op">=</span> input_ids.clone()</span>
-<span id="lst-m2-c02-c01-10"><a href="#lst-m2-c02-c01-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c02-c01-11"><a href="#lst-m2-c02-c01-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Hugging Face causal LM classes shift labels internally.</span></span>
-<span id="lst-m2-c02-c01-12"><a href="#lst-m2-c02-c01-12" aria-hidden="true" tabindex="-1"></a><span class="co"># For manual CE, compare logits[:, :-1, :] with input_ids[:, 1:].</span></span>
-<span id="lst-m2-c02-c01-13"><a href="#lst-m2-c02-c01-13" aria-hidden="true" tabindex="-1"></a>labels[attention_mask <span class="op">==</span> <span class="dv">0</span>] <span class="op">=</span> <span class="op">-</span><span class="dv">100</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m2-c02-c01-4"><a href="#lst-m2-c02-c01-4" aria-hidden="true" tabindex="-1"></a>tokenizer <span class="op">=</span> AutoTokenizer.from_pretrained(<span class="st">"bert-base-uncased"</span>)</span>
+<span id="lst-m2-c02-c01-5"><a href="#lst-m2-c02-c01-5" aria-hidden="true" tabindex="-1"></a>batch <span class="op">=</span> tokenizer(texts, padding<span class="op">=</span><span class="va">True</span>, return_tensors<span class="op">=</span><span class="st">"pt"</span>)</span>
+<span id="lst-m2-c02-c01-6"><a href="#lst-m2-c02-c01-6" aria-hidden="true" tabindex="-1"></a>input_ids <span class="op">=</span> batch[<span class="st">"input_ids"</span>]            <span class="co"># [B, T_max]</span></span>
+<span id="lst-m2-c02-c01-7"><a href="#lst-m2-c02-c01-7" aria-hidden="true" tabindex="-1"></a>attention_mask <span class="op">=</span> batch[<span class="st">"attention_mask"</span>]  <span class="co"># [B, T_max]</span></span>
+<span id="lst-m2-c02-c01-8"><a href="#lst-m2-c02-c01-8" aria-hidden="true" tabindex="-1"></a>labels <span class="op">=</span> input_ids.clone()</span>
+<span id="lst-m2-c02-c01-9"><a href="#lst-m2-c02-c01-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c02-c01-10"><a href="#lst-m2-c02-c01-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Hugging Face causal LM classes shift labels internally.</span></span>
+<span id="lst-m2-c02-c01-11"><a href="#lst-m2-c02-c01-11" aria-hidden="true" tabindex="-1"></a><span class="co"># For manual CE, compare logits[:, :-1, :] with input_ids[:, 1:].</span></span>
+<span id="lst-m2-c02-c01-12"><a href="#lst-m2-c02-c01-12" aria-hidden="true" tabindex="-1"></a>labels[attention_mask <span class="op">==</span> <span class="dv">0</span>] <span class="op">=</span> <span class="op">-</span><span class="dv">100</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The two rows have the same sequence dimension; padding positions have mask value 0 and label value -100, so they do not contribute to the loss.</p>
-<p>The tokenizer and special-token IDs belong to the selected pretrained model. Other decoder-only checkpoints may require a different padding-token policy, so the model and tokenizer must come from the same checkpoint family.</p>
+<p>The tokenizer and special-token IDs belong to the selected pretrained model. A decoder-only model may require a different padding-token policy from BERT.</p>
 <p>Padding makes unequal sequences fit into one batch, while a mask prevents padded positions from contributing to attention or loss. The IDs themselves are produced by a tokenization algorithm.</p>
 </section>
 <section id="sec-m2-c02-s03" class="level2" data-number="2.3">
-<h2 data-number="2.3" class="anchored" data-anchor-id="sec-m2-c02-s03"><span class="header-section-number">2.3</span> Padded ID Batches and Masks as Rectangular Inputs</h2>
+<h2 data-number="2.3" class="anchored" data-anchor-id="sec-m2-c02-s03"><span class="header-section-number">2.3</span> Visualizing Token Batches and Padding Masks</h2>
 <p>Token batches contain integer IDs and masks with one shared sequence dimension.</p>
 <p>Tokenization turns raw text into the model-visible symbols that later become vectors, probabilities, and training targets.</p>
 <div id="fig-m2-c02-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Native tokenization overview diagram showing raw text, normalization, pre-tokenization, subword merges, and token IDs.">
@@ -596,7 +596,8 @@ Figure&nbsp;2.2: Each tokenizer stage converts a string into the discrete IDs us
 </figure>
 </div>
 <p>Tokenization creates the sequence objects used by later feature, embedding, and language-model equations.</p>
-<p>Token strings, vocabulary entries, and token IDs are the discrete objects that make raw text computable. The result is an integer array <span class="math inline">\(X\in\mathbb{Z}^{B\times T}\)</span> and an aligned mask <span class="math inline">\(M\in\{0,1\}^{B\times T}\)</span>; Chapter 3 defines the string-to-ID algorithm, and Chapter 4 counts those IDs into feature rows.</p>
+<p>Token strings, vocabulary entries, and token IDs are the discrete objects that make raw text computable.</p>
+<p>Tokenizer training constructs vocabularies through an explicit algorithm.</p>
 
 
 </section>
