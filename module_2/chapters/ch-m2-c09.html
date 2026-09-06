@@ -442,7 +442,7 @@ window.Quarto = {
   <li><a href="#sec-m2-c09-s01" id="toc-sec-m2-c09-s01" class="nav-link active" data-scroll-target="#sec-m2-c09-s01"><span class="header-section-number">9.1</span> Validating Generalization across Held-Out Data Splits</a></li>
   <li><a href="#sec-m2-c09-s02" id="toc-sec-m2-c09-s02" class="nav-link" data-scroll-target="#sec-m2-c09-s02"><span class="header-section-number">9.2</span> Choosing Classification Metrics</a></li>
   <li><a href="#sec-m2-c09-s03" id="toc-sec-m2-c09-s03" class="nav-link" data-scroll-target="#sec-m2-c09-s03"><span class="header-section-number">9.3</span> Tuning Decision Thresholds with ROC and AUC Curves</a></li>
-  <li><a href="#sec-m2-c09-s04" id="toc-sec-m2-c09-s04" class="nav-link" data-scroll-target="#sec-m2-c09-s04"><span class="header-section-number">9.4</span> Diagnosing Model Capacity with the Bias-Variance Tradeoff</a></li>
+  <li><a href="#sec-m2-c09-s04" id="toc-sec-m2-c09-s04" class="nav-link" data-scroll-target="#sec-m2-c09-s04"><span class="header-section-number">9.4</span> Comparing Discriminative and Generative Objectives</a></li>
   <li><a href="#sec-m2-c09-s05" id="toc-sec-m2-c09-s05" class="nav-link" data-scroll-target="#sec-m2-c09-s05"><span class="header-section-number">9.5</span> Visualizing Confusion Matrices and ROC Decision Thresholds</a></li>
   </ul>
 </nav>
@@ -472,7 +472,6 @@ window.Quarto = {
 <p>A model can memorize its training examples and still fail on unseen data. Evaluation separates training fit from useful performance on new examples.</p>
 <p>A low training loss is not enough evidence that a model will work on new data. Held-out splits and task-appropriate metrics distinguish memorization, useful ranking, calibrated confidence, and real generalization.</p>
 <p>In code, <code>sklearn.metrics</code> provides confusion matrices, precision/recall/F1, ROC AUC, and calibration measurements for the held-out predictions produced by a model.</p>
-<p>Chapter 9 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c09-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 9 opener for Evaluation and generalization, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c09-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -483,7 +482,6 @@ Figure&nbsp;9.1: Held-out metrics and threshold choices test whether learned beh
 </figcaption>
 </figure>
 </div>
-<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c09-s01" class="level2" data-number="9.1">
 <h2 data-number="9.1" class="anchored" data-anchor-id="sec-m2-c09-s01"><span class="header-section-number">9.1</span> Validating Generalization across Held-Out Data Splits</h2>
 <p>A data split is the first protection against fooling yourself with a model that only memorizes the examples it has already seen. The training split changes parameters, the validation split selects decisions, and the test split estimates final generalization.</p>
@@ -505,8 +503,8 @@ Figure&nbsp;9.1: Held-out metrics and threshold choices test whether learned beh
 <p><span id="eq-m2-c09-e01"><span class="math display">\[
 \widehat{R}(\theta)=\frac{1}{n}\sum_{i=1}^{n}L(f_\theta(x_i),y_i)
 \tag{9.1}\]</span></span></p>
-<p>where n is number of observed training examples; <span class="math inline">\(x_{i}\)</span>, <span class="math inline">\(y_{i}\)</span> is inputs and targets for example i; <span class="math inline">\(f_\theta\)</span> is model with trainable parameters θ; L is per-example loss.</p>
-<p>The training set supplies one loss per example. Summing those losses and dividing by n gives one scalar objective whose gradient combines the contribution of every example.</p>
+<p>For training risk, <span class="math inline">\(n\)</span> is the number of training examples, <span class="math inline">\((x_i,y_i)\)</span> is example <span class="math inline">\(i\)</span>, <span class="math inline">\(f_\theta\)</span> is the model, and <span class="math inline">\(L\)</span> is the per-example loss. The same average can be computed on a held-out split by replacing the training examples with validation or test examples and keeping <span class="math inline">\(\theta\)</span> fixed.</p>
+<p>During training, summing the losses and dividing by <span class="math inline">\(n\)</span> gives one scalar objective whose gradient combines the contribution of every training example. During validation or testing, the code evaluates the same type of average without calling backpropagation or updating parameters.</p>
 <p>empirical risk measures fit to the observed sample; validation and test splits estimate how well that fit transfers beyond it.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Empirical risk</strong></p>
@@ -561,6 +559,7 @@ F_1=\frac{2PR}{P+R}
 <p>Changing the threshold changes these four counts, so it changes precision and recall together.</p>
 <p>The same accuracy can conceal different false-positive and false-negative costs.</p>
 </div>
+<p>The following runnable scikit-learn example receives six binary labels and six model scores. It applies a <span class="math inline">\(0.5\)</span> decision threshold for the confusion-matrix metrics, while receiver operating characteristic area under the curve (ROC AUC) uses the unthresholded scores. The three printed results therefore measure error counts, the precision-recall balance, and ranking quality on the same small data set.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Confusion-matrix metrics and ROC AUC from fixed predictions</p>
 </div>
@@ -617,7 +616,7 @@ F_1=\frac{2PR}{P+R}
 <p>ROC and AUC compare score rankings across thresholds; a deployed system must still choose one threshold for its operating context. Validation curves also reveal whether the model is underfitting or overfitting.</p>
 </section>
 <section id="sec-m2-c09-s04" class="level2" data-number="9.4">
-<h2 data-number="9.4" class="anchored" data-anchor-id="sec-m2-c09-s04"><span class="header-section-number">9.4</span> Diagnosing Model Capacity with the Bias-Variance Tradeoff</h2>
+<h2 data-number="9.4" class="anchored" data-anchor-id="sec-m2-c09-s04"><span class="header-section-number">9.4</span> Comparing Discriminative and Generative Objectives</h2>
 <p>A modeling objective specifies which probability the model tries to estimate. This distinction matters because it controls what the model can answer and what kind of data it needs.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Discriminative model:</strong></span> A model of P(y | x), useful for classification or scoring labels given an input.</li>
@@ -629,7 +628,7 @@ F_1=\frac{2PR}{P+R}
 <p>A discriminative model directly estimates a target such as a class label given an input. A generative model estimates a probability distribution over data or continuations, so it can score or produce complete sequences.</p>
 <p>The choice changes the target tensor and inference loop. Classification needs one or more label positions; language modeling needs vocabulary targets across sequence positions and repeats prediction after each generated token.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Computation map</strong></span></p>
-<p>The computation starts with data and produces optimizer through the intermediate objects shown below.</p>
+<p>Training starts with data, computes predictions and a loss, differentiates that loss, and supplies parameter gradients to an optimizer.</p>
 <div id="fig-m2-c09-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Native computation diagram: The loss connects observed data to a parameter update through gradients.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c09-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -640,7 +639,7 @@ Figure&nbsp;9.2: The loss connects observed data to a parameter update through g
 </figcaption>
 </figure>
 </div>
-<p>The output of data is the input required by optimizer; the intermediate stages name the stored objects that make the transition possible.</p>
+<p>The optimizer does not receive raw data directly. It receives gradients stored on the parameters after the forward and backward passes, then uses those gradients to update the parameter values.</p>
 <p>Capacity and regularization affect the gap between training and validation behavior. Training closes that gap by repeatedly updating parameters from loss gradients.</p>
 </section>
 <section id="sec-m2-c09-s05" class="level2" data-number="9.5">

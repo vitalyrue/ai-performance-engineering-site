@@ -302,11 +302,7 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<p>Teach GPU chip structure, SM execution, memory hierarchy, Tensor Cores, and interconnect fabrics.</p>
-<p>A Graphics Processing Unit (GPU) is built for throughput. It spends less chip area on complex control logic than a Central Processing Unit (CPU) and more area on many arithmetic lanes, memory bandwidth, and hardware scheduling of many threads. Transformer workloads fit this design when operations are regular and sufficiently large.</p>
-<p>The hardware hierarchy includes compute units, registers, shared memory, L2 cache, High Bandwidth Memory (HBM), host memory, and GPU interconnects. Each level differs in latency, bandwidth, capacity, and programmer control. Efficient software uses this hierarchy intentionally.</p>
-<p>This hierarchy controls many later optimizations. Coalesced memory access improves HBM transactions. Tensor cores accelerate aligned matrix operations. Kernel fusion reduces trips through HBM. Tensor parallelism and all-reduce depend on the difference between NVLink inside a node and InfiniBand across nodes.</p>
-<p>A training step keeps weights, activations, gradients, and optimizer state live. A decode step repeatedly reads weights and the KV cache for every generated token. The hardware hierarchy determines where these objects can reside and whether moving them costs more time than computing on them.</p>
+<p>A GPU can execute transformer operations quickly only when enough parallel work reaches its arithmetic units and reused data stays close to them. This chapter follows tensors from registers and shared memory through L2 and HBM, then across links between GPUs and servers, so later optimizations can be tied to the hardware resource they use.</p>
 <p>A GPU combines device-wide memory and cache with many Streaming Multiprocessors (SMs), each containing local execution and storage resources.</p>
 <div id="fig-m4-c02-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Two GPU devices each contain HBM, shared L2 cache, and Streaming Multiprocessors. One SM is expanded into registers, shared memory, warp scheduling, and Tensor Cores. NVLink joins device boundaries.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -321,8 +317,7 @@ Figure&nbsp;2.1: GPU resources are nested within a device, while NVLink connects
 <p>High Bandwidth Memory (HBM) and L2 cache serve the whole device. Registers, shared memory, warp scheduling, and Tensor Cores belong inside an SM. The second device makes the boundary explicit: NVLink carries peer traffic between GPUs rather than connecting an SM directly to another device’s cache.</p>
 <section id="sec-m4-c02-s01" class="level2" data-number="2.1">
 <h2 data-number="2.1" class="anchored" data-anchor-id="sec-m4-c02-s01"><span class="header-section-number">2.1</span> CPU and GPU strengths</h2>
-<p>CPUs and GPUs divide a workload by control complexity and parallel regularity. CPUs provide flexible, latency-sensitive execution for operating-system work, scheduling, tokenization, and branch-heavy control flow. GPUs apply large numbers of arithmetic lanes to regular data-parallel operations such as matrix multiplication and elementwise tensor transforms.</p>
-<p>CPU and GPU designs emphasize different kinds of work. As a broad design tendency, CPUs devote more resources to low-latency control, caches, and irregular execution, while GPUs devote more resources to throughput across many similar operations.</p>
+<p>CPUs emphasize latency and branch-heavy control flow; they devote more chip area to caches and complex execution logic. GPUs emphasize throughput; they devote more area to arithmetic units and hardware scheduling of many simple threads. To use a GPU effectively, a workload must expose enough parallel work to keep those arithmetic units busy and regular enough memory access to use the bandwidth efficiently. CPU-bound work, like request parsing or complex tokenization, often stays on the host.</p>
 <div id="fig-m4-c02-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="CPU and GPU designs emphasize different kinds of work. As a broad design tendency, CPUs devote more resources to low-latency control, caches, and irregular execution, while GPUs devote more resources to throughput across many similar operations. Treat the visual as a conceptual comparison rather than a literal chip floorplan. Modern CPUs and GPUs overlap in capability, but the throughput emphasis of GPUs explains why regular tensor shapes, batching, and memory coalescing matter.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c02-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -333,8 +328,6 @@ Figure&nbsp;2.2: CPU and GPU design trade-off
 </figcaption>
 </figure>
 </div>
-<p>Treat the visual as a conceptual comparison rather than a literal chip floorplan. Modern CPUs and GPUs overlap in capability, but the throughput emphasis of GPUs explains why regular tensor shapes, batching, and memory coalescing matter.</p>
-<p>A CPU runs fewer cores designed for branches, caches, and low-latency control work. A GPU runs many lightweight threads across similar data. Dense transformer projections therefore map naturally to GPU throughput, while request scheduling and irregular scalar logic remain CPU-side work. GPU performance depends on exposing enough parallel work, preserving locality, and avoiding divergence or tiny launches.</p>
 </section>
 <section id="sec-m4-c02-s02" class="level2" data-number="2.2">
 <h2 data-number="2.2" class="anchored" data-anchor-id="sec-m4-c02-s02"><span class="header-section-number">2.2</span> GPU chip structure</h2>
@@ -440,25 +433,15 @@ Table&nbsp;2.1: Memory hierarchy comparison.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>L2 cache:</strong></span> Device-wide cache shared by SMs. It is the main hardware cache level to discuss for cross-SM global-memory locality and L2 persistence controls.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Cache sector:</strong></span> Profiler-visible access granularity. Nsight Compute reports sectors as 32-byte chunks, with four sectors in a 128-byte L1 or L2 cache line on documented NVIDIA profiling views.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Associativity:</strong></span> Number of cache lines that can occupy one cache set. It matters when address layout or stride creates conflict misses even though total cache capacity seems sufficient.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cache control:</strong></span> A set of hints, resource preferences, and explicit staging choices. The programmer can influence replacement priority and allocation behavior, but cannot assign arbitrary tensors to cache sets or pin ordinary cache lines.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cache control boundaries:</strong></span> The hardware limits direct placement, but provides specific controls:
+<ul>
+<li><code>cudaFuncSetCacheConfig</code>: Adjusts the L1/shared memory split.</li>
+<li><strong>L2 persistence window:</strong> Retains priority lines across kernel boundaries.</li>
+<li><strong>PTX eviction hints:</strong> Marks streaming loads to prevent them from evicting reused lines.</li>
+<li><strong>Profiler-counter proof:</strong> Verifies hit rates to confirm cache effectiveness. You cannot assign arbitrary tensors to cache sets or pin ordinary cache lines.</li>
+</ul></li>
 </ul>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Where associativity shows up</strong></p>
-<p><strong>Stride and layout conflicts:</strong> Power-of-two strides, column-wise traversal, or poorly padded leading dimensions can make warps revisit a small subset of cache sets. Symptoms are low hit rate or high miss traffic even when the nominal working set is not huge.</p>
-<p><strong>Warp memory shape:</strong> Coalesced contiguous lane accesses use cache sectors efficiently. Scattered lane accesses consume more sectors and make replacement pressure harder to interpret.</p>
-<p><strong>Streaming versus reused data:</strong> A one-pass stream should not evict data that the next tile or next kernel will reuse. Marking or structuring streaming accesses differently is useful when the trace proves reuse is being lost.</p>
-<p><strong>Concurrent kernels and streams:</strong> L2 is shared. Multiple kernels with persisting windows, peer traffic, or large streaming reads can evict each other’s useful lines when their combined footprint exceeds the set-aside or effective cache capacity.</p>
-<p><strong>Explicit staging:</strong> When reuse must be predictable inside a tile, shared memory and registers are stronger tools than hoping hardware cache replacement keeps the right lines.</p>
-</div>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Cache control boundaries</strong></p>
-<p><strong>Direct control:</strong> Use registers and shared memory when the kernel needs predictable local reuse.</p>
-<p><strong>Runtime preferences:</strong> Use <code>cudaFuncSetCacheConfig</code> or <code>cudaFuncAttributePreferredSharedMemoryCarveout</code> to prefer an L1/shared-memory balance on supported devices. These are preferences or hints, not mandatory placement.</p>
-<p><strong>L2 persistence:</strong> Use a CUDA stream or graph access-policy window when a global-memory range is repeatedly reused and small enough for preferential L2 retention. The window uses properties such as persisting, streaming, and normal access plus a <code>hitRatio</code> hint.</p>
-<p><strong>Low-level cache operators:</strong> Generated PTX or hand-written low-level kernels can use cache operators and eviction hints, such as cache-all, L2-only, streaming, evict-first, or evict-last forms. These express intent; they do not change program correctness or guarantee a replacement outcome.</p>
-<p><strong>Unsupported control model:</strong> Exact associativity, undocumented replacement policy, and manual cache-set placement are architecture details, not normal CUDA programming controls.</p>
-<p><strong>Proof:</strong> Use profiler counters for sectors per request, L1/TEX hit behavior, L2 hit rate, sector misses to device, system, or peer memory, and HBM traffic before assuming a cache hint helped.</p>
-</div>
+<p>L2 cache hit rates can drop if strides repeatedly map different addresses to the same cache sets. This is an associativity or conflict miss. Reorganizing the layout or padding the dimension can reduce these misses, though the exact hardware hash function is not documented.</p>
 <p>Cache controls help only when the access pattern creates reuse and profiler counters show that the hardware retains it; they cannot repair scattered accesses or force exact residency. Once operands reach an SM, the next question is whether their shapes and data types let Tensor Cores perform the arithmetic efficiently.</p>
 </section>
 <section id="sec-m4-c02-s04" class="level2" data-number="2.4">
@@ -467,10 +450,7 @@ Table&nbsp;2.1: Memory hierarchy comparison.
 <p>Tensor Cores operate on tiles rather than arbitrary scalar operations. A 16 x 16 x 16 MMA tile is a useful first approximation, though exact supported shapes depend on architecture, dtype, and kernel path. This is why hidden sizes, head dimensions, batch shapes, and padding can affect performance. Padding may increase nominal arithmetic while improving utilization by moving the operation onto a fast tensor-core path.</p>
 <p>In modern transformer GEMM, ‘compute-bound’ often means ‘tensor-core-bound’: the useful question is whether the operation reaches the specialized matrix units efficiently. Verify this in traces rather than assuming it. Nsight Systems kernel names, Nsight Compute instruction metrics, and achieved tensor-core utilization can show whether the intended path was actually used.</p>
 <p>Shape alignment depends on the library path and GPU architecture as well as the mathematical matrix dimensions. NVIDIA’s matrix-multiplication guidance reports that modern cuBLAS and cuDNN can often use Tensor Cores even when dimensions are imperfectly aligned, while efficiency improves when the fastest-varying matrix dimensions align to hardware-friendly byte multiples. For FP16, a common practical rule is to prefer multiples of 8 elements, with larger multiples often helping on A100-class paths. Exact requirements vary by CUDA library version, dtype, layout, and GPU generation.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Tensor Core caveat</strong></p>
-<p>A poorly aligned matrix shape can trigger internal padding, a less efficient tile path, a different kernel, or Tensor Core execution with lower utilization. The performance diagnosis should therefore check the actual kernel path, achieved utilization, and tensor dimensions together.</p>
-</div>
+<p>A poorly aligned matrix shape can trigger internal padding, a less efficient tile path, a different kernel, or Tensor Core execution with lower utilization. Always check the actual kernel path, achieved utilization, and tensor dimensions together in a trace.</p>
 <p>The tensor-core figure compares two tile-utilization cases. It is a schematic utilization comparison, not a timing benchmark.</p>
 <p>Tensor Cores execute supported matrix multiply-accumulate instructions on small hardware fragments. Kernels combine those fragments into warp-, block-, and software-level tiles that can be much larger than one instruction.</p>
 <div id="fig-m4-c02-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Tensor Cores execute supported matrix multiply-accumulate instructions on small hardware fragments. Kernels combine those fragments into warp-, block-, and software-level tiles that can be much larger than one instruction. The 64 by 64 regions in the visual are software or kernel tiles, not the dimensions of one Tensor Core instruction. Alignment and remainder handling can affect utilization, while exact instruction shapes and Tensor Core counts depend on GPU architecture, dtype, and SKU.">
@@ -484,27 +464,15 @@ Figure&nbsp;2.4: Tensor Core tiling and utilization
 </figure>
 </div>
 <p>The 64 by 64 regions in the visual are software or kernel tiles, not the dimensions of one Tensor Core instruction. Alignment and remainder handling can affect utilization, while exact instruction shapes and Tensor Core counts depend on GPU architecture, dtype, and SKU.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Chart note</strong></p>
-<p><strong>Measured or compared:</strong> Tile utilization for a matrix problem that aligns cleanly with tensor-core tiles versus one that wastes lanes or tile capacity.</p>
-<p><strong>Axes, units, and series:</strong> The visual uses tile grids rather than numeric axes. Labels indicate tile dimensions and the amount of useful versus unused tile work in the best and not-so-great cases.</p>
-<p><strong>Read for:</strong> Read for the shape-alignment boundary: padding or choosing dimensions that match supported MMA tiles can increase useful tensor-core utilization even if nominal arithmetic grows.</p>
-<p><strong>Source status:</strong> Exact source schematic screenshot; utilization labels are preserved from the slide and no timing values are extracted.</p>
-</div>
 <p>Tensor Core speed requires a supported numerical format, aligned dimensions, and an execution path that actually selects the accelerated kernel. When an operation spans several GPUs, the next question is whether the local interconnect can move partial results quickly enough to preserve that compute gain.</p>
 </section>
 <section id="sec-m4-c02-s05" class="level2" data-number="2.5">
 <h2 data-number="2.5" class="anchored" data-anchor-id="sec-m4-c02-s05"><span class="header-section-number">2.5</span> Intra-node interconnects</h2>
 <p>The earlier sections described one GPU’s execution and memory hierarchy. Scaling starts when tensors must cross a physical boundary: between GPUs in one server or between servers in a cluster. A GPU is one execution device. A board or accelerator card packages one or more GPUs and their local HBM. A node, also called a server, contains CPUs, host memory, PCIe root complexes, network interface cards, and one or more GPU boards. Intra-node traffic stays inside one server; inter-node traffic crosses the cluster network between servers.</p>
 <p>Intra-node topology starts before GPU-to-GPU links. Multi-socket servers often have Non-Uniform Memory Access (NUMA): CPU cores, host memory channels, PCIe root complexes, GPUs, and Network Interface Cards (NICs) are closer to some sockets than others. A process placed on the wrong CPU socket can feed a nearby-looking GPU through a slower path.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Definition - NUMA and placement</strong></p>
-<p><strong>NUMA:</strong> Non-Uniform Memory Access. Memory and I/O access time depends on which CPU socket is attached to the memory controller or PCIe path.</p>
-<p><strong>Closest CPU/socket:</strong> The CPU socket with the shortest host path to a given GPU or NIC. Data loading, tokenization, and host-to-device copies can be slower when the process is scheduled far from that path.</p>
-<p><strong>Process/GPU pinning:</strong> Bind ranks, CPU worker threads, and visible GPUs so the host work for a GPU runs near that GPU’s PCIe and memory locality when the system topology makes this relevant.</p>
-<p><strong>Why it matters:</strong> Bad locality can reduce throughput or add latency before InfiniBand, NCCL, or distributed algorithms enter the picture.</p>
-</div>
+<p>Data loading, tokenization, and host-to-device copies run faster when the process is scheduled on the CPU socket closest to the target GPU. Process and GPU pinning bind ranks and workers to that local PCIe and memory path. Bad locality can reduce throughput or add latency before InfiniBand or NCCL even start.</p>
 <p>PCIe connects GPUs to the host and sometimes to each other, but it is much slower than on-package or board-level GPU interconnects. NVLink provides higher bandwidth GPU-to-GPU communication inside a node. NVSwitch extends this idea to many GPUs. These fabrics matter for tensor parallelism and frequent collectives.</p>
+<p>Use Table 2.2 only for an initial scale comparison: it shows how the available byte rate usually falls as traffic leaves one GPU. These are planning ranges, not measured ceilings for the current system.</p>
 <div id="tbl-m4-c02-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c02-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -560,28 +528,20 @@ Table&nbsp;2.2: Typical movement paths and bandwidth ranges for planning. Actual
 <section id="sec-m4-c02-s06" class="level2" data-number="2.6">
 <h2 data-number="2.6" class="anchored" data-anchor-id="sec-m4-c02-s06"><span class="header-section-number">2.6</span> Interconnect hierarchy beyond HBM</h2>
 <p>An interconnect is the path used to move data between processors, accelerators, host memory, network cards, or nodes. After data leaves HBM or one GPU, the cost model changes: bandwidth usually drops, latency rises, and synchronization becomes more visible.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Definition - Interconnect terms</strong></p>
-<p><strong>PCIe:</strong> General host/device expansion bus for CPUs, GPUs, NICs, and other devices.</p>
-<p><strong>NVLink:</strong> High-bandwidth GPU-to-GPU link available only on supported systems and topologies.</p>
-<p><strong>NVSwitch:</strong> Switch fabric that connects multiple NVLink-capable GPUs inside a server or platform.</p>
-<p><strong>NIC:</strong> Network Interface Card, the device that connects a node to the cluster network.</p>
-<p><strong>InfiniBand:</strong> High-performance cluster fabric commonly used for multi-node GPU training and serving.</p>
-<p><strong>RoCE:</strong> RDMA over Converged Ethernet; performance depends strongly on Ethernet fabric configuration.</p>
-<p><strong>Ethernet:</strong> General-purpose network fabric. It is ubiquitous, but unoptimized paths are often weak for frequent GPU collectives.</p>
-</div>
+<ul>
+<li><strong>PCIe:</strong> General host/device expansion bus for CPUs, GPUs, NICs, and other devices.</li>
+<li><strong>NVLink:</strong> High-bandwidth GPU-to-GPU link available only on supported systems and topologies.</li>
+<li><strong>NVSwitch:</strong> Switch fabric that connects multiple NVLink-capable GPUs inside a server or platform.</li>
+<li><strong>NIC:</strong> Network Interface Card, the device that connects a node to the cluster network.</li>
+<li><strong>InfiniBand:</strong> High-performance cluster fabric commonly used for multi-node GPU training and serving.</li>
+<li><strong>RoCE:</strong> RDMA over Converged Ethernet; performance depends strongly on Ethernet fabric configuration.</li>
+<li><strong>Ethernet:</strong> General-purpose network fabric. It is ubiquitous, but unoptimized paths are often weak for frequent GPU collectives.</li>
+</ul>
 <p>After HBM, the next distance is usually another GPU or another node. Moving tensors across PCIe, NVLink, NVSwitch, InfiniBand, RoCE, or Ethernet is far more expensive than reading registers or shared memory. Distributed training and distributed inference therefore add explicit communication costs and synchronization points to the single-GPU execution model.</p>
-<p>A useful mental model is distance. Intra-SM movement is cheapest, HBM movement is expensive but local, GPU-to-GPU movement inside a node is more expensive, and node-to-node movement is usually more expensive again. NCCL and <code>torch.distributed</code> appear later as software layers that use these physical paths.</p>
+<p>Treat each memory or communication path as a separate measured resource. Register and shared-memory reuse usually avoids slower device-memory traffic; an HBM load uses the GPU memory controllers; a peer transfer uses NVLink, NVSwitch, or PCIe; and a cross-node transfer adds a NIC and network fabric. Their relative cost depends on message size, topology, contention, and overlap, so confirm the selected path and measure its effective bandwidth and latency.</p>
 <p>A memory-transfer path is the hardware route used to move bytes from one memory domain to another. For GPU workloads, the important domains are CPU system memory, pinned host memory, one GPU’s HBM, another GPU’s HBM, and memory reachable through a Network Interface Card (NIC). These domains differ in latency, bandwidth, address-translation rules, and synchronization behavior.</p>
 <p>The performance mistake is to treat every transfer as the same kind of HBM traffic. A kernel reading its own tensor, a host batch copied into GPU memory, a peer GPU copy, and a cross-node collective all move bytes, but they use different software owners and hardware paths.</p>
 <p>Copy engines and caches solve different movement problems. A copy engine is used for explicit transfer work, such as host-device copies or some device-device copies. The cache hierarchy serves ordinary kernel load/store instructions as warps read and write tensors. A slow trace can involve both: a batch might first move through a DMA copy path into HBM, then a kernel might waste HBM bandwidth because its warp loads miss cache or access scattered sectors.</p>
-<ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>SM load/store path:</strong></span> Used by kernels reading and writing tensors already in the same GPU’s HBM. Requests flow through the GPU execution pipeline, L2 cache, memory controllers, and HBM stacks.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Copy engine and DMA path:</strong></span> Used by many explicit host-device or device-device copy operations. The host submits a command, while Direct Memory Access (DMA)-capable hardware moves bytes without the CPU copying each byte in a software loop.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Peer-to-peer path:</strong></span> Used when one GPU can directly copy to or access another GPU’s memory through NVLink, NVSwitch, or PCIe peer paths supported by the platform.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>NIC and RDMA path:</strong></span> Used when bytes cross nodes through a network card. On supported systems, GPUDirect RDMA lets the NIC access GPU memory directly; otherwise the payload may stage through host memory.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Host bounce path:</strong></span> A fallback where GPU data is copied through CPU memory before reaching its destination. It is often correct but can add PCIe traffic, CPU-memory pressure, and latency.</li>
-</ul>
 <p>The diagram separates the movement paths. The following principles and table answer a practical design question: which software layer initiates each path, which physical route carries the bytes, and which condition should be checked before optimizing it.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Transfer design principles</strong></p>
@@ -590,6 +550,7 @@ Table&nbsp;2.2: Typical movement paths and bandwidth ranges for planning. Actual
 <p><strong>Direct path validation:</strong> Confirm that a peer, NVLink/NVSwitch, or RDMA path is actually available before assuming the fast route exists.</p>
 <p><strong>Distance by frequency:</strong> The more often data moves, the closer the communicating devices must be. Per-token communication should stay closer than per-step or background movement.</p>
 </div>
+<p>After a trace identifies a transfer, Table 2.3 answers a different question: which software submitted it, which physical route likely carried it, and what evidence can distinguish a direct path from staging or fallback.</p>
 <div id="tbl-m4-c02-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c02-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -647,8 +608,7 @@ Table&nbsp;2.3: Transfer paths: initiating software, physical route, and diagnos
 <h2 data-number="2.7" class="anchored" data-anchor-id="sec-m4-c02-s07"><span class="header-section-number">2.7</span> Hardware limits on software design</h2>
 <p>Software design is constrained by the cheapest place where data can be reused. If values are reused within a thread, registers are ideal. If values are reused by a block, shared memory can help. If values are reused across kernels or requests, L2, HBM layout, and serving-engine cache policies matter. Distributed systems add another hierarchy: GPU-to-GPU, node-to-node, and storage-to-host movement.</p>
 <p>VRAM means the GPU device-memory capacity available for tensors, model weights, activations, workspaces, and caches. On the datacenter GPUs discussed in this module, that device memory is High Bandwidth Memory (HBM).</p>
-<p>The mismatch between GPU VRAM capacity growth and LLM parameter size growth explains why model sharding, quantization, and offloading are central concerns. GPU compute and bandwidth have scaled faster than per-device VRAM capacity, so memory capacity remains a hard physical wall for large models.</p>
-<p>This capacity comparison estimates what raw weights alone consume on example GPUs. Start with parameter count times bytes per stored weight, then reserve capacity for scales, temporary workspaces, allocator headroom, and the KV cache required by the target batch and context length.</p>
+<p>For many current LLMs, one device cannot hold the weights at the desired precision together with KV cache, activations or temporary workspaces, and allocator headroom. Estimate raw weight bytes first, then add the workload-specific state before choosing quantization, sharding, or offload. Table 2.4 provides examples for specific GPU variants; cite and date each hardware value because capacity and peak bandwidth differ by SKU and configuration.</p>
 <div id="tbl-m4-c02-t04" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c02-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">

@@ -291,8 +291,8 @@ ul.task-list li input[type="checkbox"] {
 
 
 <p>Large language model performance is determined by more than the number of floating-point operations. Each training step or inference request creates tensors with different sizes, lifetimes, reuse patterns, and placement constraints. The hardware must move those tensors through a memory hierarchy, execute kernels, and sometimes exchange partial results with other GPUs. A useful optimization starts by identifying the active work and the resource that limits it.</p>
-<p>Readers need basic Python and PyTorch familiarity. The systems model then develops in dependency order: model state and workload phases, GPU compute and memory paths, CUDA and Triton execution, measurement, compiler/runtime changes, training and serving techniques, and finally communication across GPUs. Equations and code examples appear where they answer a concrete sizing, timing, or implementation question.</p>
-<p>The guide is divided into three parts. Part I builds the single-GPU model, Part II applies it to training and inference workloads, and Part III adds communication and distributed execution.</p>
+<p>Basic Python and PyTorch familiarity is enough to begin. Chapter 1 introduces the tensors used in training and generation. Chapters 2-4 explain where those tensors are stored and how GPU programs process them. Chapters 5-6 show how to measure that work and reduce compiler and runtime overhead. Equations and code examples support the memory estimates, timing comparisons, and implementations along the way.</p>
+<p>Part I covers execution on one GPU. Part II applies those foundations to training and inference serving. Part III examines how GPUs share work and exchange data.</p>
 <div id="fig-m4-index-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Thirteen chapters arranged as a reading path across three parts: single-GPU foundations, training and inference workloads, and distributed systems, with measurement loops returning to earlier decisions.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-index-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -304,7 +304,6 @@ Figure&nbsp;1: Book structure and chapter path
 </figure>
 </div>
 <p>The chapter path is a reading order, not one runtime pipeline. Measurement recurs throughout the guide because every change must be checked in the phase and system where it is expected to help.</p>
-<p>The recurring engineering method is simple. Select one measured phase, identify the tensors and messages that are live, choose the metric that describes progress, and determine whether compute, memory traffic, launch delay, synchronization, or communication is limiting it. Change the component that controls that behavior, then check numerical correctness, model quality, and the end-to-end metric under the same workload.</p>
 <p>After the common foundations, local acceleration, inference serving, and distributed systems can be studied as separate tracks. Each track adds different limits and control points.</p>
 <div id="fig-m4-index-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Foundations split into three parallel study tracks for local acceleration, inference serving, and distributed systems; the tracks merge into hands-on diagnosis and a measure-again feedback loop.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -319,9 +318,7 @@ Figure&nbsp;2: Study route from foundations to diagnosis
 <p>The tracks meet again in hands-on diagnosis. A reader can follow one track for immediate work, but reliable optimization still uses the same cycle: measure, change one relevant control, verify the result, and measure again.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>What mathematical objects become in a running system</strong></p>
-<p><strong>Bring forward:</strong> Tensor and matrix dimensions, dot products, softmax, attention Q/K/V, gradients, and the idea that KV cache stores historical attention state.</p>
-<p><strong>Performance layer:</strong> The physical memory tier, arithmetic intensity, kernel shape, scheduler state, and communication path that determine the cost of those mathematical objects.</p>
-<p><strong>First consequence:</strong> The same attention formula can be compute-rich during prefill and bandwidth-sensitive during decode because the available reuse and the amount of KV state read per token change.</p>
+<p>A tensor is an array of numbers, but running an operation also requires storing those numbers and moving them to the processor. Two implementations can compute the same result while moving different amounts of data. For example, reusing weights already available to a group of operations can reduce repeated memory reads. The guide connects the mathematics of each operation to these storage and execution costs.</p>
 </div>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>State objects first:</strong></span> Chapter 1 defines tensors, parameters, gradients, activations, logits, loss, optimizer state, temporary workspaces, and KV cache. These are the objects that later sections move, store, shard, compress, cache, or reuse.</li>
@@ -337,20 +334,18 @@ Figure&nbsp;2: Study route from foundations to diagnosis
 </ul>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Questions for each performance problem</strong></p>
-<p><strong>Object:</strong> What tensor, cache block, activation, gradient, parameter shard, request, or message is moving, stored, reused, compressed, or synchronized?</p>
-<p><strong>Limit:</strong> Which resource is binding: compute throughput, memory bandwidth, memory capacity, launch latency, CPU scheduling, network bandwidth, network latency, or synchronization?</p>
-<p><strong>Control layer:</strong> Which layer can change the behavior: model code, PyTorch, CUDA runtime, compiler, kernel library, serving engine, communication backend, cluster topology, or benchmark harness?</p>
-<p><strong>Evidence:</strong> Which measurement would prove the diagnosis: roofline estimate, profiler timeline, kernel counters, memory accounting, serving metrics, communication trace, or correctness check?</p>
-<p><strong>Constraint:</strong> What prevents an unsafe shortcut: numerical accuracy, model quality, shape stability, memory budget, ordering requirement, cache validity, distributed consistency, or service-level objective?</p>
+<p>For a slow training step or generation request, work through these questions:</p>
+<ul>
+<li>Which part takes the time: input preparation, GPU computation, token generation, or communication?</li>
+<li>What data does that part read, write, or keep in memory?</li>
+<li>Is it doing arithmetic, moving data, or waiting? Use measurements to distinguish these possibilities.</li>
+<li>Which code, library, or setting can change that work?</li>
+<li>After the change, are the results still correct, is model quality acceptable, and has the original time or throughput target improved under the same workload?</li>
+</ul>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>What each main mechanism changes</strong></p>
-<p><strong>FlashAttention:</strong> An example of IO-aware attention-kernel design: reduce HBM traffic by tiling attention while preserving the attention formula up to floating-point evaluation order and rounding.</p>
-<p><strong>PagedAttention:</strong> An example of KV-cache block management: allocate and reuse cache blocks without requiring one contiguous cache allocation per request.</p>
-<p><strong>CUDA Graphs:</strong> An example of launch-overhead reduction: replay a captured graph when shapes, memory addresses, and control flow are stable enough.</p>
-<p><strong>Speculative decoding:</strong> An example of trading extra model work for lower latency: use a draft model or approximation and verify with the target model.</p>
-<p><strong>Fully Sharded Data Parallel (FSDP) and ZeRO (Zero Redundancy Optimizer):</strong> Examples of sharded model state: split parameters, gradients, or optimizer state so model size is not limited by one device’s memory.</p>
-<p><strong>GPipe-style micro-batching:</strong> An example of pipeline scheduling: split a batch into micro-batches so pipeline stages spend less time idle.</p>
+<p>Some optimizations reduce the work done for each token; others reduce data transfers or keep the GPU from waiting. The right choice depends on which cost dominates the workload being measured.</p>
 </div>
 
 

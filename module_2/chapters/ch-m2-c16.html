@@ -473,7 +473,6 @@ window.Quarto = {
 <p>Attention lets a position read information directly from selected positions in a sequence. It removes the long serial path of recurrence, but full attention still compares many pairs of positions.</p>
 <p>Attention lets one position read a weighted combination of other permitted positions. The chapter builds that computation from query-key scores, a row-wise softmax, a mask, and the value vectors being combined.</p>
 <p>In code, <code>torch.matmul</code>, <code>masked_fill</code>, and <code>torch.softmax</code> implement the query-key-value calculation; Matplotlib or Seaborn turns attention matrices into inspectable heatmaps.</p>
-<p>Chapter 16 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c16-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 16 opener for Attention mathematics, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c16-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -484,7 +483,6 @@ Figure&nbsp;16.1: Queries score permitted keys and use the resulting weights to 
 </figcaption>
 </figure>
 </div>
-<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c16-s01" class="level2" data-number="16.1">
 <h2 data-number="16.1" class="anchored" data-anchor-id="sec-m2-c16-s01"><span class="header-section-number">16.1</span> Preparing Vectors for Attention</h2>
 <p>Attention produces one output vector by taking a weighted sum of value vectors. Queries and keys determine the weights; values provide the information being combined.</p>
@@ -612,6 +610,7 @@ O=AV
 <p>o: [2]</p>
 <p>The output is a weighted read from the two value vectors.</p>
 </div>
+<p>The following runnable PyTorch example receives three two-coordinate query, key, and value vectors. It prints three attention-row sums equal to one and a <span class="math inline">\([3,2]\)</span> context matrix, then prepares a labeled heatmap whose rows are queries and columns are keys. A mask, when required, must be added to the scaled score matrix before the last-axis softmax; normalizing another axis would make different queries compete with one another.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Scaled dot-product attention and a token-to-token heatmap</p>
 </div>
@@ -671,10 +670,6 @@ M_{i,j}=\begin{cases}-\infty,&amp;j&gt;i,\\0,&amp;\text{otherwise.}\end{cases}
 <p>An illegal position receives negative infinity before softmax, making its normalized weight zero.</p>
 <p>The mask changes which positions can contribute without changing the value vectors.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Example: Causal mask</strong></p>
-<p>For query position <span class="math inline">\(i=2\)</span> and key position <span class="math inline">\(j=4\)</span>, we have <span class="math inline">\(j&gt;i\)</span>, so the mask entry is <span class="math inline">\(-\infty\)</span>.</p>
-</div>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Masked scores</strong></p>
 <p>In a causal model, <span class="math inline">\(i=2\)</span> and <span class="math inline">\(j=4\)</span> imply <span class="math inline">\(j&gt;i\)</span>, so the masked score is <span class="math inline">\(-\infty\)</span>.</p>
 </div>
@@ -693,7 +688,7 @@ M_{i,j}=\begin{cases}-\infty,&amp;j&gt;i,\\0,&amp;\text{otherwise.}\end{cases}
 <p>Self-attention and cross-attention differ in where a position obtains information. Self-attention compares positions within one representation sequence. Cross-attention uses one sequence as queries and another sequence as keys and values, so an output token can read a source sentence, image patches, or retrieved context.</p>
 <p>For classification, an encoder lets every permitted token contribute to a contextual sequence representation before a classifier head reads it. For causal generation, a decoder mask limits each token to earlier positions. For translation, an encoder represents the source and a decoder cross-attends to it while producing the target sequence.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Computation map</strong></span></p>
-<p>The computation starts with input representations and produces output through the intermediate objects shown below.</p>
+<p>The computation projects input representations into queries, keys, and values, compares every query with the permitted keys, and combines the corresponding values.</p>
 <div id="fig-m2-c16-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Native computation diagram: Attention turns query-key comparisons into weights that combine the value vectors.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c16-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -704,7 +699,7 @@ Figure&nbsp;16.2: Attention turns query-key comparisons into weights that combin
 </figcaption>
 </figure>
 </div>
-<p>The output of input representations is the input required by output; the intermediate stages name the stored objects that make the transition possible.</p>
+<p>Self-attention obtains queries, keys, and values from one sequence. Cross-attention obtains queries from the sequence being updated and keys and values from a separate source, while keeping the same score, normalization, and weighted-sum operations.</p>
 <p>Self-attention reads one sequence; cross-attention reads one sequence from another. Both use the same score, normalization, and weighted-value calculation.</p>
 </section>
 <section id="sec-m2-c16-s05" class="level2" data-number="16.5">
@@ -735,7 +730,7 @@ Figure&nbsp;16.2: Attention turns query-key comparisons into weights that combin
 <h2 data-number="16.6" class="anchored" data-anchor-id="sec-m2-c16-s06"><span class="header-section-number">16.6</span> Attention trace</h2>
 <p>Attention should be learned as a matrix computation. Each token representation is projected into a query, key, and value. Queries ask what is needed, keys describe what each position offers, and values hold the information that will be mixed. The <span class="math inline">\(QK^{T}\)</span> matrix contains one score for every query-key pair.</p>
 <p>The mask is part of the mathematics, not a later implementation detail. Padding masks remove non-token positions, and causal masks remove future positions. Only after masking does the row-wise softmax turn scores into weights, and those weights form weighted sums of the value vectors.</p>
-<p>Attention becomes efficient when all query-key comparisons are packed into a matrix multiplication.</p>
+<p>Packing query-key comparisons into matrix multiplication exposes parallel hardware operations, but the exact calculation still contains one score per query-key pair and therefore remains quadratic in sequence length.</p>
 <div id="fig-m2-c16-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram showing query-key score matrices, masking, normalization, and value mixing.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c16-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -789,7 +784,7 @@ Figure&nbsp;16.4: The largest query-key score gives its value vector the stronge
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Scaled dot-product attention:</strong></span></p>
 <p><span id="eq-m2-c16-e13"><span class="math display">\[
-\operatorname{Attention}(Q,K,V)=\operatorname{softmax}\left(\frac{QK^{T}+\operatorname{mask}}{\sqrt{d_k}}\right)V
+\operatorname{Attention}(Q,K,V)=\operatorname{softmax}\!\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 \tag{16.13}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Score element:</strong></span></p>
 <p><span id="eq-m2-c16-e14"><span class="math display">\[
@@ -811,12 +806,9 @@ Figure&nbsp;16.4: The largest query-key score gives its value vector the stronge
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
 <ul>
 <li><code>scores = q @ k.transpose(-2, -1)</code> creates the query-by-key matrix.</li>
-<li><code>scores.masked_fill(mask, -inf)</code> must run before softmax.</li>
-<li>softmax(scores, <span class="math inline">\(dim=-1\)</span>) normalizes across source positions for each query.</li>
+<li><code>scores.masked_fill(mask, float("-inf"))</code> must run before softmax.</li>
+<li><code>torch.softmax(scores, dim=-1)</code> normalizes across source positions for each query.</li>
 </ul>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>It should now be clear how to compute a three-token attention row by hand, including a masked future position.</strong></p>
-</div>
 <p>Attention computes scores between queries and keys, normalizes them, and mixes values.</p>
 <p>Transformer blocks stack attention with residual, normalization, and feed-forward computation.</p>
 

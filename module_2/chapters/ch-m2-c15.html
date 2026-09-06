@@ -442,7 +442,7 @@ window.Quarto = {
   <li><a href="#sec-m2-c15-s01" id="toc-sec-m2-c15-s01" class="nav-link active" data-scroll-target="#sec-m2-c15-s01"><span class="header-section-number">15.1</span> Carrying Sequential Memory Forward with Recurrent Hidden States</a></li>
   <li><a href="#sec-m2-c15-s02" id="toc-sec-m2-c15-s02" class="nav-link" data-scroll-target="#sec-m2-c15-s02"><span class="header-section-number">15.2</span> Comparing Fixed N-Gram Histories with Continuous Hidden States</a></li>
   <li><a href="#sec-m2-c15-s03" id="toc-sec-m2-c15-s03" class="nav-link" data-scroll-target="#sec-m2-c15-s03"><span class="header-section-number">15.3</span> Training Recurrent Networks with Backpropagation Through Time</a></li>
-  <li><a href="#sec-m2-c15-s04" id="toc-sec-m2-c15-s04" class="nav-link" data-scroll-target="#sec-m2-c15-s04"><span class="header-section-number">15.4</span> Gating Sequential Memory with LSTMs and GRUs</a></li>
+  <li><a href="#sec-m2-c15-s04" id="toc-sec-m2-c15-s04" class="nav-link" data-scroll-target="#sec-m2-c15-s04"><span class="header-section-number">15.4</span> Gating Sequential Memory with LSTMs</a></li>
   <li><a href="#sec-m2-c15-s05" id="toc-sec-m2-c15-s05" class="nav-link" data-scroll-target="#sec-m2-c15-s05"><span class="header-section-number">15.5</span> Executing Additive Cell State Updates in LSTMs</a></li>
   <li><a href="#sec-m2-c15-s06" id="toc-sec-m2-c15-s06" class="nav-link" data-scroll-target="#sec-m2-c15-s06"><span class="header-section-number">15.6</span> The Vanishing Gradient Problem and the O(T) Sequential Bottleneck</a></li>
   <li><a href="#sec-m2-c15-s07" id="toc-sec-m2-c15-s07" class="nav-link" data-scroll-target="#sec-m2-c15-s07"><span class="header-section-number">15.7</span> RNN state trace</a></li>
@@ -474,7 +474,6 @@ window.Quarto = {
 <p>Language has order: an earlier token can change the meaning of a later one. Recurrent models represent that order by carrying a state from one position to the next.</p>
 <p>Sequence tasks must retain both token content and token order. N-grams use a fixed history; RNNs and LSTMs carry a learned state through the sequence, which exposes the limits that motivate attention.</p>
 <p>In code, <code>torch.nn.RNN</code>, <code>GRU</code>, and <code>LSTM</code> return per-token outputs and final states; NLTK supports the count-based n-gram comparison.</p>
-<p>Chapter 15 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c15-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 15 opener for N-grams, RNNs, and LSTMs, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c15-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -485,7 +484,6 @@ Figure&nbsp;15.1: Fixed history and recurrent state provide different ways to ca
 </figcaption>
 </figure>
 </div>
-<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c15-s01" class="level2" data-number="15.1">
 <h2 data-number="15.1" class="anchored" data-anchor-id="sec-m2-c15-s01"><span class="header-section-number">15.1</span> Carrying Sequential Memory Forward with Recurrent Hidden States</h2>
 <p>A sequence task preserves the order of tokens and may return one decision, one label per position, or another sequence.</p>
@@ -529,11 +527,16 @@ P(x_{t}\mid x_{&lt;t})\approx P\!\left(x_{t}\mid x_{t-n+1},\ldots,x_{t-1}\right)
 <p>At step t, an RNN combines the current input vector with the previous hidden state using the same learned weights used at every other position. The new state can produce an output immediately or carry information to a later position.</p>
 <p>Backpropagation through time unrolls those repeated updates. A loss at a later position sends gradients through each earlier state transition to the shared input and recurrent matrices.</p>
 <p>Teacher forcing supplies the observed previous token during training. During generation the model receives its own selected token instead, so an early error can alter every later input state.</p>
+<p>Here <span class="math inline">\(u_t\)</span> denotes the decoder input at step <span class="math inline">\(t\)</span>. During training, <span class="math inline">\(x_{t-1}^{\mathrm{gold}}\)</span> is the observed previous token ID and its embedding is looked up before the recurrent cell receives it.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Teacher forcing:</strong></span></p>
+<p><span id="eq-m2-c15-e06"><span class="math display">\[
+u_{t}=x_{t-1}^{\mathrm{gold}}
+\tag{15.2}\]</span></span></p>
 <p>An RNN updates a hidden state one token at a time.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>RNN update:</strong></span></p>
 <p><span id="eq-m2-c15-e02"><span class="math display">\[
 h_{t}=\phi(W_{x}x_{t}+W_{h}h_{t-1}+b)
-\tag{15.2}\]</span></span></p>
+\tag{15.3}\]</span></span></p>
 <p>where <span class="math inline">\(x_{t}\)</span> is input at time t; <span class="math inline">\(h_{t-1}\)</span> is previous hidden state; <span class="math inline">\(h_{t}\)</span> is new hidden state.</p>
 <p>An RNN reuses the same transition at every time step, combining the new input with a summary of previous inputs.</p>
 <p>recurrence serializes sequence processing because each <span class="math inline">\(h_{t}\)</span> depends on <span class="math inline">\(h_{t-1}\)</span>.</p>
@@ -541,8 +544,8 @@ h_{t}=\phi(W_{x}x_{t}+W_{h}h_{t-1}+b)
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>RNN output:</strong></span></p>
 <p><span id="eq-m2-c15-e03"><span class="math display">\[
 z_{t}=W_{o}h_{t}+b_{o}
-\tag{15.3}\]</span></span></p>
-<p>where <span class="math inline">\(h_{t}\)</span> is hidden state at time t; <span class="math inline">\(x_{t}\)</span> is input vector at time t; φ is nonlinear activation.</p>
+\tag{15.4}\]</span></span></p>
+<p>where <span class="math inline">\(h_t\in\mathbb{R}^{H}\)</span> is the hidden state, <span class="math inline">\(W_o\in\mathbb{R}^{V\times H}\)</span> is the output matrix, <span class="math inline">\(b_o\in\mathbb{R}^{V}\)</span> is the bias, and <span class="math inline">\(z_t\in\mathbb{R}^{V}\)</span> contains one logit per vocabulary item. The activation <span class="math inline">\(\phi\)</span> was used to construct <span class="math inline">\(h_t\)</span> in the preceding recurrence; it is not applied again in this output projection.</p>
 <p>The recurrence combines the current input with the previous hidden state before applying the activation.</p>
 <p>The hidden state carries information forward, but the same dependency also limits parallel computation.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
@@ -554,6 +557,7 @@ z_{t}=W_{o}h_{t}+b_{o}
 <p><strong>RNN recurrence:</strong></p>
 <p>With both scalar weights equal to <span class="math inline">\(1\)</span>, <span class="math inline">\(x_t=2\)</span>, <span class="math inline">\(h_{t-1}=1\)</span>, and <span class="math inline">\(b=0\)</span>, the preactivation is <span class="math inline">\(1\cdot2+1\cdot1+0=3\)</span>.</p>
 </div>
+<p>The following runnable PyTorch example receives a random tensor of shape <span class="math inline">\([2,5,3]\)</span>: two sequences, five steps, and three input features. A two-layer bidirectional LSTM with hidden width four returns outputs of shape <span class="math inline">\([2,5,8]\)</span> and final hidden and cell states of shape <span class="math inline">\([4,2,4]\)</span>. The output width doubles because it concatenates two directions, while the first axis of the final states combines two layers with two directions. Bidirectional recurrence requires the complete sequence and is therefore unsuitable for causal generation.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Deep bidirectional LSTM dimensions</p>
 </div>
@@ -580,7 +584,7 @@ z_{t}=W_{o}h_{t}+b_{o}
 <p>Backpropagation through time assigns the loss at later positions to the shared recurrent weights used at earlier positions.</p>
 </section>
 <section id="sec-m2-c15-s04" class="level2" data-number="15.4">
-<h2 data-number="15.4" class="anchored" data-anchor-id="sec-m2-c15-s04"><span class="header-section-number">15.4</span> Gating Sequential Memory with LSTMs and GRUs</h2>
+<h2 data-number="15.4" class="anchored" data-anchor-id="sec-m2-c15-s04"><span class="header-section-number">15.4</span> Gating Sequential Memory with LSTMs</h2>
 <p>An LSTM adds gates that control what to remember, forget, and expose. The gates improve gradient flow and make longer dependencies more learnable than in a plain RNN.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Forget gate:</strong></span> Controls how much previous cell state is retained.</li>
@@ -597,11 +601,6 @@ z_{t}=W_{o}h_{t}+b_{o}
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>LSTM forget gate:</strong></span></p>
 <p><span id="eq-m2-c15-e05"><span class="math display">\[
 f_{t}=\sigma\!\left(W_{f}[h_{t-1};x_{t}]+b_{f}\right)
-\tag{15.4}\]</span></span></p>
-<p>Teacher forcing feeds the true previous token during training rather than the model’s sampled output.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Teacher forcing:</strong></span></p>
-<p><span id="eq-m2-c15-e06"><span class="math display">\[
-u_{t}=x_{t-1}^{\mathrm{gold}}
 \tag{15.5}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Gated update sketch:</strong></span></p>
 <p><span id="eq-m2-c15-e07"><span class="math display">\[
@@ -610,6 +609,7 @@ c_{t}=f_{t}\odot c_{t-1}+i_{t}\odot g_{t}
 <p>where <span class="math inline">\(c_{t}\)</span> is cell state at time t; <span class="math inline">\(f_{t}\)</span> is forget gate; <span class="math inline">\(i_{t}\)</span> is input gate; <span class="math inline">\(g_{t}\)</span> is candidate update.</p>
 <p>The cell state is the retained previous state plus a gated candidate contribution.</p>
 <p>Separate gates let an LSTM preserve or overwrite memory selectively.</p>
+<p>A gated recurrent unit (GRU) is a related recurrent layer that uses update and reset gates without a separate cell-state tensor. <code>torch.nn.GRU</code> has the same step-by-step sequence limitation as an LSTM, but it stores less recurrent state; this guide uses the LSTM equations to make the gating mechanism explicit.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Updating one scalar LSTM memory coordinate</strong></p>
 <p>Use previous cell state <span class="math inline">\(c_{t-1}=0.5\)</span>, candidate update <span class="math inline">\(g_t=0.4\)</span>, forget gate <span class="math inline">\(f_t=0.8\)</span>, input gate <span class="math inline">\(i_t=0.3\)</span>, and output gate <span class="math inline">\(o_t=0.6\)</span>.</p>
@@ -720,9 +720,6 @@ h_{t}=\tanh(W_{x}x_{t}+W_{h}h_{t-1}+b)
 <li>Token-level loss usually flattens [B, T, V] to [B·T, V] and targets to [B·T].</li>
 <li>Sampling from a CharRNN feeds the sampled id back into the next recurrent step.</li>
 </ul>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>It should now be clear how to identify whether a sequence task needs [B,H], [B,T,H], or [B,T,V].</strong></p>
-</div>
 <p>Sequence alternatives show what attention improves: recurrence, fixed context, and step-by-step state updates.</p>
 <p>Attention selects and combines value vectors through normalized query-key scores.</p>
 

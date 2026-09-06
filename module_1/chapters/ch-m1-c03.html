@@ -441,7 +441,7 @@ Figure&nbsp;3.1: A finite context budget is divided among instructions, history,
 <p><span id="eq-m1-c03-e01"><span class="math display">\[
 B_{sys}+B_{hist}+B_{evidence}+B_{tools}+B_{user}+B_{out} \le C
 \tag{3.1}\]</span></span></p>
-<p>Each <span class="math inline">\(B\)</span> term is the token allocation for one context component, and <span class="math inline">\(C\)</span> is model capacity. The plus signs represent direct competition for the same window; the inequality requires the complete request plus reserved output to fit. The expression is an application constraint, not a model-quality metric.</p>
+<p>The <span class="math inline">\(B\)</span> terms allocate tokens to system policy, history, evidence, tool definitions, the user request, and output, respectively; <span class="math inline">\(C\)</span> is the context capacity in tokens. Each input allocation must include its serialization overhead, or a separate margin must reserve that overhead. The inequality requires the complete input plus reserved output to fit. It checks capacity, not answer quality.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked calculation - allocate an 8,000-token request</strong></p>
 <p>Reserve 800 tokens for system policy, 1,200 for recent history, 3,000 for retrieved evidence, 600 for tool schemas, 400 for the user request, and 1,200 for output.</p>
@@ -501,7 +501,7 @@ Figure&nbsp;3.4: Dynamic context combines request-specific state, memory, retrie
 </section>
 <section id="sec-m1-c03-s03" class="level2" data-number="3.3">
 <h2 data-number="3.3" class="anchored" data-anchor-id="sec-m1-c03-s03"><span class="header-section-number">3.3</span> Request assembly and validation</h2>
-<p>Context engineering has defined the candidate components and the token budget. A production system still needs a repeatable order for loading, selecting, trimming, and validating them. The final section makes that control flow explicit and assigns each failure to the application component that can repair it.</p>
+<p>We now have a token budget and a set of candidate inputs. The application must turn them into the request sent to the model. That requires an order for loading and selecting the inputs, checking their total size, and trimming lower-priority material. Logging the input actually sent to the model lets an engineer later check whether a poor answer came from missing information or from how the model used it.</p>
 <p>A robust request builder loads a known policy version, finds relevant conversation state and external evidence, selects allowed tools, appends the user request, counts the serialized tokens, and trims lower-priority material when necessary. It records the policy version and selected sources so an engineer can reconstruct the request later.</p>
 <div id="fig-m1-c03-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Production context assembly is an ordered application pipeline, and the model is one step inside it. Source: Week 1, PDF p. 171.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -513,31 +513,48 @@ Figure&nbsp;3.5: Production context assembly is an ordered application pipeline,
 </figcaption>
 </figure>
 </div>
-<p>The slide’s sequence creates a request trace: each selected history item, document, and tool can be inspected independently of the final answer.</p>
+<p>The resulting request trace identifies the selected history items, documents, and tools independently of the final answer. It must describe the inputs retained after trimming, not the larger candidate set loaded beforehand.</p>
 <p><strong>Code example 3.1 - context assembly preserves source identity and output capacity.</strong></p>
+<p>This abbreviated Python function takes three application helpers. <code>load_context(user_id, question)</code> returns a versioned policy and a ranked list of authorized history, evidence, memory, or tool items. <code>serialize</code> assembles the provider request with policy and question kept separate from optional items; it preserves their role and source labels. <code>count_tokens</code> counts that complete request using the selected model’s tokenizer. Each optional item has a stable ID and a priority score, with smaller scores removed first. These helpers perform the retrieval, permission, formatting, and tokenization work; the function below shows how trimming and the final record stay consistent.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 3.1 - context assembly preserves source identity and output capacity.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c03-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c03-c01-1"><a href="#lst-m1-c03-c01-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> build_request(user_id, question, token_limit):</span>
-<span id="lst-m1-c03-c01-2"><a href="#lst-m1-c03-c01-2" aria-hidden="true" tabindex="-1"></a>    policy   <span class="op">=</span> load_versioned_system_policy()</span>
-<span id="lst-m1-c03-c01-3"><a href="#lst-m1-c03-c01-3" aria-hidden="true" tabindex="-1"></a>    history  <span class="op">=</span> retrieve_relevant_history(user_id, question, limit<span class="op">=</span><span class="dv">6</span>)</span>
-<span id="lst-m1-c03-c01-4"><a href="#lst-m1-c03-c01-4" aria-hidden="true" tabindex="-1"></a>    evidence <span class="op">=</span> retrieve_authorized_documents(question, limit<span class="op">=</span><span class="dv">12</span>)</span>
-<span id="lst-m1-c03-c01-5"><a href="#lst-m1-c03-c01-5" aria-hidden="true" tabindex="-1"></a>    evidence <span class="op">=</span> rerank_and_deduplicate(question, evidence)[:<span class="dv">5</span>]</span>
-<span id="lst-m1-c03-c01-6"><a href="#lst-m1-c03-c01-6" aria-hidden="true" tabindex="-1"></a>    tools    <span class="op">=</span> tools_allowed_for(user_id, question)</span>
-<span id="lst-m1-c03-c01-7"><a href="#lst-m1-c03-c01-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m1-c03-c01-8"><a href="#lst-m1-c03-c01-8" aria-hidden="true" tabindex="-1"></a>    request <span class="op">=</span> serialize(policy, history, evidence, tools, question)</span>
-<span id="lst-m1-c03-c01-9"><a href="#lst-m1-c03-c01-9" aria-hidden="true" tabindex="-1"></a>    request <span class="op">=</span> trim_by_priority(</span>
-<span id="lst-m1-c03-c01-10"><a href="#lst-m1-c03-c01-10" aria-hidden="true" tabindex="-1"></a>        request,</span>
-<span id="lst-m1-c03-c01-11"><a href="#lst-m1-c03-c01-11" aria-hidden="true" tabindex="-1"></a>        max_input_tokens<span class="op">=</span>token_limit <span class="op">-</span> RESERVED_OUTPUT_TOKENS,</span>
-<span id="lst-m1-c03-c01-12"><a href="#lst-m1-c03-c01-12" aria-hidden="true" tabindex="-1"></a>        never_drop<span class="op">=</span>[<span class="st">"system_policy"</span>, <span class="st">"current_question"</span>],</span>
-<span id="lst-m1-c03-c01-13"><a href="#lst-m1-c03-c01-13" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m1-c03-c01-14"><a href="#lst-m1-c03-c01-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> request, {</span>
-<span id="lst-m1-c03-c01-15"><a href="#lst-m1-c03-c01-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">"policy_version"</span>: policy.version,</span>
-<span id="lst-m1-c03-c01-16"><a href="#lst-m1-c03-c01-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">"history_ids"</span>: [item.<span class="bu">id</span> <span class="cf">for</span> item <span class="kw">in</span> history],</span>
-<span id="lst-m1-c03-c01-17"><a href="#lst-m1-c03-c01-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">"evidence_ids"</span>: [item.<span class="bu">id</span> <span class="cf">for</span> item <span class="kw">in</span> evidence],</span>
-<span id="lst-m1-c03-c01-18"><a href="#lst-m1-c03-c01-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">"tool_names"</span>: [tool.name <span class="cf">for</span> tool <span class="kw">in</span> tools],</span>
-<span id="lst-m1-c03-c01-19"><a href="#lst-m1-c03-c01-19" aria-hidden="true" tabindex="-1"></a>    }</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The returned metadata records what entered the request. When an answer fails, engineers can distinguish a missing document from a generation error. The application checks permission before tool definitions or documents enter the context; hiding an unauthorized result after generation is too late.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c03-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c03-c01-1"><a href="#lst-m1-c03-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dataclasses <span class="im">import</span> dataclass</span>
+<span id="lst-m1-c03-c01-2"><a href="#lst-m1-c03-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> Any, Literal</span>
+<span id="lst-m1-c03-c01-3"><a href="#lst-m1-c03-c01-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c03-c01-4"><a href="#lst-m1-c03-c01-4" aria-hidden="true" tabindex="-1"></a><span class="at">@dataclass</span>(frozen<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m1-c03-c01-5"><a href="#lst-m1-c03-c01-5" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> ContextItem:</span>
+<span id="lst-m1-c03-c01-6"><a href="#lst-m1-c03-c01-6" aria-hidden="true" tabindex="-1"></a>    kind: Literal[<span class="st">"history"</span>, <span class="st">"evidence"</span>, <span class="st">"memory"</span>, <span class="st">"tool"</span>]</span>
+<span id="lst-m1-c03-c01-7"><a href="#lst-m1-c03-c01-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">id</span>: <span class="bu">str</span></span>
+<span id="lst-m1-c03-c01-8"><a href="#lst-m1-c03-c01-8" aria-hidden="true" tabindex="-1"></a>    payload: Any</span>
+<span id="lst-m1-c03-c01-9"><a href="#lst-m1-c03-c01-9" aria-hidden="true" tabindex="-1"></a>    priority: <span class="bu">float</span></span>
+<span id="lst-m1-c03-c01-10"><a href="#lst-m1-c03-c01-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m1-c03-c01-11"><a href="#lst-m1-c03-c01-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> build_request(user_id, question, token_limit, <span class="op">*</span>,</span>
+<span id="lst-m1-c03-c01-12"><a href="#lst-m1-c03-c01-12" aria-hidden="true" tabindex="-1"></a>                  load_context, serialize, count_tokens,</span>
+<span id="lst-m1-c03-c01-13"><a href="#lst-m1-c03-c01-13" aria-hidden="true" tabindex="-1"></a>                  reserved_output_tokens<span class="op">=</span><span class="dv">1200</span>):</span>
+<span id="lst-m1-c03-c01-14"><a href="#lst-m1-c03-c01-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> token_limit <span class="op">&lt;=</span> <span class="dv">0</span> <span class="kw">or</span> <span class="kw">not</span> <span class="dv">0</span> <span class="op">&lt;=</span> reserved_output_tokens <span class="op">&lt;</span> token_limit:</span>
+<span id="lst-m1-c03-c01-15"><a href="#lst-m1-c03-c01-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"Reserve must leave a positive input budget"</span>)</span>
+<span id="lst-m1-c03-c01-16"><a href="#lst-m1-c03-c01-16" aria-hidden="true" tabindex="-1"></a>    max_input_tokens <span class="op">=</span> token_limit <span class="op">-</span> reserved_output_tokens</span>
+<span id="lst-m1-c03-c01-17"><a href="#lst-m1-c03-c01-17" aria-hidden="true" tabindex="-1"></a>    policy, candidates <span class="op">=</span> load_context(user_id, question)</span>
+<span id="lst-m1-c03-c01-18"><a href="#lst-m1-c03-c01-18" aria-hidden="true" tabindex="-1"></a>    kept, omitted <span class="op">=</span> <span class="bu">list</span>(candidates), []</span>
+<span id="lst-m1-c03-c01-19"><a href="#lst-m1-c03-c01-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="va">True</span>:</span>
+<span id="lst-m1-c03-c01-20"><a href="#lst-m1-c03-c01-20" aria-hidden="true" tabindex="-1"></a>        request <span class="op">=</span> serialize(policy, kept, question)</span>
+<span id="lst-m1-c03-c01-21"><a href="#lst-m1-c03-c01-21" aria-hidden="true" tabindex="-1"></a>        input_tokens <span class="op">=</span> count_tokens(request)</span>
+<span id="lst-m1-c03-c01-22"><a href="#lst-m1-c03-c01-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> input_tokens <span class="op">&lt;=</span> max_input_tokens:</span>
+<span id="lst-m1-c03-c01-23"><a href="#lst-m1-c03-c01-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
+<span id="lst-m1-c03-c01-24"><a href="#lst-m1-c03-c01-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> kept:</span>
+<span id="lst-m1-c03-c01-25"><a href="#lst-m1-c03-c01-25" aria-hidden="true" tabindex="-1"></a>            <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"Required policy and question exceed the budget"</span>)</span>
+<span id="lst-m1-c03-c01-26"><a href="#lst-m1-c03-c01-26" aria-hidden="true" tabindex="-1"></a>        worst <span class="op">=</span> <span class="bu">min</span>(<span class="bu">range</span>(<span class="bu">len</span>(kept)), key<span class="op">=</span><span class="kw">lambda</span> i: kept[i].priority)</span>
+<span id="lst-m1-c03-c01-27"><a href="#lst-m1-c03-c01-27" aria-hidden="true" tabindex="-1"></a>        omitted.append(kept.pop(worst))</span>
+<span id="lst-m1-c03-c01-28"><a href="#lst-m1-c03-c01-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> request, {</span>
+<span id="lst-m1-c03-c01-29"><a href="#lst-m1-c03-c01-29" aria-hidden="true" tabindex="-1"></a>        <span class="st">"policy_version"</span>: policy.version,</span>
+<span id="lst-m1-c03-c01-30"><a href="#lst-m1-c03-c01-30" aria-hidden="true" tabindex="-1"></a>        <span class="st">"retained"</span>: [{<span class="st">"kind"</span>: item.kind, <span class="st">"id"</span>: item.<span class="bu">id</span>} <span class="cf">for</span> item <span class="kw">in</span> kept],</span>
+<span id="lst-m1-c03-c01-31"><a href="#lst-m1-c03-c01-31" aria-hidden="true" tabindex="-1"></a>        <span class="st">"omitted"</span>: [{<span class="st">"kind"</span>: item.kind, <span class="st">"id"</span>: item.<span class="bu">id</span>} <span class="cf">for</span> item <span class="kw">in</span> omitted],</span>
+<span id="lst-m1-c03-c01-32"><a href="#lst-m1-c03-c01-32" aria-hidden="true" tabindex="-1"></a>        <span class="st">"input_tokens"</span>: input_tokens,</span>
+<span id="lst-m1-c03-c01-33"><a href="#lst-m1-c03-c01-33" aria-hidden="true" tabindex="-1"></a>        <span class="st">"reserved_output_tokens"</span>: reserved_output_tokens,</span>
+<span id="lst-m1-c03-c01-34"><a href="#lst-m1-c03-c01-34" aria-hidden="true" tabindex="-1"></a>    }</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>After each removal, the function serializes and counts again. The policy and current question cannot be removed: if those alone exceed the available input budget, the request fails before any model call. On success, <code>retained</code> and <code>omitted</code> identify the actual selection, and the token count corresponds to the returned request. For example, with a 900-token input allowance, dropping a 200-token low-priority history item from a 1,050-token request leaves 850 tokens; the log must list that history item as omitted, not retained.</p>
+<p>The application checks permission before documents or tool definitions enter the candidate list. It then saves the returned request record under the logging and privacy policy described in Section 3.5. Hiding an unauthorized result after generation would leave the model exposed to information it should never have received.</p>
 </section>
 <section id="sec-m1-c03-s04" class="level2" data-number="3.4">
 <h2 data-number="3.4" class="anchored" data-anchor-id="sec-m1-c03-s04"><span class="header-section-number">3.4</span> Evidence placement in the context window</h2>

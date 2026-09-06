@@ -471,7 +471,6 @@ window.Quarto = {
 <p>A token ID names a row in a vocabulary; it is not a meaningful numeric quantity by itself. An embedding table gives each token a trainable vector that a model can combine with other vectors.</p>
 <p>Token IDs are addresses, not meaningful numeric values. An embedding table maps each address to a learned vector, and pooling shows one way to turn several token vectors into one sequence representation.</p>
 <p>In code, <code>torch.nn.Embedding</code> maps integer IDs to floating-point rows, and <code>torch.mean</code> or masked reductions pool token vectors into one sequence representation.</p>
-<p>Chapter 13 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c13-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 13 opener for Embedding tables and vector representations, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c13-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -482,7 +481,6 @@ Figure&nbsp;13.1: Token IDs select learned rows that can be batched and pooled i
 </figcaption>
 </figure>
 </div>
-<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c13-s01" class="level2" data-number="13.1">
 <h2 data-number="13.1" class="anchored" data-anchor-id="sec-m2-c13-s01"><span class="header-section-number">13.1</span> Mapping Discrete Token IDs to Dense Vector Coordinates</h2>
 <p>An embedding matrix is a learned lookup table. It maps each discrete token ID to a dense vector that can be processed by neural layers.</p>
@@ -526,6 +524,7 @@ E\in\mathbb{R}^{\lvert V\rvert\times d}
 <p><strong>One-hot equivalence:</strong></p>
 <p>If <span class="math inline">\(\operatorname{onehot}(2)=(0,0,1,0)\)</span>, then <span class="math inline">\(\operatorname{onehot}(2)^T E\)</span> returns the row of <span class="math inline">\(E\)</span> indexed by token ID <span class="math inline">\(2\)</span>.</p>
 </div>
+<p>The following runnable PyTorch example receives two sequences of token IDs, looks up four-coordinate rows, mean-pools across the sequence axis, and backpropagates the sum of the pooled values. The final printout reports one gradient magnitude per vocabulary row: rows used by the batch can be nonzero, while unused rows remain zero. The unmasked mean is deliberate here; padded batches require the masked reduction introduced in Chapter 2.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Embedding lookup, pooling, and selected-row gradients</p>
 </div>
@@ -566,7 +565,7 @@ H_{0}=E[X],\quad H_{0}\in\mathbb{R}^{B\times T\times d}
 <p>In a simple embedding lookup, only selected rows receive direct lookup gradients.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Row-gradient sparsity:</strong></span></p>
 <p><span id="eq-m2-c13-e05"><span class="math display">\[
-\operatorname{grad}(E_{j,:})\ne 0\quad\text{only for token rows }j\text{ used in the batch}
+j\notin\mathcal{I}_{B}\quad\to\quad\frac{\partial L}{\partial E_{j,:}}=0
 \tag{13.5}\]</span></span></p>
 <p>One-hot multiplication and integer indexing select the same embedding row.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>One-hot embedding lookup:</strong></span></p>
@@ -580,15 +579,15 @@ H_{0}=E[X],\quad H_{0}\in\mathbb{R}^{B\times T\times d}
 <p><strong>Example: Why repeated token IDs add gradients to one row</strong></p>
 <p>Use a batch containing token IDs (2,5,2).</p>
 <p><strong>Forward lookup:</strong></p>
-<p><span class="math inline">\(H = (\mathbb{E}[2], \mathbb{E}[5], \mathbb{E}[2])\)</span></p>
+<p><span class="math inline">\(H=(E_{2,:},E_{5,:},E_{2,:})\)</span></p>
 <p><strong>Backward contributions:</strong></p>
 <p>The first occurrence contributes one gradient to row 2.</p>
 <p>The second occurrence contributes one gradient to row 5.</p>
 <p>The third occurrence contributes another gradient to row 2.</p>
 <p><strong>Stored result:</strong></p>
-<p>grad E[2] is the sum of two contributions.</p>
-<p>grad E[5] has one contribution.</p>
-<p>An unused row such as E[7] receives no direct lookup gradient.</p>
+<p><span class="math inline">\(\nabla_{E_{2,:}}L\)</span> is the sum of two contributions.</p>
+<p><span class="math inline">\(\nabla_{E_{5,:}}L\)</span> has one contribution.</p>
+<p>An unused row such as <span class="math inline">\(E_{7,:}\)</span> receives no direct lookup gradient.</p>
 <p><strong>Dimensions:</strong></p>
 <p>For embedding width d, H has dimensions [3,d].</p>
 <p>The repeated token ID reuses one table row; it does not create a second parameter row.</p>
@@ -695,9 +694,6 @@ E_{\mathrm{ids}}=W_{\mathrm{embed}}[\mathrm{input\,ids}]
 <li>Pooling removes the token axis; after pooling the model no longer sees token order unless order was encoded earlier.</li>
 <li>Negative sampling code should show both positive and sampled negative scores.</li>
 </ul>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>It should now be clear how to explain which rows of the embedding matrix get gradients for one batch of token ids.</strong></p>
-</div>
 <p>Embeddings turn token IDs into trainable vectors, and only selected rows move on a lookup step.</p>
 <p>Representation objectives give embedding geometry a training signal.</p>
 

@@ -441,7 +441,7 @@ window.Quarto = {
   <ul>
   <li><a href="#sec-m2-c14-s01" id="toc-sec-m2-c14-s01" class="nav-link active" data-scroll-target="#sec-m2-c14-s01"><span class="header-section-number">14.1</span> Learning Word Meaning from Co-Occurrence Windows (Word2Vec)</a></li>
   <li><a href="#sec-m2-c14-s02" id="toc-sec-m2-c14-s02" class="nav-link" data-scroll-target="#sec-m2-c14-s02"><span class="header-section-number">14.2</span> Measuring Semantic Closeness with Cosine Similarity and Vector Math</a></li>
-  <li><a href="#sec-m2-c14-s03" id="toc-sec-m2-c14-s03" class="nav-link" data-scroll-target="#sec-m2-c14-s03"><span class="header-section-number">14.3</span> Accelerating Training on Massive Vocabularies with Negative Sampling</a></li>
+  <li><a href="#sec-m2-c14-s03" id="toc-sec-m2-c14-s03" class="nav-link" data-scroll-target="#sec-m2-c14-s03"><span class="header-section-number">14.3</span> Compressing Co-Occurrence Structure with Low-Rank Factors</a></li>
   <li><a href="#sec-m2-c14-s04" id="toc-sec-m2-c14-s04" class="nav-link" data-scroll-target="#sec-m2-c14-s04"><span class="header-section-number">14.4</span> Distinguishing Static Word Vectors from Contextual Sequence Representations</a></li>
   <li><a href="#sec-m2-c14-s05" id="toc-sec-m2-c14-s05" class="nav-link" data-scroll-target="#sec-m2-c14-s05"><span class="header-section-number">14.5</span> Visualizing Word2Vec Embedding Geometry and Vector Arithmetic</a></li>
   </ul>
@@ -472,7 +472,6 @@ window.Quarto = {
 <p>Embedding rows begin as arbitrary numbers. A context-prediction objective changes them until useful patterns of co-occurrence are reflected in the geometry of the space.</p>
 <p>Embeddings become useful when training pushes related contexts toward compatible vectors. Word2Vec, cosine similarity, and negative sampling show the objective and shortcuts behind that learning process.</p>
 <p>In code, PyTorch dot products and <code>logsigmoid</code> implement predictive embedding losses; Gensim provides a course-adjacent reference implementation for Word2Vec experiments.</p>
-<p>Chapter 14 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c14-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 14 opener for Representation learning objectives, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c14-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -483,7 +482,6 @@ Figure&nbsp;14.1: Context objectives move vectors so useful linguistic relations
 </figcaption>
 </figure>
 </div>
-<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c14-s01" class="level2" data-number="14.1">
 <h2 data-number="14.1" class="anchored" data-anchor-id="sec-m2-c14-s01"><span class="header-section-number">14.1</span> Learning Word Meaning from Co-Occurrence Windows (Word2Vec)</h2>
 <p>Word2Vec learns embeddings from local context. The training task is artificial but useful: predict a word from context or predict context from a word, so words used similarly obtain similar vectors.</p>
@@ -536,6 +534,7 @@ Figure&nbsp;14.1: Context objectives move vectors so useful linguistic relations
 <p>The negative-sample loss lowers the sampled non-pair dot product.</p>
 <p>The objective changes vector coordinates until useful context pairs tend to have larger dot products than sampled alternatives.</p>
 </div>
+<p>The following runnable Gensim example trains skip-gram Word2Vec on three tokenized sentences, then prints the shape of one eight-coordinate vector, one cosine similarity, and two nearest neighbors. The random initialization and very small corpus make the numerical neighbors unstable, so the code demonstrates library use and tensor shape rather than meaningful language structure.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Training and inspecting a small Word2Vec model</p>
 </div>
@@ -573,7 +572,7 @@ Figure&nbsp;14.1: Context objectives move vectors so useful linguistic relations
 <p>Similarity is not a dictionary definition. It is the result of the training objective: words that appear in similar contexts receive updates that tend to move their vectors into similar directions.</p>
 <p>The implementation is a matrix computation. A query vector can be multiplied by many stored vectors at once, producing one similarity score per candidate. Retrieval and analogy demos are convenient because they expose the geometry learned by the embedding objective.</p>
 <p>Cosine similarity measures the angle between two word vectors independently of their lengths, capturing semantic relatedness.</p>
-<p>Vector arithmetic such as vector(‘king’) - vector(‘man’) + vector(‘woman’) yields a point closest to vector(‘queen’), demonstrating that word vectors can be added and subtracted to combine meanings.</p>
+<p>In some large training corpora, the nearest neighbor to the vector calculation <code>king - man + woman</code> is <code>queen</code>. This can reveal a direction learned from repeated usage patterns, but it is not reliable meaning algebra: the result can change with the corpus, training seed, vocabulary, or words with several senses.</p>
 <p>Cosine compares direction while ignoring vector scale.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Cosine similarity:</strong></span></p>
 <p><span id="eq-m2-c14-e04"><span class="math display">\[
@@ -588,7 +587,7 @@ Figure&nbsp;14.1: Context objectives move vectors so useful linguistic relations
 <p>Cosine similarity compares vector direction rather than raw magnitude. Negative sampling makes it feasible to train those vectors without scoring every vocabulary entry at every step.</p>
 </section>
 <section id="sec-m2-c14-s03" class="level2" data-number="14.3">
-<h2 data-number="14.3" class="anchored" data-anchor-id="sec-m2-c14-s03"><span class="header-section-number">14.3</span> Accelerating Training on Massive Vocabularies with Negative Sampling</h2>
+<h2 data-number="14.3" class="anchored" data-anchor-id="sec-m2-c14-s03"><span class="header-section-number">14.3</span> Compressing Co-Occurrence Structure with Low-Rank Factors</h2>
 <p>A large word-context matrix can be replaced by a smaller set of latent directions when most useful variation lies in a lower-dimensional subspace.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Singular value decomposition:</strong></span> A factorization of a matrix into left directions, singular values, and right directions.</li>

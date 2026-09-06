@@ -455,13 +455,13 @@ Figure&nbsp;4.1: A release decision follows a golden set, paired baseline, contr
 </section>
 <section id="sec-m1-c04-s02" class="level2" data-number="4.2">
 <h2 data-number="4.2" class="anchored" data-anchor-id="sec-m1-c04-s02"><span class="header-section-number">4.2</span> Golden evaluation sets</h2>
-<p>A multidimensional acceptance criteria says which product outcomes matter, but it does not yet supply the cases on which those outcomes will be measured. A convenient sample can overrepresent easy cases and hide the failures that carry the greatest product harm. A golden set provides versioned test cases to evaluate whether model outputs comply with product requirements across real traffic, labeled outcomes, edge cases, and critical slices.</p>
+<p>A multidimensional evaluation specification names the product outcomes that matter, but it does not yet supply the cases on which they will be measured. A convenient sample can overrepresent easy cases and hide the failures that carry the greatest product harm. A golden set provides versioned test cases to evaluate whether model outputs comply with product requirements across real traffic, labeled outcomes, edge cases, and critical slices.</p>
 <p>A <strong>golden set</strong> is a versioned collection of evaluation tasks with expected outcomes or grading criteria. It can include human-authored cases, sampled production records, synthetic variations, and adversarial inputs. Production records should be de-identified or handled under the product’s privacy controls.</p>
 <p>Start from decisions. A support-routing system needs ordinary FAQ cases, legitimate escalations, ambiguous cases, out-of-scope requests, multilingual messages, and policy-conflict cases. If missing an escalation is costly, oversample that slice or report it separately; do not let its small traffic share disappear inside an average.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Synthetic evaluation data</strong></p>
-<p>This method applies to known dimensions and failure hypotheses that are underrepresented in available production data.. It is useful when a new feature lacks traffic, a rare safety case must be exercised, or controlled counterfactuals are needed..</p>
-<p>It works by generate candidate cases from a written specification, deduplicate them, and have humans or deterministic rules validate the labels.. Synthetic cases expand coverage, while real failures keep the suite connected to actual product behavior.</p>
+<p>Synthetic cases cover known dimensions and failure hypotheses that are underrepresented in available production data. They are useful when a new feature lacks traffic, a rare safety case must be exercised, or controlled counterfactuals are needed.</p>
+<p>Start from a written specification, generate candidate cases, remove duplicates, and have people or deterministic rules validate the labels. Synthetic cases expand coverage, while real failures keep the suite connected to actual product behavior.</p>
 <p>A limit to keep in mind: A generator reproduces its own assumptions and may miss real user language or operational constraints.</p>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
@@ -505,8 +505,7 @@ Figure&nbsp;4.3: An EDD result connects a task specification and versioned syste
 <li>Rerun the same evaluation, estimate uncertainty, and inspect failures.</li>
 <li>Ship, revise, or revert according to the decision rule; add new failures to the suite.</li>
 </ol>
-<p>A golden evaluation set is structured around decisions the product must support. Normal cases estimate common behavior; boundary and adversarial cases test where the specification changes; production-derived cases capture real language and failure patterns. Slice labels preserve these roles so a large easy group cannot hide a smaller but important subgroup.</p>
-<p>The set is versioned and grows when validated production failures reveal missing cases. New production failures can become regression cases after privacy review and label validation. Duplicate or near-duplicate cases are controlled across development and held-out partitions to reduce leakage. Expected outcomes, rubric versions, provenance, and adjudication status remain attached to each case.</p>
+<p>The fixed set keeps ordinary, boundary, adversarial, and production-derived cases visible in the comparison. Validated production failures can become regression cases after privacy review and label validation. Control duplicate or near-duplicate cases across development and held-out partitions, and retain each case’s expected outcome, rubric version, source record, and adjudication status.</p>
 </section>
 <section id="sec-m1-c04-s04" class="level2" data-number="4.4">
 <h2 data-number="4.4" class="anchored" data-anchor-id="sec-m1-c04-s04"><span class="header-section-number">4.4</span> Interpretable experiments</h2>
@@ -540,26 +539,40 @@ Figure&nbsp;4.3: An EDD result connects a task specification and versioned syste
 <section id="sec-m1-c04-s05" class="level2" data-number="4.5">
 <h2 data-number="4.5" class="anchored" data-anchor-id="sec-m1-c04-s05"><span class="header-section-number">4.5</span> Uncertainty, release thresholds, and decisions</h2>
 <p>A controlled manifest makes baseline and treatment runs comparable. Finite case samples and stochastic components still make the observed difference uncertain, while a quality gain may violate latency, cost, or safety limits. Bootstrap intervals describe case-sampling variation, slice analysis exposes heterogeneous effects, and multi-metric gates determine release.</p>
-<p>A bootstrap confidence interval resamples the evaluation cases with replacement many times and recomputes the statistic for each resample. Percentiles of the resulting distribution form an empirical interval around the observed metric.</p>
+<p>A bootstrap confidence interval resamples the evaluation cases with replacement many times and recomputes the statistic for each resample. “With replacement” means a case can appear more than once in one resample while another case is absent. The resulting statistics form an empirical distribution around the observed metric.</p>
 <p><span id="eq-m1-c04-e01"><span class="math display">\[
 CI_{1-\alpha}=[q_{\alpha/2}(m_{1:B}),q_{1-\alpha/2}(m_{1:B})]
 \tag{4.1}\]</span></span></p>
-<p>Here, <span class="math inline">\(m_b\)</span> is the metric calculated on bootstrap sample <span class="math inline">\(b\)</span>, <span class="math inline">\(B\)</span> is the number of resamples, and <span class="math inline">\(q\)</span> selects empirical quantiles. The interval captures variation caused by the observed case sample; it does not correct biased labels, repeated tuning on the same set, correlated users, or deployment drift.</p>
+<p>Here, <span class="math inline">\(m_b\)</span> is the metric calculated on bootstrap sample <span class="math inline">\(b\)</span>, <span class="math inline">\(B\)</span> is the number of resamples, and <span class="math inline">\(q\)</span> selects empirical quantiles. For a 95 percent interval, set <span class="math inline">\(\alpha=0.05\)</span>: the lower endpoint is the 2.5th percentile and the upper endpoint is the 97.5th percentile. The interval captures variation caused by the observed case sample; it does not correct biased labels, repeated tuning on the same set, correlated users, or deployment drift.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation - paired bootstrap improvement</strong></p>
+<p>Four cases have baseline scores <span class="math inline">\((0.60, 0.80, 0.50, 0.90)\)</span> and treatment scores <span class="math inline">\((0.70, 0.75, 0.55, 0.95)\)</span>. Pair each treatment score with its own baseline score before resampling, giving deltas <span class="math inline">\((+0.10, -0.05, +0.05, +0.05)\)</span>. The observed mean improvement is <span class="math inline">\(0.0375\)</span>.</p>
+<ol type="1">
+<li>A resample can select cases 1, 1, 3, and 4, producing deltas <span class="math inline">\((+0.10, +0.10, +0.05, +0.05)\)</span> and a mean of <span class="math inline">\(+0.075\)</span>.</li>
+<li>Another can select cases 2, 2, 3, and 4, producing <span class="math inline">\((-0.05, -0.05, +0.05, +0.05)\)</span> and a mean of <span class="math inline">\(0\)</span>.</li>
+<li>Repeat this sampling many times, then take the percentiles for the selected <span class="math inline">\(\alpha\)</span>.</li>
+</ol>
+<p><strong>Interpretation:</strong> Pairing keeps each case’s baseline and treatment together. If the lower endpoint is at or below zero, the observed average gain does not yet support a clear improvement under this case sample.</p>
+</div>
 <p><strong>Code example 4.2 - percentile bootstrap intervals retain the resampling unit.</strong></p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 4.2 - percentile bootstrap intervals retain the resampling unit.</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c04-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c04-c02-1"><a href="#lst-m1-c04-c02-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="lst-m1-c04-c02-2"><a href="#lst-m1-c04-c02-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m1-c04-c02-3"><a href="#lst-m1-c04-c02-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> bootstrap_ci(values, statistic<span class="op">=</span>np.mean, draws<span class="op">=</span><span class="dv">10_000</span>, seed<span class="op">=</span><span class="dv">17</span>):</span>
-<span id="lst-m1-c04-c02-4"><a href="#lst-m1-c04-c02-4" aria-hidden="true" tabindex="-1"></a>    values <span class="op">=</span> np.asarray(values)</span>
-<span id="lst-m1-c04-c02-5"><a href="#lst-m1-c04-c02-5" aria-hidden="true" tabindex="-1"></a>    rng <span class="op">=</span> np.random.default_rng(seed)</span>
-<span id="lst-m1-c04-c02-6"><a href="#lst-m1-c04-c02-6" aria-hidden="true" tabindex="-1"></a>    estimates <span class="op">=</span> [</span>
-<span id="lst-m1-c04-c02-7"><a href="#lst-m1-c04-c02-7" aria-hidden="true" tabindex="-1"></a>        statistic(rng.choice(values, size<span class="op">=</span><span class="bu">len</span>(values), replace<span class="op">=</span><span class="va">True</span>))</span>
-<span id="lst-m1-c04-c02-8"><a href="#lst-m1-c04-c02-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(draws)</span>
-<span id="lst-m1-c04-c02-9"><a href="#lst-m1-c04-c02-9" aria-hidden="true" tabindex="-1"></a>    ]</span>
-<span id="lst-m1-c04-c02-10"><a href="#lst-m1-c04-c02-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">tuple</span>(np.quantile(estimates, [<span class="fl">0.025</span>, <span class="fl">0.975</span>]))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The resampling unit must match the independence assumption. When one user contributes many correlated requests, resample users or sessions as the evaluation unit. A release gate can then require a positive lower-bound quality delta, no regression on critical slices, bounded p95 latency and cost per successful task, and zero severe policy failures.</p>
+<span id="lst-m1-c04-c02-3"><a href="#lst-m1-c04-c02-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> paired_bootstrap_delta_ci(baseline, treatment, draws<span class="op">=</span><span class="dv">10_000</span>, seed<span class="op">=</span><span class="dv">17</span>):</span>
+<span id="lst-m1-c04-c02-4"><a href="#lst-m1-c04-c02-4" aria-hidden="true" tabindex="-1"></a>    baseline <span class="op">=</span> np.asarray(baseline, dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="lst-m1-c04-c02-5"><a href="#lst-m1-c04-c02-5" aria-hidden="true" tabindex="-1"></a>    treatment <span class="op">=</span> np.asarray(treatment, dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="lst-m1-c04-c02-6"><a href="#lst-m1-c04-c02-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> baseline.shape <span class="op">!=</span> treatment.shape <span class="kw">or</span> baseline.size <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="lst-m1-c04-c02-7"><a href="#lst-m1-c04-c02-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"baseline and treatment need the same non-empty shape"</span>)</span>
+<span id="lst-m1-c04-c02-8"><a href="#lst-m1-c04-c02-8" aria-hidden="true" tabindex="-1"></a>    deltas <span class="op">=</span> treatment <span class="op">-</span> baseline</span>
+<span id="lst-m1-c04-c02-9"><a href="#lst-m1-c04-c02-9" aria-hidden="true" tabindex="-1"></a>    rng <span class="op">=</span> np.random.default_rng(seed)</span>
+<span id="lst-m1-c04-c02-10"><a href="#lst-m1-c04-c02-10" aria-hidden="true" tabindex="-1"></a>    estimates <span class="op">=</span> [</span>
+<span id="lst-m1-c04-c02-11"><a href="#lst-m1-c04-c02-11" aria-hidden="true" tabindex="-1"></a>        deltas[rng.integers(<span class="dv">0</span>, <span class="bu">len</span>(deltas), size<span class="op">=</span><span class="bu">len</span>(deltas))].mean()</span>
+<span id="lst-m1-c04-c02-12"><a href="#lst-m1-c04-c02-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(draws)</span>
+<span id="lst-m1-c04-c02-13"><a href="#lst-m1-c04-c02-13" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="lst-m1-c04-c02-14"><a href="#lst-m1-c04-c02-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">tuple</span>(np.quantile(estimates, [<span class="fl">0.025</span>, <span class="fl">0.975</span>]))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The resampling unit must match the independence assumption. When one user contributes many correlated requests, resample users or sessions as the evaluation unit. A release gate can then require a positive lower-bound quality delta, no regression on critical slices, bounded p95 latency and cost per successful task, and zero severe policy failures. Here p95 latency means the 95th-percentile latency: 95 percent of the measured requests completed at or below that time, while the slowest 5 percent took longer.</p>
 
 
 </section>

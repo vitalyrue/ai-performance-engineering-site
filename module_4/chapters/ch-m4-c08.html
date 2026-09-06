@@ -335,7 +335,6 @@ window.Quarto = {
 </header>
 
 
-<p>Establish the arithmetic, memory, and SLA metrics governing autoregressive LLM inference.</p>
 <p>The training chapter followed a workload that changes model parameters. Inference starts from fixed parameters and repeatedly applies them to a request, but it still creates live software and memory objects: token IDs, temporary activations, logits, sampler state, request metadata, and a key-value cache that grows with the context.</p>
 <p>One request has two different GPU phases. Prefill processes many prompt positions and creates the initial cache; decode adds one token per active sequence and rereads weights plus historical cache state. Their shapes, reuse, and user-visible latency metrics differ, so neither phase should be assigned a bottleneck before it is measured.</p>
 <p>The tokenizer, checkpoint, model, and inference-mode interfaces define the single-request baseline. Prefill and decode then establish the service metrics needed to size static parameters, batch-dependent state, and KV-cache capacity. That byte budget determines which cache layouts and allocation policies are practical in Chapter 9.</p>
@@ -363,7 +362,7 @@ Figure&nbsp;8.1: An inference request passes through admission, prefill, and rep
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Hugging Face Tokenizers:</strong></span> A high-performance tokenizer implementation used by many Transformers workflows for batching, truncation, padding, and special-token handling.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Performance consequence:</strong></span> More tokens increase prompt processing, generated steps, and KV-cache state even when the original character count is unchanged.</li>
 </ul>
-<p>Tokenizer behavior fixes token IDs and sequence lengths, so it sets prefill work, decode steps, and cache growth before the model runs. The next question is how checkpoint configuration turns those token sequences into model dimensions, parameter storage, and execution choices.</p>
+<p>For a particular input and chat template, the tokenizer produces the input token IDs and fixes the prompt length. That length sets prefill work and the initial KV-cache size. The number of later decode steps depends instead on stopping criteria, requested output limits, and generation settings.</p>
 </section>
 <section id="sec-m4-c08-s03" class="level3" data-number="8.1.2">
 <h3 data-number="8.1.2" class="anchored" data-anchor-id="sec-m4-c08-s03"><span class="header-section-number">8.1.2</span> Model and checkpoint interfaces</h3>
@@ -374,7 +373,7 @@ Figure&nbsp;8.1: An inference request passes through admission, prefill, and rep
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Model configuration:</strong></span> The architecture metadata that defines layer count, hidden dimensions, attention heads, vocabulary, and other dimensions needed to construct the model before weights are loaded.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Checkpoint tensors:</strong></span> Persistent parameter values loaded into CPU or GPU memory. Their format and placement affect startup and capacity, while the selected runtime path controls steady-state execution.</li>
 </ul>
-<p>Checkpoint metadata and tensors establish the architecture, stored precision, and initial placement, but they do not define the generation loop or remove training-only bookkeeping. The next question is which evaluation, autograd, caching, and sampling controls produce a correct single-process inference baseline.</p>
+<p>Separately, the model configuration defines the architecture and tensor shapes, while checkpoint loading places the stored parameters in memory.</p>
 </section>
 <section id="sec-m4-c08-s04" class="level3" data-number="8.1.3">
 <h3 data-number="8.1.3" class="anchored" data-anchor-id="sec-m4-c08-s04"><span class="header-section-number">8.1.3</span> Generation utilities and framework inference modes</h3>
@@ -386,14 +385,14 @@ Figure&nbsp;8.1: An inference request passes through admission, prefill, and rep
 <li><span class="definition-term" data-custom-style="Definition Term"><strong><code>torch.inference_mode()</code>:</strong></span> A stricter inference context that also disables view tracking and version-counter updates for tensors created inside it.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Combined use:</strong></span> Inference normally uses <code>model.eval()</code> with an appropriate gradient-disabling context. One controls module semantics; the other controls autograd bookkeeping.</li>
 </ul>
-<p>These objects define a single-process inference baseline. Chapter 10 introduces a serving engine when many requests must share admission control, batching, KV-cache blocks, and operational metrics.</p>
+<p>These preparation paths meet when the application passes the token IDs to the loaded model. Evaluation mode controls module behavior, and an inference context disables gradient bookkeeping during the generation loop. Chapter 10 introduces a serving engine when many requests must share admission control, batching, KV-cache blocks, and operational metrics.</p>
 </section>
 </section>
 <section id="sec-m4-c08-s05" class="level2" data-number="8.2">
 <h2 data-number="8.2" class="anchored" data-anchor-id="sec-m4-c08-s05"><span class="header-section-number">8.2</span> Prefill versus decode</h2>
 <p>Prefill and decode are two phases inside autoregressive inference serving. They use the same model weights, but they create different tensor shapes and stress different hardware resources. Separating them makes phase-specific measurement and optimization possible.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill:</strong></span> Processes the prompt tokens, computes attention over the input prefix, and writes the initial key-value cache. It usually has many tokens available at once.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill:</strong></span> Processes the prompt tokens, computes attention over the input prefix, and writes the initial key-value cache. It creates persistent KV state for later decode steps as well as temporary work, and usually has many tokens available at once.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode:</strong></span> Generates one new token per active sequence and appends new keys and values to the cache. It repeats many times and often has less arithmetic reuse per request.</li>
 </ul>
 <p>The first comparison holds the model fixed and contrasts the two phases by input shape, likely limiting work, user metric, and available token parallelism.</p>
@@ -494,21 +493,24 @@ Table&nbsp;8.2: Prefill and decode arithmetic-intensity interpretation.
 <p><strong>Decode:</strong> Each active sequence contributes one new query while the kernel reads the historical K/V state. The work is smaller per sequence and more dependent on HBM traffic, cache layout, launch overhead, and scheduler timing.</p>
 <p><strong>Optimization test:</strong> Measure FLOPs, bytes, and phase-specific latency separately. A prefill optimization can improve TTFT while doing little for TPOT, and a decode optimization can increase throughput while consuming more KV-cache capacity.</p>
 </div>
-<p>The phase split now gives the first measurement boundary. TTFT describes the path through admission and prefill to the first generated token; TPOT and inter-token latency describe the repeated decode path. The next section defines those metrics precisely before memory capacity is estimated.</p>
+<p>The phase split now gives the first measurement boundary. TTFT describes the path through admission and prefill to the first generated token; TPOT and inter-token latency describe the repeated decode path.</p>
 </section>
 <section id="sec-m4-c08-s06" class="level2" data-number="8.3">
 <h2 data-number="8.3" class="anchored" data-anchor-id="sec-m4-c08-s06"><span class="header-section-number">8.3</span> Serving metrics</h2>
 <p>Inference metrics describe different stakeholders. A user notices the first token, the smoothness of streaming, and total completion time. An operator notices tokens per second, requests per second, GPU utilization, and cost. A product Service Level Agreement (SLA) turns these into promises such as ‘95% of requests under a latency threshold.’</p>
+<p><strong>One-request timestamp trace</strong></p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>TTFT:</strong></span> Time To First Token. It includes queueing, API handling, tokenization, prefill, cache lookup, and sometimes cold compilation or engine setup.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>TPOT:</strong></span> Time Per Output Token. For one request, it is often the average decode time after the first generated token.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>ITL:</strong></span> Inter-Token Latency. It measures the gap between consecutive output tokens. Across a workload, ITL can be token-weighted while TPOT is often summarized per request.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>E2E latency:</strong></span> End-to-end request latency from arrival to final token. It combines queueing, TTFT, decode, and post-processing.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Throughput:</strong></span> Tokens per second or requests per second. More throughput can hurt latency when batching or queueing is pushed too far.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>QPS:</strong></span> Queries Per Second, a request-rate metric. It must be interpreted with prompt length, output length, and SLA target.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>SLA:</strong></span> Service Level Agreement, a target such as ‘p95 E2E latency below X ms’ or ‘p99 TTFT below Y ms’ for a defined workload.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Goodput:</strong></span> The portion of work completed within the SLA. A system can have high raw throughput and poor goodput if many requests miss the latency target.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cost:</strong></span> Usually dollars per million tokens, GPU-hours per million tokens, or served tokens per dollar. Cost must be tied to a latency and quality target.</li>
+<li>Record request arrival, first-token emission, each later token emission, and completion.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>TTFT:</strong></span> Arrival to first-token emission.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>ITL:</strong></span> Each gap between consecutive output-token emissions.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>TPOT in this chapter:</strong></span> Excludes the first token and is the mean of the <code>n - 1</code> decode intervals after first-token emission for a request with <code>n &gt; 1</code> output tokens. Other systems may aggregate TPOT differently; do not combine those conventions without relabeling or recomputing them.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>End-to-end latency:</strong></span> Arrival to completion.</li>
+</ul>
+<p><strong>Workload and operator metrics</strong></p>
+<ul>
+<li>Report distributions of the chosen request-level measures, such as p50 and p95, without silently changing their aggregation convention.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Throughput:</strong></span> Tokens or requests completed per second; state prompt length, output length, and workload mix.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>QPS, goodput, and cost:</strong></span> Must be tied to the SLA and quality target. Goodput counts only completed work that meets those targets.</li>
 </ul>
 <p><span id="eq-m4-c08-e01"><span class="math display">\[
 \text{E2E latency} \approx \text{TTFT} + (\text{number of output tokens} - 1) \times \text{TPOT}
@@ -542,7 +544,8 @@ Table&nbsp;8.2: Prefill and decode arithmetic-intensity interpretation.
 <p>Batch shape is the actual tensor and scheduler shape admitted to the GPU. In LLM serving, a batch contains sequences with different prompt lengths, generated lengths, cache states, decode progress, and request count.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Request batch size:</strong></span> The number of active requests. It is easy to count but insufficient for memory planning because one long request can consume more cache than many short requests.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Total batched tokens:</strong></span> The sum of tokens being processed or stored across active requests. Serving engines often control this directly because it predicts prefill work and cache pressure better than request count alone.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Tokens per iteration:</strong></span> The number of tokens actively processed in one forward pass (for example, all prompt tokens for new requests plus one token per decoding sequence).</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Tokens resident in KV cache:</strong></span> The total number of token positions retained across all active requests. Serving engines track both limits because one determines step time and the other determines memory capacity.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Context length:</strong></span> The number of tokens a request can attend to. Longer contexts increase prefill work and KV-cache storage.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Active cache blocks:</strong></span> Physical KV-cache blocks currently owned by admitted requests. This is the object that often limits concurrency.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill/decode mix:</strong></span> A batch can contain large prompt-processing work and one-token decode work. Mixing them improves utilization but can harm TTFT or inter-token latency if long prefill monopolizes the GPU.</li>

@@ -473,7 +473,6 @@ window.Quarto = {
 <p>A pretrained model has broad language behavior but may not follow a particular task format or preference. Adaptation either supplies useful context at inference time or changes a limited set of trainable parameters.</p>
 <p>Adaptation changes a pretrained model for a narrower task or behavior. Retrieval changes the input context; LoRA and QLoRA train a compact parameter update; preference methods rank outputs against human choices.</p>
 <p>In code, <code>transformers.Trainer</code> runs supervised updates; <code>peft.LoraConfig</code> and <code>get_peft_model</code> attach adapters; <code>bitsandbytes</code> supplies low-bit base-weight loading for QLoRA.</p>
-<p>Chapter 20 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c20-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 20 opener for Fine-tuning, alignment, LoRA, and QLoRA, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c20-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -484,7 +483,6 @@ Figure&nbsp;20.1: Prompting, retrieval, adapters, and quantization offer differe
 </figcaption>
 </figure>
 </div>
-<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c20-s01" class="level2" data-number="20.1">
 <h2 data-number="20.1" class="anchored" data-anchor-id="sec-m2-c20-s01"><span class="header-section-number">20.1</span> Evaluating In-Context Prompting vs Parameter Updates</h2>
 <p>Fine-tuning continues training from a pretrained checkpoint on a more specific dataset. The goal is to change behavior without relearning language from scratch.</p>
@@ -547,13 +545,13 @@ P_{\theta}(y\mid\mathrm{prompt},\mathrm{retrieved\,context})
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>DPO:</strong></span> Direct Preference Optimization, a preference-training method that avoids an explicit reinforcement-learning loop.</li>
 </ul>
 <p>Supervised fine-tuning teaches the model to imitate examples. Preference learning teaches the model to rank responses and avoid drifting too far from a useful base policy. This distinction matters for chat-style behavior because helpfulness and refusal behavior are often comparative rather than single-label targets.</p>
-<p>In PPO-style RLHF, the policy generates responses, a reward model scores them, and a KL penalty keeps the new policy close to the reference model. DPO rewrites a preference objective so the policy can be optimized directly from preferred and rejected response pairs.</p>
+<p>In reinforcement learning from human feedback (RLHF), Proximal Policy Optimization (PPO) is one online method: the current policy samples responses, a reward model scores them, and clipped updates improve the policy while a Kullback-Leibler (KL) penalty limits movement away from the reference model. Direct Preference Optimization (DPO) instead trains directly on preferred and rejected response pairs without an online rollout-and-reward loop.</p>
 <p>RLHF-style optimization trades reward against distance from a reference policy.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>KL-regularized reward objective:</strong></span></p>
 <p><span id="eq-m2-c20-e03"><span class="math display">\[
 \max_{\pi}\mathbb{E}[r_{\phi}(x,y)]-\beta\operatorname{KL}\!\left(\pi(\cdot\mid x)\mathbin{\|}\pi_{\mathrm{ref}}(\cdot\mid x)\right)
 \tag{20.3}\]</span></span></p>
-<p>where <span class="math inline">\(r_\phi\)</span> is reward model score; pi is updated policy; <span class="math inline">\(\pi_{ref}\)</span> is reference policy; β is KL penalty weight.</p>
+<p>where <span class="math inline">\(x\)</span> is a prompt, <span class="math inline">\(y\)</span> is a sampled response, <span class="math inline">\(r_\phi(x,y)\)</span> is the reward-model score, <span class="math inline">\(\pi\)</span> is the updated policy, <span class="math inline">\(\pi_{\mathrm{ref}}\)</span> is the frozen reference policy, and <span class="math inline">\(\beta&gt;0\)</span> controls the KL penalty. The expectation is over prompts and responses sampled during the RLHF loop.</p>
 <p>The reward term encourages preferred behavior; the KL term limits how far the policy distribution moves.</p>
 <p>The KL penalty is a stability and behavior-preservation term, not a task label.</p>
 <p>DPO increases the preferred response relative to the rejected response while measuring both against a fixed reference policy.</p>
@@ -561,7 +559,7 @@ P_{\theta}(y\mid\mathrm{prompt},\mathrm{retrieved\,context})
 <p><span id="eq-m2-c20-e04"><span class="math display">\[
 -\log\sigma\!\left(\beta\left((\log\pi_{\theta}(y_w\mid x)-\log\pi_{\mathrm{ref}}(y_w\mid x))-(\log\pi_{\theta}(y_l\mid x)-\log\pi_{\mathrm{ref}}(y_l\mid x))\right)\right)
 \tag{20.4}\]</span></span></p>
-<p>where <span class="math inline">\(\pi_\theta\)</span> is policy being trained; <span class="math inline">\(\pi_{ref}\)</span> is frozen reference policy; <span class="math inline">\(y_{w}\)</span> is preferred response; <span class="math inline">\(y_{l}\)</span> is rejected response; β is preference strength parameter.</p>
+<p>where <span class="math inline">\(x\)</span> is the prompt, <span class="math inline">\(\pi_\theta\)</span> is the policy being trained, <span class="math inline">\(\pi_{\mathrm{ref}}\)</span> is the frozen reference policy, <span class="math inline">\(y_w\)</span> is the preferred response, <span class="math inline">\(y_l\)</span> is the rejected response, <span class="math inline">\(\beta&gt;0\)</span> controls preference strength, and <span class="math inline">\(\sigma\)</span> is the sigmoid. Each response log probability is the sum of its token log probabilities under the named policy.</p>
 <p>The policy is not compared only to itself. DPO compares how much the trained policy raises the winner over the reference policy, then subtracts the same reference-relative quantity for the loser.</p>
 <p>The reference-policy terms keep the preference update tied to the base model distribution instead of rewarding any absolute increase in response likelihood.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
@@ -591,19 +589,18 @@ P_{\theta}(y\mid\mathrm{prompt},\mathrm{retrieved\,context})
 <p><strong>Origin note:</strong> LoRA is a modern use of low-rank matrix factorization: represent a large update by the product of two smaller matrices. QLoRA combines that adapter idea with quantization, a long-standing compression strategy that represents values with fewer bits.</p>
 <p>QLoRA separates storage precision from compute precision. The frozen base weights are stored in a low-bit quantized format, but the matmul uses dequantized values, often in bfloat16 or another accelerator-friendly compute dtype.</p>
 <p>For deployment, LoRA adapters can remain separate or be merged into the base weights. In Hugging Face PEFT workflows this is often exposed as <code>merge_and_unload()</code>, which produces an ordinary weight matrix for inference when the merge is appropriate.</p>
-<p>Ordinary fine-tuning changes the entries of a weight matrix W. LoRA leaves W unchanged and learns A and B instead. Their product BA has the same dimensions as W, so the layer can use W+BA in the ordinary matrix multiplication.</p>
-<p>The word low-rank refers to the inner dimension r. When W has dimensions <span class="math inline">\(d_{out}\)</span> by <span class="math inline">\(d_{\in}\)</span>, B has dimensions <span class="math inline">\(d_{out}\)</span> by r and A has dimensions r by <span class="math inline">\(d_{\in}\)</span>. Choosing r much smaller than both original dimensions reduces the number of trainable values.</p>
-<p>LoRA factors the weight update into two low-rank matrices: δ <span class="math inline">\(W = B · A\)</span>, with rank r much smaller than the layer dimensions. This reduces trainable parameters by over 99%.</p>
-<p>This reduces trainable parameter count by over 99% while freezing original base weights, enabling efficient multi-tenant adapter serving.</p>
+<p>Ordinary fine-tuning changes the entries of a weight matrix <span class="math inline">\(W\)</span>. LoRA leaves <span class="math inline">\(W\)</span> unchanged and learns <span class="math inline">\(A\)</span> and <span class="math inline">\(B\)</span> instead. Their product <span class="math inline">\(BA\)</span> has the same dimensions as <span class="math inline">\(W\)</span> and is multiplied by the adapter scale <span class="math inline">\(\alpha/r\)</span>, so the layer uses <span class="math inline">\(W_{\mathrm{eff}}=W+(\alpha/r)BA\)</span>. Implementations commonly initialize <span class="math inline">\(B\)</span> to zero, making the adapter’s initial contribution zero.</p>
+<p>The word low-rank refers to the inner dimension <span class="math inline">\(r\)</span>. When <span class="math inline">\(W\)</span> has dimensions <span class="math inline">\(d_{\mathrm{out}}\times d_{\mathrm{in}}\)</span>, <span class="math inline">\(B\)</span> has dimensions <span class="math inline">\(d_{\mathrm{out}}\times r\)</span>, and <span class="math inline">\(A\)</span> has dimensions <span class="math inline">\(r\times d_{\mathrm{in}}\)</span>. Choosing <span class="math inline">\(r\)</span> much smaller than both original dimensions reduces the number of trainable values.</p>
+<p>LoRA constrains the weight change to <span class="math inline">\(\Delta W=(\alpha/r)BA\)</span>. The trainable fraction is <span class="math inline">\(r(d_{\mathrm{in}}+d_{\mathrm{out}})/(d_{\mathrm{in}}d_{\mathrm{out}})\)</span>, so the saving depends on the layer dimensions and rank. For a <span class="math inline">\(4096\times4096\)</span> matrix with <span class="math inline">\(r=8\)</span>, LoRA trains about <span class="math inline">\(0.39\%\)</span> as many values as a full dense update.</p>
 <p>A frozen base matrix W is augmented by a low-rank trainable update.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>LoRA update:</strong></span></p>
 <p><span id="eq-m2-c20-e05"><span class="math display">\[
-W\prime=W+BA
+W_{\mathrm{eff}}=W+\frac{\alpha}{r}BA
 \tag{20.5}\]</span></span></p>
-<p>where W is frozen base weight; B A is low-rank trainable update.</p>
-<p>Instead of learning a full dense update Delta W, LoRA constrains Delta W to the product of two low-rank matrices.</p>
+<p>where <span class="math inline">\(W\)</span> is the frozen base weight, <span class="math inline">\(A\)</span> and <span class="math inline">\(B\)</span> are trainable low-rank factors, <span class="math inline">\(r\)</span> is their inner dimension, and <span class="math inline">\(\alpha/r\)</span> is the adapter scale.</p>
+<p>Instead of learning a full dense update <span class="math inline">\(\Delta W\)</span>, LoRA constrains it to a scaled product of two low-rank matrices.</p>
 <p>LoRA reduces trainable parameter count but still changes the effective linear map during forward computation.</p>
-<p>Rank r adapters replace <span class="math inline">\(d_{\in}\)</span>·<span class="math inline">\(d_{out}\)</span> trainable parameters with two smaller matrices.</p>
+<p>Rank-<span class="math inline">\(r\)</span> adapters replace <span class="math inline">\(d_{\mathrm{in}}d_{\mathrm{out}}\)</span> trainable parameters with two smaller matrices.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>LoRA parameter count:</strong></span></p>
 <p><span id="eq-m2-c20-e06"><span class="math display">\[
 \operatorname{params}_{\mathrm{LoRA}}=r(d_{\mathrm{in}}+d_{\mathrm{out}})
@@ -616,22 +613,22 @@ W\prime=W+BA
 <p>A QLoRA forward pass uses dequantized frozen base weights plus a trainable low-rank adapter path.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>QLoRA forward sketch:</strong></span></p>
 <p><span id="eq-m2-c20-e08"><span class="math display">\[
-y=\operatorname{dequant}(W_{4\mathrm{bit}})x+BAx
+y=\operatorname{dequant}(W_{4\mathrm{bit}})x+\frac{\alpha}{r}BAx
 \tag{20.8}\]</span></span></p>
-<p>where <span class="math inline">\(W_{\text{4-bit}}\)</span> is the quantized, frozen base-weight matrix; <span class="math inline">\(BA\)</span> is the trainable low-rank update; and <span class="math inline">\(x\)</span> is the input activation.</p>
+<p>where <span class="math inline">\(W_{\text{4-bit}}\)</span> is the quantized, frozen base-weight matrix, <span class="math inline">\((\alpha/r)BA\)</span> is the trainable low-rank update, and <span class="math inline">\(x\)</span> is the input activation.</p>
 <p>Storage uses low-bit weights, but matrix multiplication needs approximate real values, so the base is dequantized for compute.</p>
 <p>The memory saving comes from storage; the compute still uses dequantized numeric values.</p>
 <p>A trained LoRA adapter can be folded into the base matrix for inference.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Merged LoRA weight:</strong></span></p>
 <p><span id="eq-m2-c20-e09"><span class="math display">\[
-W_{\mathrm{merged}}=W+BA
+W_{\mathrm{merged}}=W+\frac{\alpha}{r}BA
 \tag{20.9}\]</span></span></p>
-<p>where W is base model weight; B A is learned low-rank adapter update.</p>
+<p>where <span class="math inline">\(W\)</span> is the base-model weight and <span class="math inline">\((\alpha/r)BA\)</span> is the learned adapter update.</p>
 <p>The base linear output and adapter linear output are additive, so their matrices can be added when dtypes and deployment choices allow.</p>
 <p>Merging removes the runtime adapter branch but also removes the ability to switch adapters cheaply.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Updating a four-by-four weight matrix with rank one</strong></p>
-<p>Let the frozen base matrix W have dimensions [4,4] and choose adapter width <span class="math inline">\(r=1\)</span>.</p>
+<p>Let the frozen base matrix <span class="math inline">\(W\)</span> have dimensions <span class="math inline">\([4,4]\)</span>, choose adapter width <span class="math inline">\(r=1\)</span>, and use <span class="math inline">\(\alpha=r\)</span> so the adapter scale is one in this shape example.</p>
 <p><strong>Adapter dimensions:</strong></p>
 <p>A has dimensions [1,4] and contains 4 trainable values.</p>
 <p>B has dimensions [4,1] and contains 4 trainable values.</p>
@@ -643,6 +640,7 @@ W_{\mathrm{merged}}=W+BA
 <p>A dense update for W would train <span class="math inline">\(4 · 4 = 16\)</span> values.</p>
 <p>The base computation still uses a [4,4] matrix; only the trainable update is stored through two thin factors.</p>
 </div>
+<p>The following abbreviated QLoRA setup requires PyTorch, Transformers, PEFT, bitsandbytes, a compatible accelerator, and a real checkpoint in place of <code>model-name</code>. <code>bnb_4bit_quant_type="nf4"</code> selects the NormalFloat lookup levels, <code>bnb_4bit_compute_dtype</code> selects the dequantized matrix-multiplication type, and <code>bnb_4bit_use_double_quant</code> compresses block-scale metadata. In <code>LoraConfig</code>, <code>r=8</code> sets adapter width, <code>lora_alpha=16</code> gives scale <span class="math inline">\(\alpha/r=2\)</span>, and <code>target_modules</code> selects the projections that receive adapters. <code>get_peft_model</code> freezes the base and exposes the new adapter parameters to the optimizer.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> QLoRA configuration and trainable-parameter inspection</p>
 </div>
@@ -677,10 +675,11 @@ W_{\mathrm{merged}}=W+BA
 <p>QLoRA reduces memory by quantizing the frozen base model in small blocks and by quantizing some of the scale information used to reconstruct those blocks.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Block quantization:</strong></span> Quantization that computes scale information separately for small groups of values so one outlier does not set the range for an entire matrix.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>NormalFloat 4 (NF4):</strong></span> A 4-bit lookup table with 16 nonuniform reconstruction levels concentrated near zero, matching the typical distribution of normalized neural-network weights more closely than equally spaced levels.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Double quantization:</strong></span> A second quantization step applied to the block-scale constants themselves.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Compute dtype:</strong></span> The floating-point type used by matrix multiplication after stored low-bit values are dequantized.</li>
 </ul>
-<p>A single scale for a large matrix can waste most quantization levels when a few values are much larger than the rest. Per-block scales localize that effect. Each stored integer is reconstructed with the scale for its own block before multiplication.</p>
+<p>A single scale for a large matrix can waste most quantization levels when a few values are much larger than the rest. Per-block scales localize that effect. The uniform dequantization equation below is a simple arithmetic model for block quantization; NF4 instead uses each 4-bit code to select one of 16 nonuniform levels and then applies the block scale.</p>
 <p>Double quantization compresses the collection of block scales. It saves additional memory because there can be many blocks, but it adds another approximation and another reconstruction step.</p>
 <p>Low-bit storage does not imply four-bit arithmetic throughout the forward pass. QLoRA commonly dequantizes blocks into bfloat16 or another supported compute type before applying the base matrix multiplication, then adds the higher-precision LoRA path.</p>
 <p>Quantization changes how the frozen base values are stored. A block keeps small integer codes q together with a scale and zero point. Dequantization reconstructs an approximation before the matrix multiplication; the LoRA adapter remains a separate higher-precision trainable path.</p>
@@ -708,7 +707,7 @@ W_{\mathrm{merged}}=W+BA
 <p><span class="math inline">\(\hat{w}=0.1\cdot(13-3)=1.0\)</span></p>
 <p>The reconstructed value participates in the base matrix multiplication; the LoRA path is added separately.</p>
 <p><strong>Double-quantized scale:</strong></p>
-<p>If a stored scale code is 8 and its scale is 0.01, the reconstructed block scale is 0.08.</p>
+<p>If the stored scale code is <span class="math inline">\(q_b^s=8\)</span>, the second-level scale is <span class="math inline">\(s_s=0.01\)</span>, and the second-level zero point is <span class="math inline">\(z_s=0\)</span>, then <span class="math inline">\(\hat{s}_b=0.01(8-0)=0.08\)</span>.</p>
 <p>The reconstructed block scale then dequantizes the frozen weight codes.</p>
 <p>Memory is saved by low-bit storage even though multiplication uses a reconstructed floating-point value.</p>
 </div>
@@ -717,7 +716,7 @@ W_{\mathrm{merged}}=W+BA
 <section id="sec-m2-c20-s06" class="level2" data-number="20.6">
 <h2 data-number="20.6" class="anchored" data-anchor-id="sec-m2-c20-s06"><span class="header-section-number">20.6</span> LoRA and QLoRA trace</h2>
 <p>LLM pretraining is next-token classification repeated at every sequence position. The input ids and labels are the same sequence shifted by one position. The model produces [B,T,V] logits, and cross-entropy chooses the correct next token along the vocabulary axis at each position.</p>
-<p>Fine-tuning changes which parameters are allowed to move. Full fine-tuning updates the base model. LoRA freezes the base matrix W and learns a low-rank update BA. QLoRA stores the frozen base weights in low-bit form, backpropagates through dequantized computation, and trains higher-precision low-rank adapters.</p>
+<p>Fine-tuning changes which parameters are allowed to move. Full fine-tuning updates the base model. LoRA freezes the base matrix <span class="math inline">\(W\)</span> and learns the scaled low-rank update <span class="math inline">\((\alpha/r)BA\)</span>. QLoRA stores the frozen base weights in low-bit form, backpropagates through dequantized computation, and trains higher-precision low-rank adapters.</p>
 <p>Fine-tuning is not the default answer to every domain problem. Some failures are better handled by retrieval, prompting, evaluation, or data cleanup.</p>
 <div id="fig-m2-c20-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram comparing retrieval-augmented generation with parameter fine-tuning.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -759,12 +758,12 @@ Figure&nbsp;20.4: Low-bit bucket values approximate full-precision weights throu
 <p><strong>Performance note:</strong> The vocabulary projection and optimizer state are large; PEFT reduces trainable memory.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Next-token table + LoRA parameter count</strong></p>
-<p>Sequence: <code>['The', 'cat', 'sat']</code>; toy vocabulary size: <span class="math inline">\(V=5000\)</span>; model width: <span class="math inline">\(d=64\)</span>.</p>
+<p>Use the token prefix <code>['The', 'cat', 'sat']</code> followed by the next token <code>'on'</code>; the toy vocabulary size is <span class="math inline">\(V=5000\)</span> and model width is <span class="math inline">\(d=64\)</span>.</p>
 <p>Input ids: [1, 2, 3]</p>
-<p>Labels: [2, 3, 4] (predict ‘cat’ from pos0, ‘sat’ from pos1, ‘on’ from pos2)</p>
+<p>Labels: [2, 3, 4] (IDs 2, 3, and 4 denote <code>'cat'</code>, <code>'sat'</code>, and <code>'on'</code> in this toy vocabulary)</p>
 <p>The model produces logits with dimensions <span class="math inline">\([B,T,V]=[1,3,5000]\)</span>.</p>
 <p><strong>Cross-entropy selects the logit at the label index for each position:</strong></p>
-<p>The average loss is <span class="math inline">\(L=\operatorname{mean}([-\log p(y_0=2),-\log p(y_1=3),-\log p(y_2=4)])\)</span>.</p>
+<p>The mean loss is <span class="math inline">\(L=\frac{1}{3}\sum_{t=0}^{2}-\log p_t(y_t)\)</span>.</p>
 <p><strong>If all logits are uniform (untrained model):</strong></p>
 <p>The probability of the correct token is <span class="math inline">\(p_{\mathrm{target}}=\frac{1}{5000}=0.0002\)</span>.</p>
 <p><span class="math inline">\(L_{\mathrm{per\ position}}=-\log(0.0002)=8.52\ \text{nats}\)</span></p>
@@ -772,7 +771,7 @@ Figure&nbsp;20.4: Low-bit bucket values approximate full-precision weights throu
 <p><strong>After training, the correct token gets higher probability, e.g., <span class="math inline">\(p=0.3:\)</span></strong></p>
 <p><span class="math inline">\(L_{\mathrm{per\ position}}=-\log(0.3)=1.20\ \text{nats}\)</span></p>
 <p>The perplexity is <span class="math inline">\(\operatorname{PPL}=\exp(1.20)\approx3.3\)</span> (the model is roughly choosing among three tokens).</p>
-<p><strong>LoRA parameter count:</strong></p>
+<p><strong>Separate large-layer illustration for LoRA parameter count:</strong></p>
 <p>A: [8, 4096] = 32,768 params</p>
 <p>B: [4096, 8] = 32,768 params</p>
 <p>LoRA total: <span class="math inline">\(65{,}536\)</span> parameters versus <span class="math inline">\(16{,}777{,}216\)</span> for the full matrix <span class="math inline">\(W\)</span>, or <span class="math inline">\(65{,}536/16{,}777{,}216\approx0.39\%\)</span> of the full layer.</p>
@@ -781,11 +780,11 @@ Figure&nbsp;20.4: Low-bit bucket values approximate full-precision weights throu
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Next-token loss:</strong></span></p>
 <p><span id="eq-m2-c20-e12"><span class="math display">\[
-L=-\sum_t\log P(x_{t+1}\mid x_{\le t})
+L_{\mathrm{mean}}=-\frac{1}{T}\sum_{t=0}^{T-1}\log P(x_{t+1}\mid x_{\le t})
 \tag{20.12}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>LoRA update:</strong></span></p>
 <p><span id="eq-m2-c20-e13"><span class="math display">\[
-W_{\mathrm{eff}}=W_{\mathrm{frozen}}+BA
+W_{\mathrm{eff}}=W_{\mathrm{frozen}}+\frac{\alpha}{r}BA
 \tag{20.13}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>LoRA parameter count:</strong></span></p>
 <p><span id="eq-m2-c20-e14"><span class="math display">\[
@@ -793,7 +792,7 @@ W_{\mathrm{eff}}=W_{\mathrm{frozen}}+BA
 \tag{20.14}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Quantized matmul sketch:</strong></span></p>
 <p><span id="eq-m2-c20-e15"><span class="math display">\[
-y=\operatorname{dequant}(W_{4\mathrm{bit}})x
+y=\operatorname{dequant}(W_{4\mathrm{bit}})x+\frac{\alpha}{r}BAx
 \tag{20.15}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
 <p>These dimensions appear in the computation in order.</p>
@@ -801,18 +800,15 @@ y=\operatorname{dequant}(W_{4\mathrm{bit}})x
 <li>Input ids: [B, T].</li>
 <li>Shifted labels: [B, T].</li>
 <li>Logits: [B, T, V].</li>
-<li>LoRA A: [r, <span class="math inline">\(d_{\in}\)</span>].</li>
-<li>LoRA B: [<span class="math inline">\(d_{out}\)</span>, r].</li>
+<li>LoRA <span class="math inline">\(A\)</span>: <span class="math inline">\([r,d_{\mathrm{in}}]\)</span>.</li>
+<li>LoRA <span class="math inline">\(B\)</span>: <span class="math inline">\([d_{\mathrm{out}},r]\)</span>.</li>
 </ul>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
 <ul>
-<li>For Hugging Face causal LM classes, labels may match <span class="math inline">\(input_{ids}\)</span> because the model shifts internally; for manual cross-entropy, compare logits up to position T-1 with labels starting at position 2, and ignore padding positions.</li>
-<li><span class="math inline">\(requires_{grad}\)</span> flags show whether full weights or only adapter weights are trainable.</li>
+<li>For Hugging Face causal language-model classes, <code>labels</code> may equal <code>input_ids</code> because the model shifts internally. For manual zero-indexed slicing, <code>logits[:, :-1, :]</code> predicts <code>labels[:, 1:]</code>; ignored padding positions do not enter the reduction.</li>
+<li>The <code>requires_grad</code> attribute shows whether the optimizer can update a tensor: the base weights are false and adapter weights are true.</li>
 <li>LoRA rank controls both adapter capacity and trainable parameter count.</li>
 </ul>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>It should now be clear how to compute the LoRA parameter count for one linear layer and say which tensors receive gradients.</strong></p>
-</div>
 <p>Fine-tuning and PEFT decide whether task learning changes full weights, adapter weights, or retrieved context.</p>
 <p>Autoregressive inference reuses transformer state while producing one token at a time.</p>
 

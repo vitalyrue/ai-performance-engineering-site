@@ -441,7 +441,7 @@ window.Quarto = {
   <ul>
   <li><a href="#sec-m2-c01-s01" id="toc-sec-m2-c01-s01" class="nav-link active" data-scroll-target="#sec-m2-c01-s01"><span class="header-section-number">1.1</span> Formulating Supervised Targets for Classification and Regression</a></li>
   <li><a href="#sec-m2-c01-s02" id="toc-sec-m2-c01-s02" class="nav-link" data-scroll-target="#sec-m2-c01-s02"><span class="header-section-number">1.2</span> Shifting Unlabeled Text to Form Autoregressive Prediction Targets</a></li>
-  <li><a href="#sec-m2-c01-s03" id="toc-sec-m2-c01-s03" class="nav-link" data-scroll-target="#sec-m2-c01-s03"><span class="header-section-number">1.3</span> Empirical-risk trace</a></li>
+  <li><a href="#sec-m2-c01-s03" id="toc-sec-m2-c01-s03" class="nav-link" data-scroll-target="#sec-m2-c01-s03"><span class="header-section-number">1.3</span> Averaging Example Losses into One Training Objective</a></li>
   </ul>
 </nav>
     </div>
@@ -468,9 +468,8 @@ window.Quarto = {
 
 
 <p>Learning begins with examples and the answer each example is meant to predict. The answer may be a number, a class label, or the next token in the same text sequence.</p>
-<p>The model first needs to know what counts as a correct answer. This chapter separates numerical targets, class labels, and shifted next-token targets, including the mask that excludes padding from the loss.</p>
-<p>In code, <code>datasets.load_dataset</code> and pandas create rows, labels, and splits; PyTorch receives those numerical rows only after the task target is fixed.</p>
-<p>Chapter 1 develops one required stage of the guide’s computation.</p>
+<p>Training code must define what counts as correct before it can calculate a loss. This chapter separates numerical targets, class labels, and shifted next-token targets, including the mask that excludes padding from the loss.</p>
+<p>In the toy code below, pandas creates four labeled rows, then assigns three to training and one to validation. PyTorch receives numerical rows only after the task target is fixed; real datasets also reserve an untouched test split.</p>
 <div id="fig-m2-c01-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 1 opener for Data, examples, and targets, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c01-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -481,7 +480,6 @@ Figure&nbsp;1.1: Supervised labels and shifted next-token targets both create tr
 </figcaption>
 </figure>
 </div>
-<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c01-s01" class="level2" data-number="1.1">
 <h2 data-number="1.1" class="anchored" data-anchor-id="sec-m2-c01-s01"><span class="header-section-number">1.1</span> Formulating Supervised Targets for Classification and Regression</h2>
 <p>A learning task starts by specifying what information enters the model, what output the model must produce, and how that output will be judged. The dataset notation in this section is the common container for classification, regression, and language-model training; later chapters change the model and loss while keeping this input-target structure.</p>
@@ -507,15 +505,15 @@ Figure&nbsp;1.1: Supervised labels and shifted next-token targets both create tr
 <p><span id="eq-m2-c01-e01"><span class="math display">\[
 D = \{(x_i,y_i)\}_{i=1}^{n}
 \tag{1.1}\]</span></span></p>
-<p>where D is training dataset; <span class="math inline">\(x_{i}\)</span> is input for training example i; <span class="math inline">\(y_{i}\)</span> is required target for training example i; n is number of examples in the dataset.</p>
+<p>where <span class="math inline">\(D\)</span> is the training set; <span class="math inline">\(x_i\)</span> is the complete input for example <span class="math inline">\(i\)</span>; <span class="math inline">\(y_i\)</span> is its target; and <span class="math inline">\(n\geq1\)</span> is the number of examples. Here <span class="math inline">\(x_i\)</span> denotes a whole example, while <span class="math inline">\(x_t\)</span> below denotes the token ID at position <span class="math inline">\(t\)</span>.</p>
 <p>The braces collect all training pairs. The index i ranges from the first to the n-th example, so the notation says that every input has a corresponding target.</p>
 <p>A loss can now compare the model output for <span class="math inline">\(x_{i}\)</span> with <span class="math inline">\(y_{i}\)</span>, and empirical risk later averages those losses across D.</p>
 <p>In next-token prediction, the target for a prefix ending at t is the next token.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Language-model target:</strong></span></p>
 <p><span id="eq-m2-c01-e02"><span class="math display">\[
-\operatorname{target}_t = x_{t+1}
+\operatorname{target}_t=x_{t+1},\quad t=1,\ldots,T-1
 \tag{1.2}\]</span></span></p>
-<p>where <span class="math inline">\(x_{t}\)</span> is token ID at position t; <span class="math inline">\(target_{t}\)</span> is the token the model must predict after position t; t is position within one token sequence.</p>
+<p>where <span class="math inline">\(x_t\)</span> is the token ID at position <span class="math inline">\(t\)</span> and <span class="math inline">\(\operatorname{target}_t\)</span> is its shifted label, defined for <span class="math inline">\(t=1,\ldots,T-1\)</span>. Position <span class="math inline">\(T\)</span> has no next token inside the sequence; padding or other excluded positions receive an ignored label and add no loss.</p>
 <p>Shift one token sequence by one position: the visible prefix ends at <span class="math inline">\(x_{t}\)</span>, while <span class="math inline">\(x_{t+1}\)</span> becomes the required next-token answer. Repeating the shift across the sequence produces many supervised pairs from one text example.</p>
 <p>The next-token target is later compared with a vocabulary-wide logit vector by cross-entropy.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
@@ -532,6 +530,7 @@ D = \{(x_i,y_i)\}_{i=1}^{n}
 <li>Language modeling predicts the next token or a masked token.</li>
 <li>Sequence-to-sequence modeling maps one sequence to another sequence.</li>
 </ul>
+<p>This runnable pandas example creates a deliberately tiny split: three training rows and one validation row. It demonstrates row and label structure, not a statistically useful validation estimate; the test split is omitted and must not be replaced by repeated use of validation data.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A small labeled dataset with explicit train and validation splits</p>
 </div>
@@ -577,7 +576,7 @@ P(x_{1:T}) = \prod_{t=1}^{T} P(x_t\mid x_{&lt;t})
 <p>Shifting turns each position into a next-token prediction. The model still needs a numeric representation for both the input tokens and their targets.</p>
 </section>
 <section id="sec-m2-c01-s03" class="level2" data-number="1.3">
-<h2 data-number="1.3" class="anchored" data-anchor-id="sec-m2-c01-s03"><span class="header-section-number">1.3</span> Empirical-risk trace</h2>
+<h2 data-number="1.3" class="anchored" data-anchor-id="sec-m2-c01-s03"><span class="header-section-number">1.3</span> Averaging Example Losses into One Training Objective</h2>
 <p>The computation in this chapter begins before a model exists. A raw example must become a row in a numerical array, and the target must become a tensor whose dimensions match the loss function. For a classifier, the input batch is usually a matrix X with one row per example, while the labels are either class ids or one-hot vectors. For a language model, the same idea is applied along a sequence: each prefix becomes the input and the next token becomes the target.</p>
 <p>Empirical risk turns many example losses into one training objective. The model runs on each row or sequence position, produces scores, and the loss compares those scores with the target. The individual losses are then averaged into a scalar, because backpropagation needs one scalar endpoint. That average is the quantity the optimizer can reduce.</p>
 <p>An LLM computation can be followed from symbols to numbers and back to symbols.</p>
@@ -593,11 +592,11 @@ Figure&nbsp;1.2: Token representations lead either to a loss for training or to 
 </div>
 <p>The same objects recur in later chapters. Training follows the loss and gradient path; inference follows the logits, probabilities, and token-selection path.</p>
 <p>Empirical risk averages per-example losses into one scalar objective. Inputs keep a batch axis; logits have one class or vocabulary axis; the reduced loss is scalar. Rows or token positions pass through a model, losses are computed independently, and reduction averages them.</p>
-<p>In PyTorch, <code>DataLoader</code> creates batches; model calls produce logits; <code>CrossEntropyLoss</code> or BCE reduces to a scalar.</p>
+<p>In PyTorch, <code>DataLoader</code> creates batches; model calls produce logits; <code>CrossEntropyLoss</code> or binary cross-entropy (BCE) reduces the losses to a scalar.</p>
 <p><strong>Performance note:</strong> Large batches spend memory on activations and logits; long sequences multiply the number of supervised token positions.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Dataset to empirical risk: three examples</strong></p>
-<p>Three examples: <span class="math inline">\(x_{1}=[1,0]\)</span>, <span class="math inline">\(y_{1}=1\)</span>; <span class="math inline">\(x_{2}=[0,1]\)</span>, <span class="math inline">\(y_{2}=0\)</span>; <span class="math inline">\(x_{3}=[1,1]\)</span>, <span class="math inline">\(y_{3}=1\)</span>.</p>
+<p>Use <span class="math inline">\(w=[0.8,-0.3]\)</span>, <span class="math inline">\(b=0.1\)</span>, <span class="math inline">\(z_i=w^{\top}x_i+b\)</span>, <span class="math inline">\(p_i=\sigma(z_i)\)</span>, and <span class="math inline">\(L_i=-[y_i\log p_i+(1-y_i)\log(1-p_i)]\)</span>. The three examples are <span class="math inline">\(x_1=[1,0]\)</span>, <span class="math inline">\(y_1=1\)</span>; <span class="math inline">\(x_2=[0,1]\)</span>, <span class="math inline">\(y_2=0\)</span>; and <span class="math inline">\(x_3=[1,1]\)</span>, <span class="math inline">\(y_3=1\)</span>.</p>
 <p><strong>A linear model:</strong></p>
 <p><span class="math inline">\(z_{1} = 1 \cdot 0.8 + 0 \cdot (-0.3) + 0.1 = 0.9\)</span></p>
 <p><span class="math inline">\(z_{2} = 0 \cdot 0.8 + 1 \cdot (-0.3) + 0.1 = -0.2\)</span></p>
@@ -608,17 +607,19 @@ Figure&nbsp;1.2: Token representations lead either to a loss for training or to 
 <p><span class="math inline">\(L_{2} = -\log(1-0.450) = -\log(0.550) = 0.598\)</span> (y=0, p near 0.5, medium loss)</p>
 <p><span class="math inline">\(L_{3} = -\log(0.646) = 0.437\)</span> (y=1, medium p, medium loss)</p>
 <p>Empirical risk: <span class="math inline">\(\hat{R} = (0.341 + 0.598 + 0.437) / 3 = 0.459\)</span></p>
-<p>This scalar is the training objective; backpropagation uses it to update w and b.</p>
+<p>This scalar is the training objective; backpropagation uses it to update <span class="math inline">\(w\)</span> and <span class="math inline">\(b\)</span>. Applying <code>torch.nn.BCEWithLogitsLoss</code> to logits <code>[0.9, -0.2, 0.6]</code> and targets <code>[1, 0, 1]</code> performs the same three-loss average.</p>
 </div>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Empirical risk:</strong></span></p>
 <p><span id="eq-m2-c01-e04"><span class="math display">\[
-\widehat{R}(\theta) = \frac{1}{N}\sum_i \operatorname{loss}(f_\theta(x_i),y_i)
+\widehat{R}(\theta)=\frac{1}{n}\sum_{i=1}^{n}\operatorname{loss}(f_\theta(x_i),y_i)
 \tag{1.4}\]</span></span></p>
+<p>Here <span class="math inline">\(f_\theta\)</span> is the model with parameters <span class="math inline">\(\theta\)</span>, and <span class="math inline">\(\operatorname{loss}\)</span> compares one model output with its target. Chapter 8 defines the binary and multiclass losses; the average is undefined for an empty dataset.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Conditional language model:</strong></span></p>
 <p><span id="eq-m2-c01-e05"><span class="math display">\[
-P(x_{1:T}) = \prod_t P(x_t\mid x_{&lt;t})
+L_{\mathrm{LM}}(\theta)=-\frac{1}{T-1}\sum_{t=1}^{T-1}\log P_\theta(x_{t+1}\mid x_{\le t})
 \tag{1.5}\]</span></span></p>
+<p>This language-model form averages the negative log probability over the <span class="math inline">\(T-1\)</span> positions that have a next-token target. Masked or padded positions must be removed from both the sum and its denominator.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
 <p>These dimensions appear in the computation in order.</p>
 <ul>
@@ -634,9 +635,6 @@ P(x_{1:T}) = \prod_t P(x_t\mid x_{&lt;t})
 <li>Cross-entropy expects logits and class indices; passing probabilities or float labels changes the meaning.</li>
 <li>The batch dimension should survive the forward pass until the loss reduces it.</li>
 </ul>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>It should now be clear how to compute empirical risk by hand for three examples, then point to the matching PyTorch loss call.</strong></p>
-</div>
 <p>The first mathematical object is not a model but a dataset made of examples, targets, and splits.</p>
 <p>Tokenization turns text-bearing examples into token strings, vocabulary entries, and token IDs.</p>
 

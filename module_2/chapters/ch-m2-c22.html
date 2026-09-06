@@ -473,7 +473,6 @@ window.Quarto = {
 <p>Transformer-style models can process more than text once images, audio, or table fields are converted into suitable input representations. The input structure and baseline model remain important when choosing an architecture.</p>
 <p>Images, audio, and tables need modality-specific inputs before transformer-style processing can begin. Patches, spectrograms, contrastive pairs, and strong baselines show what changes when the data is not ordinary text.</p>
 <p>In code, PyTorch image, audio, and tabular tensors feed modality-specific front ends; Hugging Face processors package images, audio, and text for pretrained multimodal models.</p>
-<p>Chapter 22 develops one required stage of the guide’s computation.</p>
 <div id="fig-m2-c22-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 22 opener for Beyond text and multimodal models, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c22-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -484,7 +483,6 @@ Figure&nbsp;22.1: Images, audio, and table fields become vectors that can share 
 </figcaption>
 </figure>
 </div>
-<p>The numbered panels correspond to the chapter sections and show how each local result supplies the next operation.</p>
 <section id="sec-m2-c22-s01" class="level2" data-number="22.1">
 <h2 data-number="22.1" class="anchored" data-anchor-id="sec-m2-c22-s01"><span class="header-section-number">22.1</span> Tokenizing Images into Patches with Vision Transformers (ViT)</h2>
 <p>Vision models first turn pixels into local features or patch vectors before a classifier or transformer can combine them.</p>
@@ -504,20 +502,20 @@ Figure&nbsp;22.1: Images, audio, and table fields become vectors that can share 
 <p>A vision-transformer patch token is a different object: it is a flattened image region followed by a learned linear projection. The patch token plays the same role as a text token vector, but its position refers to an image region rather than a word or subword.</p>
 <p>Vision Transformers divide 2D images into non-overlapping patches (e.g., 16x16 pixels), flatten each patch into a vector, and linearly project them into standard transformer embedding dimensions.</p>
 <p>By treating image patches as visual tokens, the same multi-head attention architecture processes vision, text, and multimodal tokens seamlessly.</p>
-<p>A convolution computes a weighted local sum over spatial offsets and channels.</p>
+<p>A convolution computes a weighted local sum over spatial offsets and input channels. The expression below describes a two-dimensional convolution with unit stride; padding determines which input coordinates exist near the border.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Convolution:</strong></span></p>
 <p><span id="eq-m2-c22-e01"><span class="math display">\[
-Y[i,j,c]=\sum_{u,v,c\prime}W[u,v,c\prime,c]X[i+u,j+v,c\prime]
+Y_{i,j,c_{\mathrm{out}}}=b_{c_{\mathrm{out}}}+\sum_{u,v,c_{\mathrm{in}}}W_{u,v,c_{\mathrm{in}},c_{\mathrm{out}}}X_{i+u,j+v,c_{\mathrm{in}}}
 \tag{22.1}\]</span></span></p>
-<p>where X is input image or feature map; W is convolution kernel; Y is output feature map.</p>
+<p>Here, <span class="math inline">\(X\)</span> is the input feature map, <span class="math inline">\(W\)</span> is the convolution kernel, <span class="math inline">\(b\)</span> is the output-channel bias, and <span class="math inline">\(Y\)</span> is the output feature map. The indices <span class="math inline">\(i,j\)</span> locate the output, <span class="math inline">\(u,v\)</span> locate a kernel entry, and <span class="math inline">\(c_{\mathrm{in}},c_{\mathrm{out}}\)</span> identify input and output channels.</p>
 <p>A convolution output is a local weighted sum: move the kernel over spatial positions and reuse the same weights at each position.</p>
-<p>convolution encodes locality before any transformer-style global mixing.</p>
+<p>Convolution encodes locality before any transformer-style global mixing.</p>
 <p>Output size depends on padding p, kernel size k, and stride s.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Convolution output size:</strong></span></p>
 <p><span id="eq-m2-c22-e02"><span class="math display">\[
-\mathrm{out}=\left\lfloor\frac{\mathrm{input}+2p-k}{s}\right\rfloor+1
+n_{\mathrm{out}}=\left\lfloor\frac{n_{\mathrm{in}}+2p-k}{s}\right\rfloor+1
 \tag{22.2}\]</span></span></p>
-<p>where input is input width or height; p is padding; k is kernel size; s is stride.</p>
+<p>Here, <span class="math inline">\(n_{\mathrm{in}}\)</span> is one input width or height, <span class="math inline">\(p\)</span> is padding on each side, <span class="math inline">\(k\)</span> is kernel size, and <span class="math inline">\(s\)</span> is stride. This form assumes dilation one.</p>
 <p>The kernel can start at every stride-spaced position whose final covered index remains inside the padded input. Counting those legal starts gives the floor expression.</p>
 <p>patch and convolution choices directly set sequence length for vision models.</p>
 <p>An H by W image with P by P patches becomes a sequence of patch tokens.</p>
@@ -525,9 +523,9 @@ Y[i,j,c]=\sum_{u,v,c\prime}W[u,v,c\prime,c]X[i+u,j+v,c\prime]
 <p><span id="eq-m2-c22-e03"><span class="math display">\[
 N_{\mathrm{patches}}=\left(\frac{H}{P}\right)\left(\frac{W}{P}\right)
 \tag{22.3}\]</span></span></p>
-<p>where H,W is image height and width; P is patch side length.</p>
+<p>Here, <span class="math inline">\(H\)</span> and <span class="math inline">\(W\)</span> are image height and width, and <span class="math inline">\(P\)</span> is the patch side length. The expression assumes that <span class="math inline">\(P\)</span> divides both image dimensions; otherwise the image must be padded or cropped.</p>
 <p>Patchification divides the image height and width by the patch side length, then multiplies those two counts to get sequence length.</p>
-<p>patch size directly controls transformer sequence length for images.</p>
+<p>Patch size directly controls transformer sequence length for images.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Patch sequence length for a 224-pixel image</strong></p>
 <p>Divide a 224 by 224 image into non-overlapping 16 by 16 patches.</p>
@@ -552,6 +550,7 @@ N_{\mathrm{patches}}=\left(\frac{H}{P}\right)\left(\frac{W}{P}\right)
 <p>A learned projection maps those four pixel values to one D-dimensional patch vector.</p>
 <p>Convolution keeps local grid structure through a sliding kernel; a vision transformer converts regions into a sequence of vector tokens.</p>
 </div>
+<p>The code takes a batch of two RGB images and uses a strided convolution as the learned patch projection. It prints the spatial patch grid and the equivalent sequence, so an incorrect patch count or axis order is immediately visible.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Patchifying an image with a strided convolution</p>
 </div>
@@ -573,22 +572,21 @@ N_{\mathrm{patches}}=\left(\frac{H}{P}\right)\left(\frac{W}{P}\right)
 <section id="sec-m2-c22-s02" class="level2" data-number="22.2">
 <h2 data-number="22.2" class="anchored" data-anchor-id="sec-m2-c22-s02"><span class="header-section-number">22.2</span> Aligning Visual and Text Embeddings with CLIP Contrastive Loss</h2>
 <p>Multimodal models either align representations from different encoders or condition a generator on projected visual representations.</p>
-<p>CLIP is a contrastive image-text model that aligns paired examples in a shared embedding space.</p>
-<p>Tabular transformers tokenize fields rather than words, but the same embedding and attention machinery can apply. The course also notes that classical tabular baselines often remain strong, so the mathematical object should fit the data rather than forcing every input into the same architecture.</p>
+<p>Contrastive Language-Image Pre-training (CLIP) aligns paired image and text examples in a shared embedding space.</p>
 <p>CLIP encodes images and text separately, compares every image with every caption in the batch, and uses a contrastive loss to raise matched similarities in both directions. The similarity matrix is therefore both a computational object and the set of candidate negatives for the batch.</p>
-<p>VQ-VAE converts image regions into discrete codebook entries that can be modeled as tokens. ViLT removes a separate heavy visual encoder and applies transformer computation more directly to projected image patches and text tokens.</p>
+<p>A vector-quantized variational autoencoder (VQ-VAE) converts image regions into discrete codebook entries that can be modeled as tokens. The Vision-and-Language Transformer (ViLT) removes a separate heavy visual encoder and applies transformer computation more directly to projected image patches and text tokens.</p>
 <p>For image captioning or visual question answering, a vision encoder produces image features and a language decoder generates text conditioned on those features. The course homework evaluates both successful outputs and systematic failures such as counting or attribute errors.</p>
 <p>A batch similarity matrix S trains matching image-text pairs to align.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>CLIP contrastive loss:</strong></span></p>
 <p><span id="eq-m2-c22-e04"><span class="math display">\[
-L=\operatorname{CE}(\operatorname{softmax}(S/\tau),\mathrm{image\,to\,text\,targets})+\operatorname{CE}(\operatorname{softmax}(S^{T}/\tau),\mathrm{text\,to\,image\,targets})
+L_{\mathrm{CLIP}}=\frac{1}{2}\left[\operatorname{CE}\!\left(\frac{S}{\tau},y\right)+\operatorname{CE}\!\left(\frac{S^{T}}{\tau},y\right)\right]
 \tag{22.4}\]</span></span></p>
-<p>where S is batch image-text similarity matrix; τ is learned or fixed temperature; CE is cross-entropy over matched pairs.</p>
+<p>Here, <span class="math inline">\(S\in\mathbb{R}^{B\times B}\)</span> is the image-text similarity matrix for a batch of <span class="math inline">\(B\)</span> pairs, <span class="math inline">\(\tau&gt;0\)</span> is a learned or fixed temperature, and <span class="math inline">\(y=(1,\ldots,B)\)</span> identifies the matching diagonal entries. Each cross-entropy function receives logits, not probabilities, and the factor one half averages the image-to-text and text-to-image directions.</p>
 <p>Each image row is normalized into probabilities over captions, and each text column is normalized into probabilities over images. Cross-entropy rewards the paired entry in both directions.</p>
 <p>CLIP learns a shared embedding space in which matched image-text pairs score higher than mismatched pairs in the same batch.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: CLIP contrastive loss</strong></p>
-<p>If correct image-text probabilities are 0.9 and 0.8, the row-direction CE average is <span class="math inline">\((-\log 0.9 - \log 0.8)/2=0.164\)</span>.</p>
+<p>Suppose two image rows assign probabilities 0.9 and 0.8 to their matching captions. The image-to-text loss is <span class="math inline">\((-\log 0.9-\log 0.8)/2=0.164\)</span> nats. The full CLIP loss also computes the text-to-image direction and averages the two directional losses.</p>
 </div>
 <p>CLIP compares whole-image and whole-text representations. Speech recognition instead turns a time sequence into a token sequence.</p>
 </section>
@@ -609,9 +607,9 @@ L=\operatorname{CE}(\operatorname{softmax}(S/\tau),\mathrm{image\,to\,text\,targ
 <p>A local window selects part of the waveform before its frequency components are measured.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Short-time Fourier transform:</strong></span></p>
 <p><span id="eq-m2-c22-e05"><span class="math display">\[
-X(t,\omega)=\sum_nx[n]w[n-t]\exp(-i\omega n)
+X[m,k]=\sum_{n=0}^{N-1}x[n]w[n-mH]\exp\!\left(-\frac{2\pi i kn}{N}\right)
 \tag{22.5}\]</span></span></p>
-<p>where x[n] is audio sample n; w[n-t] is window centered near time t; ω is angular frequency; X(t,ω) is complex local spectrum.</p>
+<p>Here, <span class="math inline">\(x[n]\)</span> is audio sample <span class="math inline">\(n\)</span>, <span class="math inline">\(w[n-mH]\)</span> selects the window for frame <span class="math inline">\(m\)</span>, <span class="math inline">\(H\)</span> is the hop size in samples, <span class="math inline">\(k\)</span> is a discrete frequency bin, and <span class="math inline">\(N\)</span> is the transform length. The complex value <span class="math inline">\(X[m,k]\)</span> records magnitude and phase for one time-frequency position.</p>
 <p>Repeating the calculation at shifted windows creates a time-frequency matrix.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Turning a short waveform window into one spectral frame</strong></p>
@@ -639,7 +637,7 @@ X(t,\omega)=\sum_nx[n]w[n-t]\exp(-i\omega n)
 <p>Categorical values can be assigned embedding rows, while continuous values require normalization or a learned projection. Attention then compares fields within one record rather than words within one sentence.</p>
 <p>The Week 8 material retains gradient-boosted trees as a strong baseline. A transformer is most useful when field interactions, pretraining, multimodal inputs, or transfer learning justify its additional complexity; it should not replace a simpler baseline by default.</p>
 <p>Tabular inputs mix numeric, categorical, missing, and sometimes time-dependent fields. Strong baselines such as regularized linear models and gradient-boosted decision trees often remain competitive because they handle heterogeneous columns and limited data efficiently.</p>
-<p>A tabular transformer embeds categorical fields, normalizes numeric fields, and uses attention to model interactions between columns. Tabular transformers are useful when complex feature interactions justify extra compute. For standard tabular data, gradient-boosted decision trees often remain faster and more accurate.</p>
+<p>A tabular transformer embeds categorical fields, normalizes numeric fields, and uses attention to model interactions between columns. It is useful when complex feature interactions, pretraining, or multimodal inputs justify extra compute. For an ordinary supervised table, a regularized linear model and gradient-boosted trees provide necessary comparison points rather than an assumed ranking.</p>
 <p>Model choice starts with the input structure and a strong baseline, then asks whether richer interactions justify the additional cost.</p>
 </section>
 <section id="sec-m2-c22-s05" class="level2" data-number="22.5">
@@ -731,12 +729,13 @@ N_{\mathrm{patches}}=\left(\frac{H}{P}\right)\left(\frac{W}{P}\right)
 \tag{22.6}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Patch projection:</strong></span></p>
 <p><span id="eq-m2-c22-e07"><span class="math display">\[
-\mathrm{patch\,tokens}=\operatorname{flatten}(\mathrm{patches})\mathbin{@}W_{\mathrm{patch}}
+Z=\operatorname{flatten}(\mathrm{patches})W_{\mathrm{patch}},\quad Z\in\mathbb{R}^{B\times N\times D}
 \tag{22.7}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>MoE routing:</strong></span></p>
 <p><span id="eq-m2-c22-e08"><span class="math display">\[
-\mathrm{expert}=\operatorname{top}_k(\operatorname{softmax}(W_{\mathrm{gate}}x))
+g=\operatorname{softmax}(W_{\mathrm{gate}}x),\quad y=\sum_{e\in\mathcal{T}_{k}(g)}g_{e}^{(k)}f_{e}(x)
 \tag{22.8}\]</span></span></p>
+<p>Here, <span class="math inline">\(x\in\mathbb{R}^{D}\)</span> is one token representation, <span class="math inline">\(g\in\mathbb{R}^{E}\)</span> contains router probabilities for <span class="math inline">\(E\)</span> experts, and <span class="math inline">\(\mathcal{T}_{k}(g)\)</span> contains the indices of its <span class="math inline">\(k\)</span> largest entries. Each selected expert <span class="math inline">\(f_e\)</span> returns a <span class="math inline">\(D\)</span>-dimensional vector, and <span class="math inline">\(g_e^{(k)}\)</span> renormalizes the selected weights so they sum to one. A separate balancing loss is normally needed because this equation alone can route too many tokens to the same expert.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Audio framing:</strong></span></p>
 <p><span id="eq-m2-c22-e09"><span class="math display">\[
 \mathrm{frames}=\left\lfloor\frac{\mathrm{samples}-\mathrm{window}}{\mathrm{hop}}\right\rfloor+1
@@ -756,9 +755,6 @@ N_{\mathrm{patches}}=\left(\frac{H}{P}\right)\left(\frac{W}{P}\right)
 <li>Projection layers align modality-specific features with the transformer hidden width.</li>
 <li>MoE routing creates conditional compute and therefore requires load-balancing checks.</li>
 </ul>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>It should now be clear how to compute the number of image patches and the transformer input dimensions for one ViT example.</strong></p>
-</div>
 <p>Beyond-text models first turn modality-specific inputs into vectors before reusing transformer-style computation.</p>
 <p>PyTorch maps these mathematical objects to tensors, modules, losses, and optimizers.</p>
 
