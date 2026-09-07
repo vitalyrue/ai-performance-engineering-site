@@ -410,13 +410,13 @@ Figure&nbsp;8.1: Application-owned routing, state, retries, validation, and appr
 <p>The workflow grows from fixed chains to routing, parallel work, feedback loops, and human approval while application code retains control of every transition.</p>
 <section id="sec-m1-c08-s01" class="level2" data-number="8.1">
 <h2 data-number="8.1" class="anchored" data-anchor-id="sec-m1-c08-s01"><span class="header-section-number">8.1</span> Application-controlled workflow steps</h2>
-<p>A grounded model can answer from selected evidence but remains a probabilistic text generator. Useful products must read databases, calculate values, send requests, or update state under permissions the model does not enforce. An AI system combines model reasoning with application-owned tools, memory, routing, validation, and user interface.</p>
+<p>A grounded model can answer from selected evidence but remains a probabilistic text generator. Production systems must query databases, execute business logic, trigger external APIs, and persist state under application authorization. An AI system combines model reasoning with application-owned tools, memory, routing, validation, and user interface.</p>
 <p>The model is strong at language, broad knowledge, local reasoning, and adapting to a task description. It is weak as a source of current private facts, a deterministic calculator, a persistent database, or an authorization system. The application supplies those missing capabilities through code and external services.</p>
 <ul>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Tool:</strong></span> A named application operation with a description, typed inputs, an execution implementation, and a result returned to the model or workflow.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Function calling:</strong></span> A model interface that returns a structured proposal for a tool name and arguments. The application validates and executes the proposal.</p></li>
 </ul>
-<p>A tool call is not the side effect itself. The model proposes <code>transfer_funds(amount=...)</code>; the application checks identity, balance, policy, limits, and approval before executing a real transfer. Tool results are also untrusted inputs: a web page or service response can contain instructions aimed at the model.</p>
+<p>A tool call is not the side effect itself. The model proposes <code>transfer_funds(amount=...)</code>, while the application checks identity, balance, policy, limits, and approval before executing a real transfer. Tool results are also untrusted inputs: a web page or service response can contain instructions aimed at the model.</p>
 <div id="fig-m1-c08-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Routing, worker execution, and validation gates keep control flow and side effects in software.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m1-c08-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -429,7 +429,7 @@ Figure&nbsp;8.2: Routing, worker execution, and validation gates keep control fl
 </div>
 <p>The model may contribute decisions inside each stage, but the application decides which outputs are valid and which state transitions are allowed.</p>
 <p>The model produces probabilistic proposals: generated text, classifications, structured arguments, or candidate plans. The application is responsible for message construction, identity, permissions, routing, validation, execution, persistence, budgets, and user-visible error behavior. External services own the authoritative data or side effect they expose through a controlled interface.</p>
-<p>These responsibilities meet at recorded interfaces. A request trace identifies which context entered the model; a tool trace identifies which validated action executed; a state trace identifies which component changed durable data. The separation allows a model checkpoint to change without silently changing authorization or business rules.</p>
+<p>These responsibilities meet at recorded interfaces. A request trace identifies which context entered the model, a tool trace identifies which validated action executed, and a state trace identifies which component changed durable data. The separation allows a model checkpoint to change without silently changing authorization or business rules.</p>
 </section>
 <section id="sec-m1-c08-s02" class="level2" data-number="8.2">
 <h2 data-number="8.2" class="anchored" data-anchor-id="sec-m1-c08-s02"><span class="header-section-number">8.2</span> Workflow state and transitions</h2>
@@ -449,24 +449,19 @@ Figure&nbsp;8.3: A workflow is a predefined structure for reliable reuse. Applic
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Workflow</strong></p>
 <p>This method applies to tasks with known phases, stable policies, expected branches, or consequential state changes. It is useful when reliability, auditability, latency bounds, and clear failure recovery matter.</p>
-<p>It represents steps and transitions in code or a graph, defines state schemas, and validates each output before the next transition. Implement and test a known process once; then reuse it on every request.</p>
+<p>Workflows model sequential transitions as code or state graphs, validating state schemas across every transition. Implement and test a known process once, then reuse it on every request.</p>
 <p>A limit to keep in mind: Fixed sequential paths can perform poorly when the next useful action depends on unforeseen observations.</p>
 </div>
 <p>In the resulting application-defined graph or sequence, model calls may fill in text, classifications, or structured fields. The application still determines which transitions exist, what each step receives, and which validator or fallback follows a failure.</p>
-<p>Workflow quality is measured at both step and outcome level. Step traces reveal parse errors, invalid transitions, retries, and branch selection; outcome metrics show whether the complete process met quality, latency, cost, and policy targets. This makes a workflow appropriate for repeatable processes whose control logic benefits from software-managed execution.</p>
+<p>Workflow quality is measured at both step and outcome level. Step traces reveal parse errors, invalid transitions, retries, and branch selection, while outcome metrics show whether the complete process met quality, latency, cost, and policy targets. This makes a workflow appropriate for repeatable processes whose control logic benefits from software-managed execution.</p>
 </section>
 <section id="sec-m1-c08-s03" class="level2" data-number="8.3">
 <h2 data-number="8.3" class="anchored" data-anchor-id="sec-m1-c08-s03"><span class="header-section-number">8.3</span> Workflow control patterns</h2>
 <p>A workflow supplies a controlled sequence. One large model call may mix extraction, reasoning, transformation, and validation so thoroughly that failures cannot be located. Prompt chaining splits the task into steps whose intermediate outputs can be typed, inspected, and retried.</p>
-<p>In a static chain, the output of one step becomes input to the next. A support workflow might extract entities, retrieve account data, draft an answer, and validate policy compliance. The chain is useful when the order is stable and each intermediate representation simplifies the next step.</p>
-<ul>
-<li><strong>Benefit:</strong> each step has a narrower prompt and a testable output specification.</li>
-<li><strong>Cost:</strong> every model call adds latency, tokens, and another failure point.</li>
-<li><strong>Risk:</strong> an early error can propagate; validators should stop or repair before the next step.</li>
-<li><strong>Design rule:</strong> use deterministic code for parsing, arithmetic, schema checks, and known transformations whenever possible.</li>
-</ul>
+<p>In a static chain, the output of one step becomes input to the next. A customer support pipeline can extract entities, fetch account records, and synthesize an answer subject to validation. The chain is useful when the order is stable and each intermediate representation simplifies the next step.</p>
+<p>Prompt chaining introduces clear operational trade-offs. Each individual step benefits from a narrower prompt and a testable output specification. However, every model call adds latency, token expense, and a potential failure point. Early errors can also propagate downstream unless validators halt or repair invalid intermediate representations immediately. Whenever a transformation follows deterministic logic—such as string parsing, arithmetic, or schema validation—engineers should execute code rather than calling a language model.</p>
 <p><strong>Code example 8.1 - a chained workflow validates the extracted object before retrieval.</strong></p>
-<p>This abbreviated Python function assumes that <code>ticket_text</code> is the incoming request, <code>customer_state</code> is application-supplied account state, and <code>ALLOWED_INTENTS</code> plus every named helper are supplied by the application. The classifier and extractor may call models; validators return an <code>ok</code> flag and reason. The function returns either a human-route result or a validated reply, and it does not send a message or modify customer data.</p>
+<p>This abbreviated Python function assumes that <code>ticket_text</code> is the incoming request, <code>customer_state</code> is application-supplied account state, and <code>ALLOWED_INTENTS</code> plus every named helper are supplied by the application. The classifier and extractor may call models, while validators return an <code>ok</code> flag and reason. The function returns either a human-route result or a validated reply, and it does not send a message or modify customer data.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 8.1 - a chained workflow validates the extracted object before retrieval.</p>
 </div>
@@ -483,8 +478,8 @@ Figure&nbsp;8.3: A workflow is a predefined structure for reliable reuse. Applic
 <span id="lst-m1-c08-c01-11"><a href="#lst-m1-c08-c01-11" aria-hidden="true" tabindex="-1"></a>    draft <span class="op">=</span> draft_grounded_reply(ticket_text, policy_chunks)</span>
 <span id="lst-m1-c08-c01-12"><a href="#lst-m1-c08-c01-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> validate_reply(draft, policy_chunks, customer_state)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p><code>classify_intent</code> and <code>extract_entities</code> may use models, while <code>validate_customer_and_order</code> and <code>validate_reply</code> enforce application rules. The human-route return is a normal branch, not an exception hidden inside a prompt.</p>
-<p>Prompt chaining divides a larger transformation into stages with explicit intermediate representations. One stage may extract facts, another normalize them, and a final stage compose an answer. Each intermediate output has a schema and local evaluation, allowing an early error to be located before it propagates through the remaining calls.</p>
-<p>The additional calls create latency, cost, and compounding reliability trade-offs. If three stages succeed independently with probability 0.95, the probability that all three succeed is about 0.86 before retries or validation are considered. Chaining is therefore useful when intermediate results and schemas improve control or observability enough to justify the extra failure opportunities.</p>
+<p>Prompt chaining divides a larger transformation into stages with explicit intermediate representations. An initial stage extracts facts, an intermediate step normalizes representations, and a terminal model synthesizes the answer. Each intermediate output has a schema and local evaluation, allowing an early error to be located before it propagates through the remaining calls.</p>
+<p>The additional calls create latency, cost, and compounding reliability trade-offs. If three stages succeed independently with probability 0.95, the probability that all three succeed is about 0.86 before retries or validation are considered. Chaining is useful when intermediate results and schemas improve control or observability enough to justify the extra failure opportunities.</p>
 </section>
 <section id="sec-m1-c08-s04" class="level2" data-number="8.4">
 <h2 data-number="8.4" class="anchored" data-anchor-id="sec-m1-c08-s04"><span class="header-section-number">8.4</span> Specialized routing</h2>
@@ -552,13 +547,13 @@ Table&nbsp;8.1: A route is useful when each label leads to a concrete worker and
 </div>
 </figure>
 </div>
-<p>A router maps one request to a finite set of workers. Valid route labels represent concrete differences in data access, prompts, tools, or policy. An explicit unsupported or fallback label prevents a low-confidence request from being forced into the nearest available branch.</p>
+<p>A router maps one request to a specific list of workers. Valid route labels represent concrete differences in data access, prompts, tools, or policy. An explicit unsupported or fallback label prevents a low-confidence request from being forced into the nearest available branch.</p>
 <p>Router evaluation uses labeled requests, per-class precision and recall, a confusion matrix, and downstream cost. A semantically plausible misroute can still be harmful when it enters a branch with different permissions or evidence sources. Confidence thresholds and deterministic prechecks can reserve ambiguous cases for clarification or human review.</p>
 </section>
 <section id="sec-m1-c08-s05" class="level2" data-number="8.5">
 <h2 data-number="8.5" class="anchored" data-anchor-id="sec-m1-c08-s05"><span class="header-section-number">8.5</span> Parallel work and result joining</h2>
 <p>Routing chooses one path when request types are mutually exclusive. Some tasks contain independent subtasks whose results are all needed, so choosing only one branch would be incomplete. Parallelization runs independent work concurrently, while an orchestrator decomposes a request and synthesizes worker results.</p>
-<p>Parallelization is appropriate when subtasks do not depend on one another’s intermediate state. Examples include translating several independent sections, running safety and quality checks together, or retrieving from multiple corpora. The workflow waits at a join point and combines results under an explicit merge rule.</p>
+<p>Parallelization is appropriate when subtasks do not depend on one another’s intermediate state. Examples include concurrent document translation, simultaneous safety checks, and multi-corpus retrieval. The workflow waits at a join point and combines results under an explicit merge rule.</p>
 <div id="fig-m1-c08-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="An orchestrator creates or selects worker tasks and synthesizes their independent results. Source: Week 3, PDF p. 97.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m1-c08-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -570,49 +565,43 @@ Figure&nbsp;8.5: An orchestrator creates or selects worker tasks and synthesizes
 </figure>
 </div>
 <p>Workers do not need broad context when the orchestrator gives each one a narrow input and output specification. The join step must resolve conflicts and missing results.</p>
-<p>An orchestrator-worker pattern is useful when the way to split the work depends on the request. The orchestrator creates tasks, sends them to specialized workers, and combines their outputs. It adds a coordination model call, so the extra split or specialization must improve a measured final result.</p>
+<p>An orchestrator-worker pattern is useful when the way to split the work depends on the request. The orchestrator partitions the objective into subtasks, dispatching them to specialized workers and merging intermediate results. It adds a coordination model call, so the extra split or specialization must improve a measured final result.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Parallel safety</strong></p>
-<p>Do not parallelize steps that mutate the same state without a conflict rule. Concurrency can reduce latency while creating duplicate side effects, stale reads, or nondeterministic merges.</p>
+<p>Do not parallelize steps that mutate the same state without a conflict rule. Uncontrolled concurrency can introduce duplicate side effects, race conditions, or conflicting state merges.</p>
 </div>
 <p>Parallel execution is valid only when tasks do not depend on one another’s intermediate results and do not mutate conflicting state. The orchestrator defines each worker’s input, output schema, deadline, retry policy, and authorization scope. The join step handles missing, inconsistent, duplicated, and late results from each branch.</p>
-<p>Latency improvement is bounded by the slowest required branch plus orchestration and synthesis overhead. Evaluation therefore records serial baseline time, branch durations, peak concurrency, cancellation behavior, and final synthesis quality. Parallelism is useful when saved wall time exceeds its coordination and resource cost.</p>
+<p>Latency improvement is bounded by the slowest required branch plus orchestration and synthesis overhead. Evaluation records serial baseline time, branch durations, peak concurrency, cancellation behavior, and final synthesis quality. Parallelism is useful when saved wall time exceeds its coordination and resource cost.</p>
 </section>
 <section id="sec-m1-c08-s06" class="level2" data-number="8.6">
 <h2 data-number="8.6" class="anchored" data-anchor-id="sec-m1-c08-s06"><span class="header-section-number">8.6</span> Feedback loops and consequential actions</h2>
 <p>Parallel workers increase throughput for independent tasks. A draft may instead need iterative improvement against a criterion that can be checked after each attempt. Evaluator-optimizer and reflection patterns add bounded feedback while preserving an explicit stop condition.</p>
-<p>An <strong>evaluator-optimizer</strong> workflow generates a candidate, scores it with an external evaluator, and revises until the candidate passes or the budget ends. The evaluator can be deterministic, model-based, or human. It should return actionable criterion failures that the next attempt can address.</p>
+<p>An <strong>evaluator-optimizer</strong> loop generates candidate solutions and grades them against an external evaluator, iteratively revising until criteria pass or budgets expire. The evaluator can be deterministic, model-based, or human. It should return specific criterion failures that the next attempt can address.</p>
 <p><strong>Reflection</strong> asks a model to critique its own or another model’s output before revision. It can help when a clear rubric exists, but repeated self-critique can increase cost without adding new evidence. External tests, retrieved sources, and independent graders provide stronger signals than unconstrained introspection.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Evaluator-optimizer</strong></p>
 <p>This method applies to a candidate response and a grader that returns specific, checkable deficiencies. It is useful when quality can improve through revision and the evaluation cost is justified.</p>
-<p>It generates a candidate, grades it, revises it from criterion-level feedback, and stops on pass, unchanged score, or budget. The loop is useful only when feedback adds information that the original generation did not already contain.</p>
+<p>The loop generates a candidate and scores it against rubrics, revising output with targeted feedback until achieving pass criteria or budget exhaustion. The loop is useful only when feedback adds information that the original generation did not already contain.</p>
 <p>A limit to keep in mind: A weak evaluator can reward superficial changes or create reward hacking.</p>
 </div>
 <p>Log every candidate and score. If only the final answer is kept, an apparent improvement cannot be separated from grader inconsistency or sampling luck.</p>
 <p>Between attempts, the evaluator’s criterion-level findings become inputs to the next revision. The loop ends on a pass condition, a fixed attempt or cost budget, or a no-progress condition.</p>
-<p>The evaluator becomes part of the system’s behavior and needs its own calibration. An unstable or exploitable judge can reward verbosity, format tricks, or repeated self-justification. Calibration tests must show that its score tracks real improvement. Evaluation compares final quality with a one-pass baseline while also recording attempts, evaluator scores, latency, cost, and unchanged-output loops.</p>
+<p>The evaluator becomes part of the system’s behavior and needs its own calibration. An uncalibrated judge can reward superficial verbosity or deceptive formatting artifacts. Calibration tests must show that its score tracks real improvement. Evaluation compares final quality with a one-pass baseline while also recording attempts, evaluator scores, latency, cost, and unchanged-output loops.</p>
 </section>
 <section id="sec-m1-c08-s07" class="level2" data-number="8.7">
 <h2 data-number="8.7" class="anchored" data-anchor-id="sec-m1-c08-s07"><span class="header-section-number">8.7</span> Validators and human approval</h2>
-<p>Feedback loops can revise low-stakes text automatically. A consequential action such as moving money, deleting data, or sending a binding message requires an authorized person or deterministic policy check; a model score cannot grant that permission. Human-in-the-loop gates and deterministic validators bind approval to a concrete action and current state.</p>
-<p>A human approval step should show the proposed action, parameters, evidence, expected effect, and reversible alternatives. Approval is invalid if the underlying state changes before execution; revalidate identity, permissions, balances, or inventory after approval and immediately before the side effect.</p>
+<p>Feedback loops can revise low-stakes text automatically. High-consequence actions like transferring funds or deleting records mandate human authorization or deterministic verification. A model score cannot grant that permission. Human-in-the-loop gates and deterministic validators bind approval to a concrete action and current state.</p>
+<p>A human approval step should show the proposed action, parameters, evidence, expected effect, and reversible alternatives. Approval is invalid if the underlying state changes before execution. Revalidate identity, permissions, balances, or inventory after approval and immediately before the side effect.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Guardrail:</strong></span> A policy or validation mechanism that restricts inputs, outputs, tool use, or state changes. Guardrails may be deterministic, model-based, or human, but consequential authorization should not depend on model judgment alone.</li>
 </ul>
-<p>The control surface can be reviewed at the input, output, tool, and state boundaries:</p>
-<ul>
-<li><strong>Input validation:</strong> size limits, content type, authentication, and injection-resistant separation of policy from data.</li>
-<li><strong>Output validation:</strong> schema, required evidence, allowed values, sensitive-data checks, and refusal or escalation state.</li>
-<li><strong>Tool validation:</strong> identity, permission, argument ranges, rate limits, idempotency keys, and environment isolation.</li>
-<li><strong>State validation:</strong> compare the current version with the version the proposal was based on before committing.</li>
-</ul>
+<p>Engineers enforce these guardrails across four distinct system boundaries. Input validation enforces payload limits and verifies caller credentials while isolating untrusted text. Output validation verifies schema adherence and constrains permitted values, while filtering sensitive data. Tool validation restricts invocation privileges and checks parameter boundaries, isolating execution environments. Finally, state validation compares current system data against initial proposal versions to prevent race conditions before committing a side effect.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Approval is scoped</strong></p>
 <p>User consent for one visible action does not authorize a different amount, recipient, file, or future action. Store the approved parameters and reject execution when they no longer match.</p>
 </div>
 <p>Human approval is a time-bounded authorization event, not a general transfer of control. The approval view contains the proposed action, normalized parameters, relevant evidence, expected effect, alternatives, and the identity and state against which approval was granted. Execution revalidates those facts immediately before the side effect.</p>
-<p>Validators provide narrower automatic gates before and after approval. Input validation checks identity, scope, arguments, and policy; tool validation checks result type and provenance; output validation checks the final state. The audit record links proposal, approval, revalidation, execution, and outcome so a later review can distinguish an invalid proposal from an expired approval or failed tool.</p>
+<p>Validators provide narrower automatic gates before and after approval. Input validation checks identity, scope, arguments, and policy, while tool validation checks result type and provenance, and output validation checks the final state. The audit record links proposal, approval, revalidation, execution, and outcome so a later review can distinguish an invalid proposal from an expired approval or failed tool.</p>
 </section>
 <section id="sec-m1-c08-s08" class="level2" data-number="8.8">
 <h2 data-number="8.8" class="anchored" data-anchor-id="sec-m1-c08-s08"><span class="header-section-number">8.8</span> The smallest sufficient workflow</h2>
@@ -678,7 +667,7 @@ Table&nbsp;8.2: Workflow choice begins with the task dependency and risk structu
 </div>
 </figure>
 </div>
-<p>The application records the state before and after every step, the input and output schema, model and prompt version, tool call and result, validation decision, retry, cost, and wall time. This record connects workflow debugging to controlled agent tool use in Chapter 9.</p>
+<p>The application records the state before and after every step, the input and output schema, model and prompt version, tool call and result, validation decision, retry, cost, and wall time. This record connects workflow debugging to controlled agent tool use in Chapter 9. For an architectural reference delineating system responsibilities between third-party workflow libraries and application code, see Appendix D.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter checkpoint</strong></p>
 <p>A workflow encodes known control flow and uses models inside tested boundaries. An agent is justified only when the next useful action cannot be specified safely before observing the environment.</p>

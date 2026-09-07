@@ -437,8 +437,8 @@ Figure&nbsp;7.1: RAG evaluation separates evidence retrieval, claim support, ans
 <p>The diagnostic path identifies whether the retriever found the needed evidence, generation used it faithfully, and the complete answer met the task.</p>
 <section id="sec-m1-c07-s01" class="level2" data-number="7.1">
 <h2 data-number="7.1" class="anchored" data-anchor-id="sec-m1-c07-s01"><span class="header-section-number">7.1</span> Evidence failures and answer failures</h2>
-<p>A RAG answer depends on both selected evidence and model behavior. One score can hide whether the context was irrelevant, the answer was unsupported, or the answer simply missed the user intent. The RAG triad names context relevance, faithfulness, and answer relevance as distinct diagnostic views.</p>
-<p><strong>Context relevance</strong> asks whether retrieved passages are useful for the question. <strong>Faithfulness</strong> asks whether the answer’s claims are supported by the supplied context. <strong>Answer relevance</strong> asks whether the answer actually addresses the question. The first belongs mainly to retrieval, the second to evidence use, and the third to the complete response.</p>
+<p>A RAG answer depends on both selected evidence and model behavior. A single aggregated score conceals whether context was irrelevant, claims were unfaithful, or output missed user intent. The RAG triad names context relevance, faithfulness, and answer relevance as distinct diagnostic views.</p>
+<p><strong>Context relevance</strong> measures whether retrieved passages are useful for the question. <strong>Faithfulness</strong> assesses whether the answer’s claims are supported by the supplied context. <strong>Answer relevance</strong> evaluates whether the answer directly addresses the question. The first belongs mainly to retrieval, the second to evidence use, and the third to the complete response.</p>
 <div id="fig-m1-c07-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The RAG triad maps context relevance, faithfulness, and answer relevance to different repair decisions. Source: Week 3, PDF p. 55.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m1-c07-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -505,8 +505,8 @@ Figure&nbsp;7.3: Evidence availability and answer support separate retrieval fai
 </figcaption>
 </figure>
 </div>
-<p>The same wrong answer can arise because the evidence never appeared, because context assembly dropped it, or because generation ignored it. The retrieval trace and claim-support record locate the component where the failure began.</p>
-<p>The three dimensions correspond to different components and therefore to different repair actions. They also interact: highly relevant evidence can still produce an unfaithful answer, and a faithful summary can still answer the wrong question. Missing evidence limits how completely the task can be answered from the selected context, but it does not force low faithfulness: an answer can explicitly say that the context lacks a needed fact and remain fully supported. A diagnostic record keeps query, ranked candidates, selected context, claims, citations, and final answer together so each relationship can be scored without reconstructing the run.</p>
+<p>An incorrect answer can stem from retrieval omission, context-budget trimming, or model hallucination. The retrieval trace and claim-support record locate the component where the failure began.</p>
+<p>The three dimensions correspond to different components and require different repair actions. They also interact: highly relevant evidence can still produce an unfaithful answer, and a faithful summary can still answer the wrong question. Missing evidence limits how completely a task can be answered from context. However, it does not force low faithfulness. An answer stating that context lacks the needed fact remains fully supported. A diagnostic record keeps query, ranked candidates, selected context, claims, citations, and final answer together so each relationship can be scored without reconstructing the run.</p>
 </section>
 <section id="sec-m1-c07-s02" class="level2" data-number="7.2">
 <h2 data-number="7.2" class="anchored" data-anchor-id="sec-m1-c07-s02"><span class="header-section-number">7.2</span> Retrieval evidence metrics</h2>
@@ -516,7 +516,7 @@ Figure&nbsp;7.3: Evidence availability and answer support separate retrieval fai
 \mathrm{hit}@k=\mathbb{1}(R_k\cap E\ne\emptyset)
 \tag{7.1}\]</span></span></p>
 <p>Here, <span class="math inline">\(R_k\)</span> contains the top-k retrieved source units, <span class="math inline">\(E\)</span> contains one or more acceptable evidence units, and the indicator returns one for a nonempty intersection. The metric checks evidence presence but ignores how many irrelevant chunks were also returned.</p>
-<p>Precision@k and recall@k reuse the same labeled sets but answer different questions. Precision measures how concentrated the top-k results are with relevant evidence; recall measures how much of all labeled evidence was recovered.</p>
+<p>Precision@k and recall@k reuse the same labeled sets but answer different questions. Precision measures how concentrated the top-k results are with relevant evidence, while recall measures how much of all labeled evidence was recovered.</p>
 <p><span id="eq-m1-c07-e02"><span class="math display">\[
 \mathrm{Precision}@k=\frac{\lvert R_k\cap E\rvert}{k}
 \tag{7.2}\]</span></span></p>
@@ -525,8 +525,8 @@ Figure&nbsp;7.3: Evidence availability and answer support separate retrieval fai
 \mathrm{Recall}@k=\frac{\lvert R_k\cap E\rvert}{\lvert E\rvert}
 \tag{7.3}\]</span></span></p>
 <p>For retrieval recall, the numerator is unchanged but the denominator is the number of labeled relevant units in <span class="math inline">\(E\)</span>. Recall depends on label completeness: an incomplete evidence set can make a useful alternative source look like noise.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation - retrieval precision and recall at five</strong></p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Example calculation: Retrieval precision and recall at five</strong></p>
 <p>A question has four labeled relevant chunks. The retriever returns five chunks, three of which belong to the labeled evidence set.</p>
 <ol type="1">
 <li>The relevant intersection contains three chunks.</li>
@@ -541,11 +541,11 @@ Figure&nbsp;7.3: Evidence availability and answer support separate retrieval fai
 MRR=\frac{1}{N}\sum_{i=1}^{N}\begin{cases}\frac{1}{r_i},&amp;\text{if a relevant result is retrieved}\\0,&amp;\text{otherwise}\end{cases}
 \tag{7.4}\]</span></span></p>
 <p>Here, <span class="math inline">\(N\)</span> is the number of questions and <span class="math inline">\(r_i\)</span> is the rank of the first relevant result for question <span class="math inline">\(i\)</span>. A question with no relevant result contributes zero rather than an undefined reciprocal. The reciprocal makes rank 1 contribute 1, rank 2 contribute 0.5, and later hits contribute progressively less. MRR ignores additional relevant results after the first.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation - hit@5 and reciprocal rank</strong></p>
-<p>For four questions, the first relevant pages appear at ranks 1, 2, and 5; the fourth question has no relevant page in the evaluated list.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Example calculation: Hit@5 and reciprocal rank</strong></p>
+<p>For four questions, the first relevant pages appear at ranks 1, 2, and 5, while the fourth question has no relevant page in the evaluated list.</p>
 <ol type="1">
-<li>The first three questions have hit@5 = 1; the missed question has hit@5 = 0, so average hit@5 = 3/4 = 0.75.</li>
+<li>The first three questions have hit@5 = 1 and the missed question has hit@5 = 0, so average hit@5 = 3/4 = 0.75.</li>
 <li>Reciprocal-rank contributions are 1, 1/2, 1/5, and 0 for the miss.</li>
 <li>MRR = (1 + 0.5 + 0.2 + 0) / 4 = 0.425.</li>
 </ol>
@@ -565,12 +565,12 @@ Figure&nbsp;7.4: Retrieval recall and precision ask whether relevant documents w
 <p>The evidence labels must use the same unit as retrieval. Page-level labels and chunk-level results require a documented mapping.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Label source</strong></p>
-<p>Evidence labels may come from an answer-bearing page, a cited ground-truth document, expert annotation, or a validated synthetic pair. Record how labels were produced; weak evidence labels make retrieval metrics look precise while measuring the wrong target.</p>
+<p>Evidence labels derive from source document pages, reference citations, domain expert annotations, or synthetic pairs. Record how labels were produced. Weak evidence labels make retrieval metrics look precise while measuring the wrong target.</p>
 </div>
 </section>
 <section id="sec-m1-c07-s03" class="level2" data-number="7.3">
 <h2 data-number="7.3" class="anchored" data-anchor-id="sec-m1-c07-s03"><span class="header-section-number">7.3</span> Answer-support and correctness metrics</h2>
-<p>Retrieval metrics can show that the right page or chunk entered the candidate set. They cannot show whether the model read that evidence correctly or whether the final answer matches the ground truth. Generation evaluation therefore scores correctness, faithfulness, citation support, and answer relevance with the selected context held visible.</p>
+<p>Retrieval metrics can show that the right page or chunk entered the candidate set. They cannot show whether the model read that evidence correctly or whether the final answer matches the ground truth. Generation evaluation scores correctness, faithfulness, citation support, and answer relevance with the selected context held visible.</p>
 <p><strong>Correctness</strong> compares the answer with a ground-truth result or expert judgment. <strong>Faithfulness</strong> checks whether claims follow from retrieved evidence. <strong>Citation support</strong> checks the exact evidence attached to each claim. A model judge can help with open text, but deterministic numeric comparison and source-page checks should remain code-based where possible.</p>
 <ol type="1">
 <li>Normalize the answer form only as much as the task permits, preserving units and qualifiers.</li>
@@ -609,10 +609,10 @@ Figure&nbsp;7.4: Retrieval recall and precision ask whether relevant documents w
 <p>This abbreviated example makes evaluator calls, but does not retrieve documents or generate the answer being scored. Record the evaluator model, Ragas version, metric prompt, and case-level reason with the score. Faithfulness is a model-based proxy for support, so a human-audited subset and deterministic citation checks remain necessary. Earlier Ragas releases used <code>SingleTurnSample</code> and <code>single_turn_ascore</code>. Pin implementation examples to the installed version and verify the current API before use.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Faithfulness is context-relative</strong></p>
-<p>A statement can be true in the world but unfaithful to the supplied evidence. A grounded product must either retrieve support or label the statement as external knowledge; it cannot silently substitute model memory for retrieved reference data.</p>
+<p>A statement can be true in the world but unfaithful to the supplied evidence. A grounded product must either retrieve support or label the statement as external knowledge. It cannot silently substitute model memory for retrieved reference data.</p>
 </div>
 <p>Generation evaluation begins at the claim level when answers contain several factual statements. Correctness compares a claim with a trusted answer or computation. Faithfulness compares it with the evidence actually supplied to the model. Citation support verifies that the cited unit entails the claim. Answer relevance then checks whether the supported claims resolve the user’s question.</p>
-<p>Deterministic checks are preferable for exact numbers, identifiers, schema rules, and citation membership. Human or model judgment is useful for paraphrase, completeness, and open-ended support, but the judge receives the same bounded evidence and a calibrated rubric. Per-claim results expose partial support that a single answer-level label would hide.</p>
+<p>Deterministic checks are preferable for exact numbers, identifiers, schema rules, and citation membership. Human or model judgment is useful for paraphrase, completeness, and open-ended support, but the judge receives the same bounded evidence and a calibrated rubric. Per-claim results expose partial support that an answer-level label alone would hide.</p>
 </section>
 <section id="sec-m1-c07-s04" class="level2" data-number="7.4">
 <h2 data-number="7.4" class="anchored" data-anchor-id="sec-m1-c07-s04"><span class="header-section-number">7.4</span> Component-level and end-to-end failures</h2>
@@ -631,16 +631,16 @@ Figure&nbsp;7.5: Component evaluation isolates retriever or generator behavior, 
 <p>A retriever can improve evidence hit while adding so much irrelevant context that answer quality falls. A stronger generator can mask weak retrieval on familiar questions by answering from weights. Compare the same question set with retrieved identifiers, context text, and final outputs stored together.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Ablation</strong></p>
-<p>This method applies to one RAG component or setting while the question set and other stages remain fixed.. It is useful when a metric moved and the responsible stage is unclear..</p>
-<p>It works by hold the generator fixed while changing retrieval, or hold retrieved context fixed while changing prompt or model.. Ablation converts an end-to-end delta into evidence about which component caused it.</p>
-<p>A limit to keep in mind: Components interact; the best isolated retriever may not produce the best context for a particular generator.</p>
+<p>This method applies to one RAG component or setting while the question set and other stages remain fixed. It is useful when a metric moved and the responsible stage is unclear.</p>
+<p>It works by holding the generator fixed while changing retrieval, or holding retrieved context fixed while changing prompt or model. Ablation converts an end-to-end delta into evidence about which component caused it.</p>
+<p>A limit to keep in mind: Components interact. The best isolated retriever may not produce the best context for a particular generator.</p>
 </div>
 <p>Component evaluation isolates a retriever or generator with controlled inputs. A retriever can be tested against labeled evidence without allowing a strong model to answer from memory. A generator can receive a fixed evidence set so faithfulness changes are not confused with retrieval changes. These tests explain where a failure begins.</p>
-<p>End-to-end evaluation measures the product outcome under the real pipeline, including interactions that component tests cannot reproduce. Both views are necessary because local improvement can reduce total quality; for example, a broader retriever may raise recall while adding enough noise to lower faithfulness. Release evidence connects each component delta to the final outcome and tests their relationship directly.</p>
+<p>End-to-end evaluation measures the product outcome under the real pipeline, including interactions that component tests cannot reproduce. Both views are necessary because local improvement can reduce total quality. When a retriever broadens recall, it can introduce enough noise to lower generation faithfulness. Release evidence connects each component delta to the final outcome and tests their relationship directly.</p>
 </section>
 <section id="sec-m1-c07-s05" class="level2" data-number="7.5">
 <h2 data-number="7.5" class="anchored" data-anchor-id="sec-m1-c07-s05"><span class="header-section-number">7.5</span> One-change improvement cycles</h2>
-<p>Component metrics and ablations can locate a weak stage. Changing chunk size, top-k, query rewriting, reranking, prompt, and model together would make a better result impossible to attribute. A RAG improvement cycle states the metric expected to move, changes one factor, reruns the same questions, and records trade-offs.</p>
+<p>Component metrics and ablations can locate a weak stage. Changing chunk size, top-k, query rewriting, reranking, prompt, and model together would make a better result impossible to attribute. A disciplined RAG improvement cycle targets a specific metric, modifies one variable, and evaluates the benchmark to quantify trade-offs.</p>
 <p>A controlled RAG study can vary the generation prompt, generation model, top-k, or chunk size. A directional local hypothesis might predict that increasing <code>k</code> from 3 to 8 raises page-hit at k for multi-page answers while reducing faithfulness if irrelevant chunks enter the context. The resulting comparison retains the baseline and every changed setting.</p>
 <div id="tbl-m1-c07-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
@@ -712,7 +712,7 @@ Table&nbsp;7.2: RAG experiments connect one changed factor to a predicted metric
 <li>Retrieve chunks and preserve document name, one-based source page, rank, retrieval score, and chunk text.</li>
 <li>Calculate page-hit@k by mapping retrieved chunks back to their source pages.</li>
 <li>Generate from the selected evidence and store cited pages plus the complete prompt version.</li>
-<li>Score answer correctness and faithfulness; retain judge explanations and model version.</li>
+<li>Score answer correctness and faithfulness, and retain judge explanations and model version.</li>
 <li>Append the row to the per-question spreadsheet and aggregate by question type.</li>
 <li>Repeat after one controlled setting change and compare with the baseline row.</li>
 </ol>
@@ -746,7 +746,7 @@ Table&nbsp;7.2: RAG experiments connect one changed factor to a predicted metric
 <span id="lst-m1-c07-c02-24"><a href="#lst-m1-c07-c02-24" aria-hidden="true" tabindex="-1"></a>    <span class="st">"output_tokens"</span>: usage.output_tokens,</span>
 <span id="lst-m1-c07-c02-25"><a href="#lst-m1-c07-c02-25" aria-hidden="true" tabindex="-1"></a>    <span class="st">"latency_ms"</span>: elapsed_ms,</span>
 <span id="lst-m1-c07-c02-26"><a href="#lst-m1-c07-c02-26" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>This abbreviated row construction assumes <code>case.evidence_doc_name</code> and <code>case.evidence_page</code> are the labelled source pair and that <code>answer_with_rag</code> returns the Chapter 6 trace. Its expected output copies the actual answer, citations, retrieved records, and status into one row; page hit compares document and page together, so page 7 in two different files is not treated as the same evidence. Calculate aggregate correctness, faithfulness, and page-hit results from the recorded rows so the result remains reproducible. Question-type slices can show whether RAG helps domain-relevant questions more than metrics-generated or novel-generated questions.</p>
+<p>This abbreviated row construction assumes case.evidence_doc_name and case.evidence_page are the labelled source pair and that nswer_with_rag returns the Chapter 6 trace. The expected output logs the answer, citations, retrieved records, and status into one row. Page hit compares document and page identifiers together, so page 7 in two different files is never treated as the same evidence. Calculate aggregate correctness, faithfulness, and page-hit results from the recorded rows so the result remains reproducible. Question-type slices can show whether RAG helps domain-relevant questions more than metrics-generated or novel-generated questions.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter checkpoint</strong></p>
 <p>RAG is measurable because retrieval identifiers, evidence pages, answer text, and scores share one record. Chapter 8 keeps that evidence path while adding deterministic control flow, tools, validation, and human decisions.</p>

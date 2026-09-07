@@ -435,7 +435,7 @@ Figure&nbsp;5.1: Metrics, scores produced under a documented evaluation procedur
 </figcaption>
 </figure>
 </div>
-<p>The map moves from error consequences to metric selection, then through benchmark scope, judge-model bias controls, human agreement, and failure slices, so each score answers a specific question about the product.</p>
+<p>The map moves from error consequences to metric selection, then through benchmark scope and judge bias controls. It connects human agreement and failure slices directly to specific product questions.</p>
 <section id="sec-m1-c05-s01" class="level2" data-number="5.1">
 <h2 data-number="5.1" class="anchored" data-anchor-id="sec-m1-c05-s01"><span class="header-section-number">5.1</span> Metrics, output structure, and error cost</h2>
 <p>A golden set supplies labeled outcomes and product-relevant slices. Classification still requires a metric whose denominator matches the harm of false alarms and missed cases. Precision reads predicted positives, recall reads actual positives, and F1 combines the two when neither error type should dominate silently.</p>
@@ -443,7 +443,7 @@ Figure&nbsp;5.1: Metrics, scores produced under a documented evaluation procedur
 <p><span id="eq-m1-c05-e01"><span class="math display">\[
 \mathrm{Precision} = \frac{TP}{TP+FP}
 \tag{5.1}\]</span></span></p>
-<p>Here, <span class="math inline">\(TP\)</span> counts correctly predicted positives and <span class="math inline">\(FP\)</span> counts negative cases incorrectly predicted as positive. The numerator contributes justified alerts; the denominator contains every alert the system raised. Precision is high when few raised alerts are false.</p>
+<p>Here, <span class="math inline">\(TP\)</span> counts correctly predicted positives and <span class="math inline">\(FP\)</span> counts negative cases incorrectly predicted as positive. The numerator contributes justified alerts, while the denominator contains every alert the system raised. Precision is high when few raised alerts are false.</p>
 <p>Recall asks how completely the system finds actual positives.</p>
 <p><span id="eq-m1-c05-e02"><span class="math display">\[
 \mathrm{Recall} = \frac{TP}{TP+FN}
@@ -454,8 +454,8 @@ Figure&nbsp;5.1: Metrics, scores produced under a documented evaluation procedur
 F_1 = \frac{2PR}{P+R}
 \tag{5.3}\]</span></span></p>
 <p>Here, <span class="math inline">\(P\)</span> is precision and <span class="math inline">\(R\)</span> is recall. Multiplication and the harmonic-mean denominator force the score down when either component is small. F1 provides one balance point, but it does not express an asymmetric cost unless the task or metric is modified.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation - escalation alerts</strong></p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Example calculation: Escalation alerts</strong></p>
 <p>An evaluator contains 12 cases that truly require escalation. The system raises 10 alerts, and 8 of those alerts are correct.</p>
 <ol type="1">
 <li>TP = 8. The two incorrect alerts give FP = 2.</li>
@@ -492,15 +492,23 @@ Figure&nbsp;5.3: A confusion matrix exposes class-specific errors that a single 
 </section>
 <section id="sec-m1-c05-s02" class="level2" data-number="5.2">
 <h2 data-number="5.2" class="anchored" data-anchor-id="sec-m1-c05-s02"><span class="header-section-number">5.2</span> Automated metrics for different output types</h2>
-<p>Classification metrics work because evaluation labels define a finite set of outcomes. Open text and code can have several valid surface forms, so exact equality may reject good outputs or reward superficial overlap. Metric choice moves from verifiable execution and exact match toward text proxies only as the task requires.</p>
-<p><strong>Exact match</strong> is appropriate when one canonical answer or normalized identifier exists. An <strong>n-gram</strong> is a run of <span class="math inline">\(n\)</span> neighboring tokens: in “red fox runs,” <code>red fox</code> is a bigram. <strong>BLEU</strong> emphasizes n-gram precision and is associated with translation. If a candidate says “a small red car” and a reference says “a red car is small,” the words overlap but only some neighboring pairs do; BLEU therefore penalizes changed word order even when the meaning is close. <strong>ROUGE</strong> emphasizes how much reference content appears in the candidate and is often used for summaries. If a five-word reference has three matching words in a short candidate, a unigram-recall view of ROUGE counts 3/5 before considering order or meaning. Both can miss semantic equivalence and can reward copying. Use them as proxies, not semantic truth.</p>
-<p>For code, a test suite can execute a completion and grade behavior. When the system may produce several candidates, pass@k asks whether at least one succeeds. Under an idealized independent-attempt model with one-attempt success probability <code>p</code>, the probability of at least one success by <code>k</code> attempts is:</p>
+<p>Section 5.1 covered classification metrics with fixed labels. However, open-ended text can be worded in many different ways. Exact matching will fail on acceptable paraphrases. Evaluators use n-gram metrics to approximate text quality automatically.</p>
+<p>An <strong>n-gram</strong> is a run of $ neighboring tokens. In “red fox runs,” ed fox is a bigram. N-gram metrics count how many of these chunks overlap between a candidate and a reference.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>BLEU:</strong></span> An evaluation metric that measures n-gram precision. It asks: how much of the candidate text appears in the reference?</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>ROUGE:</strong></span> An evaluation metric that measures n-gram recall. It asks: how much of the reference text appears in the candidate?</li>
+</ul>
+<p>BLEU is traditionally associated with translation, while ROUGE evaluates summaries. Both methods are fast, cheap, and deterministic.</p>
+<p>However, they suffer a critical limit: they are blind to meaning. If a reference says “large automobile” and a candidate says “big car,” n-gram metrics award zero overlap. Yet copying the same correct words in a scrambled order can yield high scores.</p>
+<p>Consider a reference: “a red car is small.” The candidate says: “a small red car.” They share unigrams, but larger n-grams fail to match. BLEU heavily penalizes this word order change, even though the meaning remains identical.</p>
+<p>Because they penalize paraphrasing and reward exact copying, treat BLEU and ROUGE only as rough baseline proxies. They do not represent semantic truth.</p>
+<p>For code, a test suite can execute a completion and grade behavior. When the system may produce several candidates, pass@k evaluates whether at least one attempt succeeds. Under an idealized independent-attempt model with one-attempt success probability <code>p</code>, the probability of at least one success by <code>k</code> attempts is:</p>
 <p><span id="eq-m1-c05-e04"><span class="math display">\[
 P(\mathrm{success\ by\ }k) = 1-(1-p)^k
 \tag{5.4}\]</span></span></p>
-<p>Here, <span class="math inline">\(p\)</span> is single-attempt success and <span class="math inline">\(k\)</span> is the number of independent attempts. The term <span class="math inline">\((1-p)^k\)</span> is the chance that every attempt fails; subtracting from one gives at least one success. Real samples are correlated. Estimate pass@k from observed sample outcomes and document the dependence assumption.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation - independent pass at five</strong></p>
+<p>Here, <span class="math inline">\(p\)</span> is single-attempt success and <span class="math inline">\(k\)</span> is the number of independent attempts. The term <span class="math inline">\((1-p)^k\)</span> is the chance that every attempt fails, so subtracting from one gives at least one success. Real samples are correlated. Estimate pass@k from observed sample outcomes and document the dependence assumption.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Example calculation: Independent pass at five</strong></p>
 <p>Suppose one generated program has a 0.30 probability of passing all hidden tests and five attempts are independent.</p>
 <ol type="1">
 <li>One attempt fails with probability 1 - 0.30 = 0.70.</li>
@@ -526,9 +534,9 @@ Figure&nbsp;5.4: Metric choice follows the output type and error structure; no p
 <section id="sec-m1-c05-s03" class="level2" data-number="5.3">
 <h2 data-number="5.3" class="anchored" data-anchor-id="sec-m1-c05-s03"><span class="header-section-number">5.3</span> Benchmark and judge-model interpretation</h2>
 <p>Task metrics score one evaluation set under one procedure. Public benchmarks package a dataset, metric, and protocol so model results can be compared, but their meaning changes as models and training corpora change. A useful benchmark reading separates measured capability, contamination risk, saturation, and product relevance.</p>
-<p>Benchmarks such as MMLU, ARC, HellaSwag, GSM8K, GPQA, HumanEval, MBPP, and SWE-bench target different tasks. MMLU uses subject-area multiple-choice questions; ARC uses grade-school science questions; HellaSwag tests likely sentence continuations; GSM8K tests worked arithmetic word problems; and GPQA uses difficult science questions. HumanEval and MBPP execute small programming tasks against tests, while SWE-bench evaluates repository issue resolution. A result belongs to the exact benchmark version, prompt protocol, sampling settings, tool access, and grading environment. It should not be generalized to unrelated product tasks.</p>
+<p>Benchmarks such as MMLU, ARC, HellaSwag, GSM8K, GPQA, HumanEval, MBPP, and SWE-bench target different tasks. MMLU uses subject-area multiple-choice questions, ARC uses grade-school science questions, HellaSwag tests likely sentence continuations, GSM8K tests worked arithmetic word problems, and GPQA uses difficult science questions. HumanEval and MBPP execute small programming tasks against tests, while SWE-bench evaluates repository issue resolution. A result belongs to the exact benchmark version, prompt protocol, sampling settings, tool access, and grading environment. It should not be generalized to unrelated product tasks.</p>
 <p><strong>Data contamination</strong> occurs when benchmark questions, answers, patches, or close variants enter model training or evaluation-time retrieval. A contaminated model can score well without demonstrating generalization. Dynamic benchmarks such as LiveBench and LiveCodeBench use newer or frequently refreshed items to reduce, not eliminate, this risk.</p>
-<p>Long-context tests also require interpretation. A needle-retrieval task measures whether one fact can be recovered from a long sequence; it does not establish that a model can reason over all relationships in that context. Latency, cost, safety, and robustness need separate protocols.</p>
+<p>Long-context tests also require interpretation. A needle-retrieval task measures whether one fact can be recovered from a long sequence. It does not establish that a model can reason over all relationships in that context. Latency, cost, safety, and robustness need separate protocols.</p>
 <div id="tbl-m1-c05-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m1-c05-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -574,8 +582,8 @@ Table&nbsp;5.1: A benchmark result is meaningful only with its protocol, exposur
 </div>
 </figure>
 </div>
-<p>A benchmark result is produced by a protocol: dataset version, prompt template, few-shot examples, decoding settings, tool access, scoring code, and model checkpoint all contribute to the number. Reproducing the score therefore requires more than naming the benchmark. Contamination and repeated tuning can further weaken its value as evidence about unseen product inputs.</p>
-<p>Public benchmarks remain useful for broad capability screening and regression detection. Product decisions need an additional transfer step using representative local cases, failure costs, and operating constraints. Agreement between a public result and a product evaluation strengthens the conclusion; disagreement identifies a distribution or protocol difference that requires inspection.</p>
+<p>A benchmark result is produced by a protocol: dataset version, prompt template, few-shot examples, decoding settings, tool access, scoring code, and model checkpoint all contribute to the number. Reproducing the score requires more than naming the benchmark. Contamination and repeated tuning can further weaken its value as evidence about unseen product inputs.</p>
+<p>Public benchmarks remain useful for broad capability screening and regression detection. Product decisions need an additional transfer step using representative local cases, failure costs, and operating constraints. Agreement between a public result and a product evaluation strengthens the conclusion, whereas disagreement identifies a distribution or protocol difference that requires inspection.</p>
 </section>
 <section id="sec-m1-c05-s04" class="level2" data-number="5.4">
 <h2 data-number="5.4" class="anchored" data-anchor-id="sec-m1-c05-s04"><span class="header-section-number">5.4</span> Judge-model calibration and robustness</h2>
@@ -593,11 +601,11 @@ Figure&nbsp;5.5: Judge models sit between fully verifiable checks and human eval
 </div>
 <p>Flexible judging becomes appropriate when cheaper objective checks cannot capture the behavior. Objective checks can remain in place for syntax, execution, citations, and final state.</p>
 <ul>
-<li><strong>Position bias:</strong> the judge may prefer the first or second answer; an evaluation protocol can swap or randomize order.</li>
-<li><strong>Verbosity bias:</strong> longer answers may appear more complete; the evaluation specification can state a target length and penalize irrelevant content explicitly.</li>
-<li><strong>Self-enhancement bias:</strong> a judge may prefer outputs from its own model family; a calibration study can compare another family or human labels.</li>
-<li><strong>Prompt injection:</strong> candidate text may instruct the judge to ignore the rubric; the evaluator can treat candidates as untrusted data and include attack cases.</li>
-<li><strong>Rubric drift:</strong> vague criteria produce inconsistent scores; a rubric can define pass/fail anchors and include calibration examples.</li>
+<li><strong>Position bias:</strong> The judge may prefer the first or second answer. An evaluation protocol can swap or randomize order.</li>
+<li><strong>Verbosity bias:</strong> Longer answers may appear more complete. The evaluation specification can state a target length and penalize irrelevant content explicitly.</li>
+<li><strong>Self-enhancement bias:</strong> A judge may prefer outputs from its own model family. A calibration study can compare another family or human labels.</li>
+<li><strong>Prompt injection:</strong> Candidate text may instruct the judge to ignore the rubric. The evaluator can treat candidates as untrusted data and include attack cases.</li>
+<li><strong>Rubric drift:</strong> Vague criteria produce inconsistent scores. A rubric can define pass/fail anchors and include calibration examples.</li>
 </ul>
 <p><strong>Code example 5.1 - pairwise judging randomizes answer order and restores the original identity afterward.</strong></p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
@@ -632,9 +640,9 @@ Figure&nbsp;5.5: Judge models sit between fully verifiable checks and human eval
 <p><span id="eq-m1-c05-e05"><span class="math display">\[
 A_o=\frac{1}{N}\sum_{i=1}^{N}\mathbb{1}(h_i=j_i)
 \tag{5.5}\]</span></span></p>
-<p>Here, <span class="math inline">\(N\)</span> is the audited case count, <span class="math inline">\(h_i\)</span> is the human label for case <span class="math inline">\(i\)</span>, <span class="math inline">\(j_i\)</span> is the judge label, and the indicator contributes one only when the labels match. The average reports the matching fraction. It does not adjust for agreement expected from class prevalence and therefore belongs beside a confusion matrix and per-class results.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation - human-judge agreement</strong></p>
+<p>Here, <span class="math inline">\(N\)</span> is the audited case count, <span class="math inline">\(h_i\)</span> is the human label for case <span class="math inline">\(i\)</span>, <span class="math inline">\(j_i\)</span> is the judge label, and the indicator contributes one only when the labels match. The average reports the matching fraction. It does not adjust for agreement expected from class prevalence, so it belongs beside a confusion matrix and per-class results.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Example calculation: Human-judge agreement</strong></p>
 <p>An audited sample contains 50 cases, and the human and model judge produce the same criterion label on 42.</p>
 <ol type="1">
 <li>The indicator contributes one for each of the 42 matching rows and zero for the remaining eight.</li>
@@ -645,7 +653,7 @@ A_o=\frac{1}{N}\sum_{i=1}^{N}\mathbb{1}(h_i=j_i)
 <p><strong>Interpretation:</strong> The eight disagreements require inspection. A judge that always chooses the majority class can obtain high agreement while failing the rare cases that matter most.</p>
 </div>
 <p><strong>Code example 5.2 - swapped presentations expose position-sensitive verdicts before agreement is reported.</strong></p>
-<p>This example reuses <code>judge_pair</code> from Code example 5.1, including its rubric renderer and model response format. Each call returns a dictionary with the selected candidate’s original identity, so the comparison remains meaningful when the display order changes.</p>
+<p>This example reuses <code>judge_pair</code> from Code example 5.1, including its rubric renderer and model response format. Each call returns a dictionary with the selected candidate’s original identity, so the comparison remains valid when the display order changes.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 5.2 - swapped presentations expose position-sensitive verdicts before agreement is reported.</p>
 </div>
@@ -669,9 +677,9 @@ A_o=\frac{1}{N}\sum_{i=1}^{N}\mathbb{1}(h_i=j_i)
 </section>
 <section id="sec-m1-c05-s05" class="level2" data-number="5.5">
 <h2 data-number="5.5" class="anchored" data-anchor-id="sec-m1-c05-s05"><span class="header-section-number">5.5</span> Automated scores and human review</h2>
-<p>A calibrated model judge extends coverage for open-ended outputs. Some judgments still require domain expertise, and some behaviors must be discovered before a fixed rubric can score them. Human review anchors quality while scalable pipelines generate, run, and summarize larger behavioral test families.</p>
-<p>Human evaluation remains the reference for nuanced usefulness, domain correctness, and policy interpretation, but it is expensive and subject to disagreement. Give raters the same written criteria, randomize presentation where possible, collect multiple ratings for ambiguous tasks, and record disagreement explicitly.</p>
-<p>Anthropic’s Bloom is a scalable behavioral-evaluation pipeline. It turns a seed behavior into diverse evaluation scenarios, runs them, and uses a judge or meta-judge to summarize behavior-level results. The value lies in expanding coverage systematically; the generated scenarios and judge still require validation.</p>
+<p>A calibrated model judge extends coverage for open-ended outputs. Some judgments still require domain expertise, and some behaviors must be discovered before a fixed rubric can score them. Human review anchors quality while automated evaluation pipelines generate, run, and summarize larger behavioral test families.</p>
+<p>Human evaluation remains the reference for subtle usefulness, domain correctness, and policy interpretation, but it is expensive and subject to disagreement. Give raters the same written criteria, randomize presentation where possible, collect multiple ratings for ambiguous tasks, and record disagreement explicitly.</p>
+<p>Anthropic’s Bloom is an automated behavioral-evaluation pipeline. It converts a seed behavior into diverse evaluation scenarios, executes the suite, and aggregates behavior-level summaries using a judge or meta-judge. The value lies in expanding coverage systematically, though the generated scenarios and judge still require validation.</p>
 <div id="fig-m1-c05-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Bloom expands a seed behavior into scenarios, rollouts, and judged behavior-level metrics. Source: Week 2, PDF p. 139.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m1-c05-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -682,20 +690,20 @@ Figure&nbsp;5.6: Bloom expands a seed behavior into scenarios, rollouts, and jud
 </figcaption>
 </figure>
 </div>
-<p>A scalable pipeline can increase the number of evaluated behaviors, but each stage adds assumptions. Preserve the seed, scenario generator, model versions, transcripts, and judge configuration.</p>
+<p>An automated pipeline can increase the number of evaluated behaviors, but each stage adds assumptions. Preserve the seed, scenario generator, model versions, transcripts, and judge configuration.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Human calibration</strong></p>
 <p>Human calibration uses a stratified subset of outputs and the criteria a model judge will apply at scale. It is useful when the task is open-ended, high-impact, domain-specific, or vulnerable to judge bias.</p>
 <p>Independent raters score the subset, adjudicators inspect disagreements, and the team compares per-criterion judge agreement before revising rubric anchors. Calibration turns a model judge from an untested opinion into a measured proxy with known disagreement patterns.</p>
-<p>A limit to keep in mind: A small or homogeneous rater group can encode shared bias; low agreement may indicate the task itself is underspecified.</p>
+<p>A limit to keep in mind: A small or homogeneous rater group can encode shared bias. In addition, low agreement may indicate the task itself is underspecified.</p>
 </div>
-<p>Human evaluation is strongest when domain judgment, user value, or policy interpretation cannot be reduced to a deterministic rule. The protocol defines rater qualification, rubric anchors, randomization, blinding, sample allocation, and disagreement handling. Inter-rater agreement is diagnostic. Low agreement can reveal an unclear rubric, a genuinely ambiguous task, or inconsistent model behavior.</p>
-<p>Scalable behavioral evaluation can expand coverage by generating scenarios, running many trials, and applying calibrated judge models. Human review remains the reference for newly discovered behaviors and high-impact slices. A hybrid design uses automated checks for objective properties, judge models for repeatable subjective screening, and human adjudication for calibration and contested cases.</p>
+<p>Human evaluation is strongest when domain judgment, user value, or policy interpretation cannot be reduced to a deterministic rule. The protocol defines rater qualification, rubric anchors, randomization, blinding, sample allocation, and disagreement handling. Inter-rater agreement is diagnostic. Low agreement can reveal vague rubric criteria, genuinely ambiguous tasks, or model output instability.</p>
+<p>Automated behavioral evaluation expands test coverage by generating scenarios and executing trials across calibrated judge models. Human review remains the reference for newly discovered behaviors and high-impact slices. A hybrid design uses automated checks for objective properties, judge models for repeatable subjective screening, and human adjudication for calibration and contested cases.</p>
 </section>
 <section id="sec-m1-c05-s06" class="level2" data-number="5.6">
 <h2 data-number="5.6" class="anchored" data-anchor-id="sec-m1-c05-s06"><span class="header-section-number">5.6</span> Uncertainty and failure slices in diagnosis</h2>
-<p>Metrics and judge models produce sample scores on a finite evaluation set. A difference such as 70 percent versus 60 percent may come from sampled cases or stochastic trial variation. Confidence intervals, repeated runs, and slice-level error analysis show whether the observed delta is stable and useful.</p>
-<p>Chapter 4 introduced bootstrap intervals as part of experiment design. Here the interval is interpreted with the metric’s own assumptions: a narrow interval around a weak proxy still does not establish user value, and an aggregate interval can conceal a critical slice regression.</p>
+<p>Metrics and judge models produce sample scores on a fixed evaluation set. A difference such as 70 percent versus 60 percent may come from sampled cases or random variation between runs. Confidence intervals, repeated runs, and slice-level error analysis show whether the observed delta is stable and useful.</p>
+<p>Chapter 4 introduced bootstrap intervals for experiment design. Here the interval reflects the metric’s own assumptions. A narrow interval around a weak proxy cannot establish user value, and an aggregate interval can conceal critical slice regressions.</p>
 <div id="fig-m1-c05-f07" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Bootstrap resampling turns one observed metric into an empirical uncertainty interval. Source: Week 2, PDF p. 149.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m1-c05-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -707,7 +715,7 @@ Figure&nbsp;5.7: Bootstrap resampling turns one observed metric into an empirica
 </figure>
 </div>
 <p>Publish the interval with sample size, protocol, model version, and slice results. A narrow interval around a biased proxy is still misleading.</p>
-<p>Error analysis groups failures by an actionable cause: missing evidence, misunderstood instruction, wrong category boundary, output truncation, judge disagreement, policy conflict, or tool failure. Each bucket should point to the owning system component and a proposed next experiment.</p>
+<p>Error analysis groups failures by cause, such as missing evidence, prompt misunderstanding, incorrect category boundaries, output truncation, judge disagreement, policy conflicts, or tool errors. Each bucket should point to the owning system component and a proposed next experiment.</p>
 <div id="tbl-m1-c05-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m1-c05-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -772,7 +780,7 @@ Figure&nbsp;5.8: The end-to-end EDD loop adds uncertainty, failure inspection, a
 </section>
 <section id="sec-m1-c05-s07" class="level2" data-number="5.7">
 <h2 data-number="5.7" class="anchored" data-anchor-id="sec-m1-c05-s07"><span class="header-section-number">5.7</span> A product-description evaluation</h2>
-<p>EDD has supplied the task specification, scoring methods, calibration, uncertainty, and failure analysis. A product-description evaluation shows how those pieces combine when quality has no single reference answer. The implementation trace follows rubric definition, generation, cost, human labels, improvement, judge calibration, and full comparison.</p>
+<p>EDD has supplied the task specification, scoring methods, calibration, uncertainty, and failure analysis. A product-description evaluation shows how those pieces combine when quality has no unique reference answer. The implementation trace follows rubric definition, generation, cost, human labels, improvement, judge calibration, and full comparison.</p>
 <p>The example begins with criterion-level descriptions and a cumulative pass bar. Two named generation models then produce descriptions for every product while the application records token use and latency. A sampled subset receives cost calculations and manual criterion labels. One prompt or model hypothesis changes at a time, after which a structured judge is calibrated and its criterion-level decisions are compared with human labels.</p>
 <p>A reproducible evaluation preserves four concrete records: the rubric and pass rule, the executable prompts and model calls, row-level manual and automated scores, and the experiment log. A prose conclusion without the configuration and per-example evidence cannot show whether an apparent improvement came from the model, prompt, evaluator, or changed data.</p>
 <p><strong>Code example 5.3 - a row-level evaluation record shows where each generation and judgment came from.</strong></p>
