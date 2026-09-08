@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -445,6 +445,7 @@ window.Quarto = {
   <li><a href="#sec-m2-c20-s04" id="toc-sec-m2-c20-s04" class="nav-link" data-scroll-target="#sec-m2-c20-s04"><span class="header-section-number">20.4</span> Adapting Model Weights with Low-Rank Matrices (LoRA)</a></li>
   <li><a href="#sec-m2-c20-s05" id="toc-sec-m2-c20-s05" class="nav-link" data-scroll-target="#sec-m2-c20-s05"><span class="header-section-number">20.5</span> Compressing Base Weights with 4-Bit NormalFloat via QLoRA</a></li>
   <li><a href="#sec-m2-c20-s06" id="toc-sec-m2-c20-s06" class="nav-link" data-scroll-target="#sec-m2-c20-s06"><span class="header-section-number">20.6</span> LoRA and QLoRA trace</a></li>
+  <li><a href="#sec-m2-c20-check" id="toc-sec-m2-c20-check" class="nav-link" data-scroll-target="#sec-m2-c20-check"><span class="header-section-number">20.7</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -470,6 +471,7 @@ window.Quarto = {
 </header>
 
 
+<p>Choose between input augmentation and parameter adaptation and inspect adapter costs.</p>
 <p>A pretrained model has broad language behavior but may not follow a particular task format or preference. Adaptation either supplies useful context at inference time or changes a limited set of trainable parameters.</p>
 <p>Adaptation changes a pretrained model for a narrower task or behavior. Retrieval changes the input context; LoRA and QLoRA train a compact parameter update; preference methods rank outputs against human choices.</p>
 <p>In code, <code>transformers.Trainer</code> runs supervised updates; <code>peft.LoraConfig</code> and <code>get_peft_model</code> attach adapters; <code>bitsandbytes</code> supplies low-bit base-weight loading for QLoRA.</p>
@@ -571,18 +573,13 @@ P_{\theta}(y\mid\mathrm{prompt},\mathrm{retrieved\,context})
 <p>If the winner’s reference-relative log probability is <span class="math inline">\(1.5\)</span>, the loser’s is <span class="math inline">\(0.5\)</span>, and <span class="math inline">\(\beta=0.5\)</span>, then the sigmoid input is <span class="math inline">\(0.5(1.5-0.5)=0.5\)</span>.</p>
 </div>
 <p>Preference data changes which outputs are rewarded. Low-rank adaptation changes which small set of parameters can respond to that signal.</p>
+<p>Parameter-efficient adaptation can also insert a small trainable bottleneck into a frozen layer, train only selected existing layers, or learn continuous prompt vectors prepended to the input embeddings. In the last case, the optimized object is a set of vectors rather than ordinary prompt words. These choices share the need to identify exactly which tensors receive gradients. LoRA below uses two matrix factors to constrain each selected weight update.</p>
 </section>
 <section id="sec-m2-c20-s04" class="level2" data-number="20.4">
 <h2 data-number="20.4" class="anchored" data-anchor-id="sec-m2-c20-s04"><span class="header-section-number">20.4</span> Adapting Model Weights with Low-Rank Matrices (LoRA)</h2>
 <p>Low-Rank Adaptation (LoRA) adapts a model by learning low-rank update matrices while freezing the original weights. Quantized Low-Rank Adaptation (QLoRA) combines low-rank adaptation with quantized base weights to reduce memory requirements.</p>
-<ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>LoRA:</strong></span> Low-rank adaptation, a method that freezes the base weight matrix and trains two smaller adapter matrices.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Rank:</strong></span> The inner dimension of the low-rank update.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>PEFT:</strong></span> Parameter-efficient fine-tuning, a family of methods that train only a small subset of added or selected parameters.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>QLoRA:</strong></span> Fine-tuning with a quantized base model and trainable low-rank adapters.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Frozen base weight:</strong></span> The pretrained matrix W, stored for the forward pass but not updated by the optimizer.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Adapter width:</strong></span> The inner dimension r of the two LoRA matrices; a small r limits the update’s rank and parameter count.</li>
-</ul>
+<p><strong>Parameter-efficient fine-tuning (PEFT)</strong> trains a small subset of added or selected parameters. <strong>Low-rank adaptation (LoRA)</strong> freezes a pretrained weight matrix and trains two smaller matrices that form an additive update. Their inner dimension, often called the <strong>adapter width</strong>, limits the update’s rank and parameter count.</p>
+<p>The <strong>frozen base weight</strong> still participates in forward computation and in gradients needed by earlier trainable components, but the optimizer does not update it. <strong>QLoRA</strong> combines low-rank adapters with quantized base-weight storage. The adapter parameters remain trainable floating-point tensors.</p>
 <p>Low-rank representation compression approximates a data matrix. Low-Rank Adaptation instead constrains the trainable change to a frozen weight matrix: the base weight remains fixed while two thin factors represent the update.</p>
 <p>The key math idea is that the update to a large weight matrix may live in a lower-dimensional subspace. Instead of training every weight, LoRA trains the factors of that update.</p>
 <p>QLoRA saves memory by storing the frozen base in low precision while preserving trainable adapter updates. The trade-off is added implementation complexity and possible accuracy sensitivity to quantization choices.</p>
@@ -806,11 +803,22 @@ y=\operatorname{dequant}(W_{4\mathrm{bit}})x+\frac{\alpha}{r}BAx
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
 <ul>
 <li>For Hugging Face causal language-model classes, <code>labels</code> may equal <code>input_ids</code> because the model shifts internally. For manual zero-indexed slicing, <code>logits[:, :-1, :]</code> predicts <code>labels[:, 1:]</code>; ignored padding positions do not enter the reduction.</li>
-<li>The <code>requires_grad</code> attribute shows whether the optimizer can update a tensor: the base weights are false and adapter weights are true.</li>
+<li><code>requires_grad=True</code> enables gradient tracking for adapter parameters. The optimizer must also include those parameters in its groups. Frozen base weights have <code>requires_grad=False</code>.</li>
 <li>LoRA rank controls both adapter capacity and trainable parameter count.</li>
 </ul>
 <p>Fine-tuning and PEFT decide whether task learning changes full weights, adapter weights, or retrieved context.</p>
 <p>Autoregressive inference reuses transformer state while producing one token at a time.</p>
+</section>
+<section id="sec-m2-c20-check" class="level2" data-number="20.7">
+<h2 data-number="20.7" class="anchored" data-anchor-id="sec-m2-c20-check"><span class="header-section-number">20.7</span> Chapter checkpoint</h2>
+<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
+<ol type="1">
+<li>The application needs recently changed factual material. Which difference between retrieval and adaptation matters first?</li>
+<li>Increasing LoRA rank improves training loss but worsens the held-out level-adaptive answers. What should the comparison report?</li>
+</ol>
+<p><strong>Feedback</strong></p>
+<p><strong>1.</strong> Retrieval changes the information supplied at inference and can update a reference collection directly. Adaptation changes parameters and needs training plus evaluation. Neither guarantees a correct answer without checking the returned result.</p>
+<p><strong>2.</strong> Report the added trainable parameters and memory alongside held-out regressions. More adapter capacity can fit training details without improving the intended behavior.</p>
 
 
 </section>

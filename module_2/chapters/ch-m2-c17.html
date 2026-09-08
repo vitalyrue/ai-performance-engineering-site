@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -445,8 +445,9 @@ window.Quarto = {
   <li><a href="#sec-m2-c17-s04" id="toc-sec-m2-c17-s04" class="nav-link" data-scroll-target="#sec-m2-c17-s04"><span class="header-section-number">17.4</span> Transforming Channel Features with Gated FFNs</a></li>
   <li><a href="#sec-m2-c17-s05" id="toc-sec-m2-c17-s05" class="nav-link" data-scroll-target="#sec-m2-c17-s05"><span class="header-section-number">17.5</span> Adding Position Information to Attention</a></li>
   <li><a href="#sec-m2-c17-s06" id="toc-sec-m2-c17-s06" class="nav-link" data-scroll-target="#sec-m2-c17-s06"><span class="header-section-number">17.6</span> Preserving Relative Token Order with Rotary Position Embeddings (RoPE)</a></li>
-  <li><a href="#sec-m2-c17-s07" id="toc-sec-m2-c17-s07" class="nav-link" data-scroll-target="#sec-m2-c17-s07"><span class="header-section-number">17.7</span> Scaling Model Capacity without Extra Compute using Mixture-of-Experts (MoE)</a></li>
+  <li><a href="#sec-m2-c17-s07" id="toc-sec-m2-c17-s07" class="nav-link" data-scroll-target="#sec-m2-c17-s07"><span class="header-section-number">17.7</span> Activating a Subset of Model Capacity with Mixture-of-Experts (MoE)</a></li>
   <li><a href="#sec-m2-c17-s08" id="toc-sec-m2-c17-s08" class="nav-link" data-scroll-target="#sec-m2-c17-s08"><span class="header-section-number">17.8</span> Transformer block trace</a></li>
+  <li><a href="#sec-m2-c17-check" id="toc-sec-m2-c17-check" class="nav-link" data-scroll-target="#sec-m2-c17-check"><span class="header-section-number">17.9</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -472,6 +473,7 @@ window.Quarto = {
 </header>
 
 
+<p>Assemble transformer blocks while preserving axes and distinguishing normalization from routing.</p>
 <p>Attention mixes information across token positions, but a useful deep model needs more than the attention calculation alone. A transformer block adds position information, residual paths, normalization, and per-token feature transformations.</p>
 <p>A transformer block packages attention with residual connections, normalization, position information, and a feed-forward transformation. Repeating the block lets each token representation gather and refine context across many layers.</p>
 <p>In code, <code>torch.nn.MultiheadAttention</code>, <code>LayerNorm</code>, linear layers, and dropout correspond to transformer-block components; <code>transformers</code> supplies pretrained implementations of the same architecture.</p>
@@ -623,13 +625,14 @@ Q\,[B,T,D]\to Q_{\mathrm{heads}}\left[B,H,T,\frac{D}{H}\right]
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Post-norm transformer:</strong></span> A transformer block that applies normalization after the residual addition.</li>
 </ul>
 <p>Residual paths make it easier for a deep model to learn incremental transformations rather than recreating the whole representation at every layer.</p>
-<p>LayerNorm differs from batch normalization because it does not depend on statistics across examples in the batch. That makes it suitable for variable-length sequence modeling and autoregressive inference.</p>
+<p>The <a href="ch-m2-c12.html#sec-m2-c12-s02">initialization calculation in Chapter 12</a> controls the starting scale. Normalization controls the scale of representations during the forward calculation. For a token vector, LayerNorm computes statistics over its hidden coordinates. BatchNorm instead computes each channel’s statistics across a batch and, for sequence or image input, the relevant spatial or temporal positions. Changing other examples can therefore change a BatchNorm training output while leaving that token’s LayerNorm output unchanged.</p>
+<p>For two examples with one channel, values 2 and 4 give batch mean 3. Replacing the second example by 10 changes the mean to 6, even though the first example is unchanged. A LayerNorm calculation for the first token uses only that token’s selected feature axes. BatchNorm commonly uses running statistics during evaluation, while LayerNorm uses input statistics in both modes. Padding and very small batches need deliberate handling when batch statistics are used. Neither method is a universal substitute for the other. See the <a href="https://docs.pytorch.org/docs/2.14/generated/torch.nn.LayerNorm.html">LayerNorm</a> and <a href="https://docs.pytorch.org/docs/2.14/generated/torch.nn.BatchNorm1d.html">BatchNorm</a> definitions.</p>
 <p>The feed-forward network is usually the largest per-token computation inside a transformer block. It expands the hidden width, applies a nonlinearity such as GELU, and projects back to the model width.</p>
 <p>Pre-norm and post-norm differ in where LayerNorm sits relative to the residual addition. Modern decoder LLMs commonly use pre-norm because the residual path gives gradients a cleaner route through deep stacks.</p>
 <p>A residual connection is an addition, not a separate memory store. If a sublayer returns F(x), the block returns x+F(x). During backpropagation, the derivative of the direct x path contributes an identity term, so a gradient can travel through the stack even when the learned sublayer derivative is small.</p>
 <p>LayerNorm then rescales each token vector using statistics computed across its hidden coordinates. For <span class="math inline">\(x=(2,4)\)</span>, the mean is <span class="math inline">\(\mu=3\)</span> and the population variance is <span class="math inline">\(\sigma^2=((2-3)^2+(4-3)^2)/2=1\)</span> before the learned scale and bias are applied. The operation normalizes one token at a time; it does not mix statistics across the batch.</p>
 <p>Pre-RMSNorm normalizes the input before the attention or feed-forward sub-layer, adding the un-normalized sub-layer output directly to the residual stream: <span class="math inline">\(x_{l+1}\)</span> = <span class="math inline">\(x_{l}\)</span> + SubLayer(RMSNorm(<span class="math inline">\(x_{l}\)</span>)).</p>
-<p>This ensures an uninterrupted linear highway for gradient propagation, allowing transformers with hundreds of layers to train stably without exploding or vanishing gradients.</p>
+<p>The identity contribution gives gradients an additional route through the stack. It does not guarantee stable training at every depth or learning rate. Initialization, normalization, and update scale still need to be checked together.</p>
 <p>LayerNorm normalizes hidden features within a token representation.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>LayerNorm:</strong></span></p>
 <p><span id="eq-m2-c17-e06"><span class="math display">\[
@@ -773,7 +776,7 @@ x\leftarrow x+\operatorname{Sublayer}(\operatorname{LayerNorm}(x))
 <p>A complete transformer combines positional information, attention, residual paths, normalization, and a feed-forward transformation. Architecture families choose how that block is connected.</p>
 </section>
 <section id="sec-m2-c17-s07" class="level2" data-number="17.7">
-<h2 data-number="17.7" class="anchored" data-anchor-id="sec-m2-c17-s07"><span class="header-section-number">17.7</span> Scaling Model Capacity without Extra Compute using Mixture-of-Experts (MoE)</h2>
+<h2 data-number="17.7" class="anchored" data-anchor-id="sec-m2-c17-s07"><span class="header-section-number">17.7</span> Activating a Subset of Model Capacity with Mixture-of-Experts (MoE)</h2>
 <p>A mixture-of-experts layer uses a learned router to send each token vector through only a small subset of feed-forward expert networks.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Expert:</strong></span> A subnetwork, often a feed-forward block, selected for some tokens.</li>
@@ -875,6 +878,19 @@ x_2=x_1+\operatorname{FFN}(\operatorname{LayerNorm}(x_1))
 </ul>
 <p>A transformer block preserves sequence dimensions while alternating token mixing and per-token transformations.</p>
 <p>Visibility masks and objectives determine encoder-only, decoder-only, and encoder-decoder families.</p>
+</section>
+<section id="sec-m2-c17-check" class="level2" data-number="17.9">
+<h2 data-number="17.9" class="anchored" data-anchor-id="sec-m2-c17-check"><span class="header-section-number">17.9</span> Chapter checkpoint</h2>
+<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
+<ol type="1">
+<li>A tensor is reshaped into heads but the head and sequence axes are not permuted. Why can a plausible element count hide the error?</li>
+<li>Changing another example changes a token output during normalization. Which normalization mechanism could explain that?</li>
+<li>An MoE layer stores many experts but routes nearly every token to one. What has failed?</li>
+</ol>
+<p><strong>Feedback</strong></p>
+<p><strong>1.</strong> Reshape preserves element count, not axis meaning. Attention must compare sequence positions separately within each head, so both dimensions and axis order need verification.</p>
+<p><strong>2.</strong> BatchNorm training statistics can include other examples. LayerNorm over that token’s hidden coordinates does not. Inspect the selected axes and training/evaluation mode.</p>
+<p><strong>3.</strong> Stored capacity is not being used evenly and one path can become overloaded. Inspect router assignments and the balancing objective rather than counting total parameters alone.</p>
 
 
 </section>

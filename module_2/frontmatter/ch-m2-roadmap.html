@@ -47,7 +47,7 @@ ul.task-list li input[type="checkbox"] {
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -76,6 +76,35 @@ ul.task-list li input[type="checkbox"] {
   }
 }</script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 <link rel="stylesheet" href="../styles.css">
 </head>
@@ -337,7 +366,7 @@ ul.task-list li input[type="checkbox"] {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -370,8 +399,16 @@ ul.task-list li input[type="checkbox"] {
 </nav>
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
-        
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m2-roadmap-start" id="toc-sec-m2-roadmap-start" class="nav-link active" data-scroll-target="#sec-m2-roadmap-start">Starting knowledge and tensor notation</a></li>
+  <li><a href="#sec-m2-roadmap-paths" id="toc-sec-m2-roadmap-paths" class="nav-link" data-scroll-target="#sec-m2-roadmap-paths">Reading paths and scope</a></li>
+  <li><a href="#sec-m2-roadmap-references" id="toc-sec-m2-roadmap-references" class="nav-link" data-scroll-target="#sec-m2-roadmap-references">References and execution guidance</a></li>
+  </ul>
+</nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
@@ -395,15 +432,16 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
+<p>Establish scope, starting knowledge, reading paths, and reference access.</p>
 <p>A model begins with data and a task, turns inputs into numerical representations, produces outputs, and compares those outputs with targets. Training uses the resulting loss to update parameters; inference uses fixed parameters to make a prediction or generate text.</p>
-<p>The parts follow the computation in the order a reader needs to understand it.</p>
+<p>The parts establish shared foundations, then follow several related paths. The maps summarize those relationships rather than prescribing one execution pipeline.</p>
 <p>Part I, From Text to Mathematical Objects (Chapters 1-4): defines data, targets, tokens, vocabulary IDs, and feature matrices.</p>
 <p>Part II, From Scores to Loss (Chapters 5-9): turns features into scores and probabilities, chooses outputs, measures loss, and evaluates held-out data.</p>
 <p>Part III, From Error to Learning (Chapters 10-14): traces gradients, changes parameters, and learns nonlinear and embedding representations.</p>
 <p>Part IV, Modeling Sequences (Chapters 15-19): models order and context with n-grams, recurrent networks, attention, and transformers.</p>
 <p>Part V, Adapting and Running LLMs (Chapters 20-21): adapts a pretrained model and serves generated tokens efficiently.</p>
 <p>Part VI, Implementation and Extensions (Chapters 22-24): extends the same ideas to other modalities, PyTorch, and course labs.</p>
-<p>The guide follows one computation from represented inputs through prediction, learning, sequence context, adaptation, and implementation.</p>
+<p>Two representation routes share the same task definition: sparse document features feed a classifier, while token IDs select embeddings for a sequence model. Neither route requires passing through the other.</p>
 <div id="fig-m2-roadmap-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Six-panel book map showing inputs, operations, and results for the guide's six parts, with a training feedback arrow from loss to parameter learning.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-roadmap-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -414,8 +452,8 @@ Figure&nbsp;1: The six parts connect model inputs to tested implementations.
 </figcaption>
 </figure>
 </div>
-<p>The teal arrows show the main dependency path. The orange return path shows that measured loss and evaluation results guide later parameter updates.</p>
-<p>Part I fixes targets, token IDs, and feature rows. Part II scores those rows and measures prediction error; the later Parts propagate that error into learned representations, sequence models, adaptation, and executable tensor operations.</p>
+<p>Read the arrows as learning dependencies. After scores become probabilities, inference chooses an output while training compares outputs with targets. Evaluation informs later model choices without updating parameters on the test examples.</p>
+<p>Part I fixes the inputs and targets. Parts II and III explain predictions and learning. Parts IV and V apply these foundations to sequence context, adaptation, and serving. Part VI connects them through tensor storage and course exercises.</p>
 <div id="fig-m2-roadmap-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Learning path across six parts, showing token representations, probabilities and loss, gradients, attention, model adaptation and serving, and verified implementations.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-roadmap-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -426,7 +464,7 @@ Figure&nbsp;2: Representation, prediction, learning, context, serving, and imple
 </figcaption>
 </figure>
 </div>
-<p>The path begins with model inputs and ends with verified code and multimodal extensions. Training feedback links measured loss back to the parameter-learning stage.</p>
+<p>The final exercises connect model choice, data preparation, held-out evaluation, and generated answers. Small code checks isolate individual calculations. The execution guidance below distinguishes these checks from a complete trained-model experiment.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Where large language models fit</strong></span></p>
 <p>The course moves from the broad field of artificial intelligence to language models trained on token sequences.</p>
 <ul>
@@ -549,8 +587,25 @@ Table&nbsp;1: Model families differ in the context they can use and the outputs 
 </figure>
 </div>
 <p>The same learning task can use different families; the family determines how input information is combined before the task objective is applied.</p>
+<section id="sec-m2-roadmap-start" class="level2">
+<h2 class="anchored" data-anchor-id="sec-m2-roadmap-start">Starting knowledge and tensor notation</h2>
+<p>The guide assumes elementary algebra, functions, sums, and a basic understanding of probability. Python examples use lists, indexing, functions, and imports. Derivatives and PyTorch autograd are taught within the book. Readers new to matrix multiplication can follow the dimension calculation in <a href="../chapters/ch-m2-c05.html#sec-m2-c05-s03">§5.3</a> before continuing to embeddings and attention.</p>
+<p>A tensor is an array with explicit axes, a numerical type, and a storage device. An array with dimensions <span class="math inline">\([B,T,D]\)</span> contains <span class="math inline">\(B\)</span> examples, <span class="math inline">\(T\)</span> positions per example, and <span class="math inline">\(D\)</span> coordinates per position. For <span class="math inline">\([2,3,4]\)</span>, there are <span class="math inline">\(2\cdot3\cdot4=24\)</span> values. Integer token IDs select rows, floating-point arrays hold learned vectors, and Boolean arrays can mark permitted positions. The device identifies where the array is stored and computed, such as CPU memory or a CUDA GPU.</p>
+<p>Matrix multiplication contracts a shared axis. If <span class="math inline">\(X\)</span> has dimensions <span class="math inline">\([B,D_{in}]\)</span> and the mathematical matrix <span class="math inline">\(W\)</span> has dimensions <span class="math inline">\([D_{in},D_{out}]\)</span>, then <span class="math inline">\(XW\)</span> has dimensions <span class="math inline">\([B,D_{out}]\)</span>. PyTorch stores <code>nn.Linear.weight</code> as <span class="math inline">\(A\)</span> with dimensions <span class="math inline">\([D_{out},D_{in}]\)</span>, so the same layer computes <span class="math inline">\(XA^{\mathsf T}+b\)</span>. Keeping different symbols for mathematical and stored orientations prevents an accidental extra transpose. <a href="../chapters/ch-m2-c23.html">Chapter 23</a> develops storage, strides, copies, and device costs once these operations are familiar.</p>
+</section>
+<section id="sec-m2-roadmap-paths" class="level2">
+<h2 class="anchored" data-anchor-id="sec-m2-roadmap-paths">Reading paths and scope</h2>
+<p>Read Chapters 1–6 for targets, representations, and probability outputs. From there, <a href="../chapters/ch-m2-c07.html">Chapter 7</a> follows inference with fixed parameters. <a href="../chapters/ch-m2-c08.html">Chapters 8–11</a> follow losses, evaluation, gradient updates, and their derivation. Chapter 10 treats gradients as supplied quantities, while Chapter 11 derives them. Readers who prefer derivation before optimizer comparisons can read Chapter 11 before Chapter 10.</p>
+<p>For text classification, continue through <a href="../chapters/ch-m2-c12.html">nonlinear classifiers</a>, <a href="../chapters/ch-m2-c13.html">embedding lookup</a>, and <a href="../chapters/ch-m2-c14.html">Word2Vec training</a>, then use <a href="../chapters/ch-m2-c24.html#sec-m2-c24-s02">the classification lab</a>. For sequence modeling, compare <a href="../chapters/ch-m2-c15.html#sec-m2-c15-s02">n-gram counts</a> and <a href="../chapters/ch-m2-c24.html#sec-m2-c24-s06">their lab</a> before recurrent state, attention, and transformers. For adaptation and serving, complete Chapters 17–21 before the <a href="../chapters/ch-m2-c24.html#sec-m2-c24-s04">architecture comparison</a>. The <a href="../chapters/ch-m2-c24.html#sec-m2-c24-s07">multimodal case</a> combines retrieval with a separate captioning or question-answering component.</p>
+<p>This is a mathematics companion to the performance engineering course. It explains the objects and calculations needed to inspect training and inference: tensor dimensions, probabilities, gradients, attention, adapters, and cache storage. Kernel programming, Tensor Core scheduling, memory coalescing, production benchmarking, and complete distributed training configurations belong to the performance guide. They are not prerequisites for the calculations here. Mixed precision and serving engines appear only where they change a mathematical assumption, memory estimate, or experimental choice.</p>
+</section>
+<section id="sec-m2-roadmap-references" class="level2">
+<h2 class="anchored" data-anchor-id="sec-m2-roadmap-references">References and execution guidance</h2>
+<p>Use the <a href="ch-m2-notation.html">notation reference</a> to check symbols, dimensions, and mask conventions. The <a href="ch-m2-library-map.html">library map</a> connects each operation to its first introduction and practical exercise. The <a href="../appendices/ch-m2-dictionary.html">dictionary</a> expands abbreviations and returns to the section that explains them.</p>
+<p>Each code example states its scope. A runnable calculation checks the listed inputs and outputs. An abbreviated fragment requires the surrounding model or data objects. A course experiment additionally needs its dataset split, checkpoint, training configuration, and held-out results. Passing a tensor assertion establishes neither model quality nor a speed improvement. The <a href="../chapters/ch-m2-c24.html">lab execution guide</a> explains the environment and evidence to retain.</p>
 
 
+</section>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">

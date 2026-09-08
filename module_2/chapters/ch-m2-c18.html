@@ -47,7 +47,7 @@ ul.task-list li input[type="checkbox"] {
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -366,7 +366,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -408,7 +408,8 @@ window.Quarto = {
   <li><a href="#sec-m2-c18-s02" id="toc-sec-m2-c18-s02" class="nav-link" data-scroll-target="#sec-m2-c18-s02"><span class="header-section-number">18.2</span> Masked Bidirectional Pretraining vs Causal Next-Token Pretraining</a></li>
   <li><a href="#sec-m2-c18-s03" id="toc-sec-m2-c18-s03" class="nav-link" data-scroll-target="#sec-m2-c18-s03"><span class="header-section-number">18.3</span> Aligning Pretraining Objectives with Downstream Inference Requirements</a></li>
   <li><a href="#sec-m2-c18-s04" id="toc-sec-m2-c18-s04" class="nav-link" data-scroll-target="#sec-m2-c18-s04"><span class="header-section-number">18.4</span> Compressing Large Models into Small Language Models (SLMs) via Distillation</a></li>
-  <li><a href="#sec-m2-c18-s05" id="toc-sec-m2-c18-s05" class="nav-link" data-scroll-target="#sec-m2-c18-s05"><span class="header-section-number">18.5</span> Visualizing Encoder and Decoder Attention Visibility Masks</a></li>
+  <li><a href="#sec-m2-c18-s05" id="toc-sec-m2-c18-s05" class="nav-link" data-scroll-target="#sec-m2-c18-s05"><span class="header-section-number">18.5</span> Comparing Attention Visibility and Optional Diffusion Generation</a></li>
+  <li><a href="#sec-m2-c18-check" id="toc-sec-m2-c18-check" class="nav-link" data-scroll-target="#sec-m2-c18-check"><span class="header-section-number">18.6</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -434,8 +435,8 @@ window.Quarto = {
 </header>
 
 
+<p>Connect architecture visibility with objectives and distinguish compression choices.</p>
 <p>Transformer models differ mainly in which positions may exchange information and what they are trained to predict. Those choices determine whether a model is built for representation, continuation, or sequence-to-sequence work.</p>
-<p>Transformer architectures differ in which positions can interact and which prediction task supplies the loss. Encoder-only, decoder-only, and encoder-decoder models therefore serve different representation and generation roles.</p>
 <p>In code, <code>transformers</code> model classes expose encoder-only, causal-decoder, and encoder-decoder masks and heads; their configuration selects the architecture and training interface.</p>
 <div id="fig-m2-c18-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 18 opener for Transformer families and training objectives, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -457,7 +458,6 @@ Figure&nbsp;18.1: Encoder, decoder, and encoder-decoder visibility patterns matc
 </ul>
 <p>The family distinction is a visibility rule. Encoder-only models can see both directions in the input. Decoder-only models cannot see future tokens. Encoder-decoder models add cross-attention from target positions to encoded source states.</p>
 <p>The family name describes information flow, not a unique task. An encoder-only model creates bidirectional representations that can feed a classifier or token-labeling head. A decoder-only model creates causal representations for next-token generation. An encoder-decoder model builds source representations once and lets target queries use cross-attention while generating the output sequence.</p>
-<p>Encoder-only, decoder-only, and encoder-decoder transformers share attention blocks but expose context differently. An encoder can use both left and right context for classification or masked-token prediction. A decoder uses a causal mask for next-token generation. An encoder-decoder model represents a source sequence and generates a separate target sequence through cross-attention.</p>
 <p>The architecture choice does not by itself determine the application. A decoder can answer questions, summarize, or write code because each task is expressed as conditional next-token prediction. An encoder can classify sentiment, assign token labels, or retrieve passages because its output is a contextual representation rather than an autoregressive continuation.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: How three transformer families connect input to target</strong></p>
@@ -469,7 +469,7 @@ Figure&nbsp;18.1: Encoder, decoder, and encoder-decoder visibility patterns matc
 <p>Target: the review label.</p>
 <p><strong>Decoder-only language modeling:</strong></p>
 <p>Input: tokens <span class="math inline">\(x_{1}\)</span> through <span class="math inline">\(x_{t}\)</span>.</p>
-<p>Visibility: each position reads only earlier positions.</p>
+<p>Visibility: each position reads the current input token and earlier positions while predicting the following token.</p>
 <p>Output: vocabulary logits at every eligible position.</p>
 <p>Target: the next token <span class="math inline">\(x_{t+1}\)</span>.</p>
 <p><strong>Encoder-decoder translation:</strong></p>
@@ -532,52 +532,68 @@ L_{\mathrm{seq2seq}}=-\sum_t\log P_{\theta}(y_t\mid y_{&lt;t},x_{\mathrm{source}
 <p>For IDs [4,8,9], inputs [4,8] train labels [8,9].</p>
 </div>
 <p>Masked and causal objectives create different representations and different inference interfaces, even when both use transformer layers.</p>
+<p>The original BERT training setup also included next-sentence prediction (NSP). Two text segments are separated by <code>[SEP]</code>, and the <code>[CLS]</code> representation feeds a binary classifier that predicts whether the second segment follows the first in the corpus. Its classification loss is added to the masked-token loss. These targets supervise different outputs: selected token positions versus one segment-pair decision. NSP is a feature of the <a href="https://arxiv.org/abs/1810.04805">original BERT objective</a>, not a requirement for every encoder model.</p>
 </section>
 <section id="sec-m2-c18-s03" class="level2" data-number="18.3">
 <h2 data-number="18.3" class="anchored" data-anchor-id="sec-m2-c18-s03"><span class="header-section-number">18.3</span> Aligning Pretraining Objectives with Downstream Inference Requirements</h2>
-<p>Pretraining uses large corpora to learn general representations and next-token behavior before a model is specialized for a narrower task.</p>
-<ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Pretraining:</strong></span> Large-scale training before task-specific adaptation.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Next-token prediction:</strong></span> A causal objective that predicts token <span class="math inline">\(x_{t}\)</span> from tokens before it.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Masked language modeling:</strong></span> An objective that predicts hidden tokens from surrounding context.</li>
-</ul>
-<p>Decoder-only LLMs are commonly trained with next-token prediction. Encoder models such as BERT-style systems often use masked language modeling. Encoder-decoder models can be trained for denoising or sequence-to-sequence objectives.</p>
-<p>The objective determines the inference interface. A next-token decoder naturally supports left-to-right generation; a masked encoder is stronger for representation and fill-in tasks but is not by itself a left-to-right generator.</p>
-<p>Architecture and objective determine which context is visible and which positions contribute targets. Corpus construction and scale then determine the empirical distribution over which that objective is optimized.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Autoregressive factorization:</strong></span></p>
-<p><span id="eq-m2-c18-e05"><span class="math display">\[
-P(x_1\ldots x_T)=\prod_tP(x_t\mid x_{&lt;t})
-\tag{18.5}\]</span></span></p>
-<p>where <span class="math inline">\(x_{t}\)</span> is token at position t; <span class="math inline">\(x_{&lt;t}\)</span> is tokens before position t.</p>
-<p>The chain rule factors a sequence probability into conditional next-token probabilities.</p>
-<p>Causal language-model training supervises these factors one position at a time.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Example: Autoregressive factorization</strong></p>
-<p>Conditional probabilities 0.5, 0.4, and 0.25 multiply to a sequence probability of 0.05.</p>
+<p>The target construction in <a href="ch-m2-c01.html#sec-m2-c01-s02">§1.2</a> and the visibility rules in <a href="#sec-m2-c18-s02">§18.2</a> jointly determine what a trained model can consume and produce. Architecture-specific training must align those two choices.</p>
+<div id="tbl-m2-c18-rev01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m2-c18-rev01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;18.1: Architecture families differ in visible input and supervised output.
+</figcaption>
+<div aria-describedby="tbl-m2-c18-rev01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Family</th>
+<th>Visible input</th>
+<th>Supervised output</th>
+<th>Inference consequence</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Causal decoder</td>
+<td>Prefix up to the current position</td>
+<td>Following token</td>
+<td>Extends the prefix one token at a time</td>
+</tr>
+<tr class="even">
+<td>Masked encoder</td>
+<td>Unmasked positions on either side</td>
+<td>Selected hidden tokens</td>
+<td>Produces contextual features or fills selected positions</td>
+</tr>
+<tr class="odd">
+<td>Encoder-decoder</td>
+<td>Encoded source plus earlier target tokens</td>
+<td>Next target token</td>
+<td>Generates an answer conditioned on a separate source</td>
+</tr>
+</tbody>
+</table>
 </div>
-<p>The selected objective determines the examples and labels that pretraining must supply. Data preparation is therefore part of the training method.</p>
+</figure>
+</div>
+<p>For the instruction “Explain gravity for a child,” a causal decoder receives an instruction prefix followed by answer tokens during training. An answer-only objective ignores the instruction positions. An encoder-decoder receives the instruction in its encoder input and answer tokens in a separate target sequence. The <a href="ch-m2-c24.html#sec-m2-c24-s04">adaptation lab</a> compares these two formats on the same questions.</p>
+<p>Both forms use the established probability and loss calculations. Reusing the <a href="ch-m2-c01.html#sec-m2-c01-s02">factorization in §1.2</a> avoids treating their shared next-token mechanism as a new objective. The difference is the conditioning information and supervised positions. <a href="ch-m2-c19.html">Chapter 19</a> next asks which corpus, token budget, and mixture supply those positions at scale.</p>
 </section>
 <section id="sec-m2-c18-s04" class="level2" data-number="18.4">
 <h2 data-number="18.4" class="anchored" data-anchor-id="sec-m2-c18-s04"><span class="header-section-number">18.4</span> Compressing Large Models into Small Language Models (SLMs) via Distillation</h2>
-<p>Recent language-model variants change how positions are encoded, how parameters are selected, how sequences are generated, or how a large model is compressed.</p>
-<ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Mixture of experts:</strong></span> A transformer layer that routes each token through a small subset of expert feed-forward networks.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Diffusion language model:</strong></span> A model that generates or refines multiple token positions iteratively instead of committing strictly left to right.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Small language model:</strong></span> A lower-parameter model designed for lower memory, latency, or deployment cost.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Distillation:</strong></span> Training a smaller student model from outputs or representations supplied by a larger teacher.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Pruning:</strong></span> Removing parameters, channels, heads, or other structures judged unnecessary under a stated criterion.</li>
-</ul>
-<p>Mixture-of-experts routing increases total parameter capacity without evaluating every expert for every token. A balancing term is needed because routing all tokens to one expert would waste the remaining capacity and overload one path.</p>
-<p>Diffusion language models change the inference factorization by refining a partially corrupted or masked sequence over several steps. They are an alternative generation procedure rather than a non-text modality.</p>
-<p>Distillation and pruning are ways to obtain smaller models after or during training. Distillation changes the training targets available to the student; pruning changes the retained parameter structure. Neither is equivalent to quantizing every retained value to fewer bits.</p>
-<p>Model families also differ in how they trade capacity, latency, and memory. A small language model reduces memory and compute costs. Distillation trains it to mimic a larger teacher model. Pruning removes unneeded weights, while mixture-of-experts increases model capacity without increasing compute per token.</p>
-<p>These methods do not replace the training skeleton. Each still maps inputs to logits, computes an objective on targets, differentiates that objective, and updates a defined set of trainable parameters. What changes is which parameters are stored, activated, or trained on each step.</p>
-<p>Knowledge distillation trains a compact student model to match the output probability distribution and intermediate activations of a larger teacher model.</p>
-<p>This can improve the accuracy of a small language model (SLM) relative to training the same student only on hard labels. Whether it improves serving throughput or fits an edge device still depends on the student’s size, numerical format, sequence length, and deployment hardware.</p>
-<p>Architecture and compression change model capacity; pretraining data and compute determine how that capacity is trained.</p>
+<p>A smaller model can reduce parameter storage and per-token arithmetic, but size alone does not establish answer quality. Distillation trains a student using a larger teacher’s outputs or intermediate representations. Pruning removes selected weights or structures from a model. These methods answer different questions about what the smaller model retains.</p>
+<p>In output distillation, hold the teacher fixed, run the same inputs through both models, and compare their probability distributions. The <a href="ch-m2-c08.html#sec-m2-c08-s02">KL divergence in §8.2</a> can supply a distribution-matching objective, sometimes combined with the original target loss. The teacher’s relative probabilities contain information beyond the highest-scoring label. They can also transfer its mistakes, so assess the student on held-out task data.</p>
+<p>Pruning can remove individual values or whole channels and heads. Reduced parameter count saves execution time only if the chosen implementation avoids the removed work. <a href="ch-m2-c20.html#sec-m2-c20-s05">Quantization in Chapter 20</a> instead stores retained values with fewer bits. <a href="ch-m2-c17.html#sec-m2-c17-s07">Expert routing</a> activates selected parameter groups per token and should be considered separately from shrinking the full model.</p>
+<p>Compare original and compressed models with the same prompts, scoring protocol, and decoding settings. Record quality, parameter bytes, and latency separately. The result can reveal a smaller model that fits memory yet does not meet the task’s quality requirement. Pretraining data and compute determine how much useful behavior the retained capacity can learn.</p>
 </section>
 <section id="sec-m2-c18-s05" class="level2" data-number="18.5">
-<h2 data-number="18.5" class="anchored" data-anchor-id="sec-m2-c18-s05"><span class="header-section-number">18.5</span> Visualizing Encoder and Decoder Attention Visibility Masks</h2>
+<h2 data-number="18.5" class="anchored" data-anchor-id="sec-m2-c18-s05"><span class="header-section-number">18.5</span> Comparing Attention Visibility and Optional Diffusion Generation</h2>
 <p>Attention visibility and target placement distinguish the three principal transformer families.</p>
 <p>The same block components support different model families when the attention mask and objective change.</p>
 <div id="fig-m2-c18-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram comparing encoder-only, decoder-only, and encoder-decoder transformer architectures.">
@@ -591,7 +607,7 @@ Figure&nbsp;18.2: Attention visibility and targets distinguish representation, g
 </figure>
 </div>
 <p>Encoder-only models support bidirectional representation tasks, decoder-only models support causal generation, and encoder-decoder models support conditional sequence generation.</p>
-<p>Diffusion-style language models are presented as a non-autoregressive alternative to one-token-at-a-time decoding.</p>
+<p><strong>Optional extension: masked diffusion generation.</strong> Models such as <a href="https://arxiv.org/abs/2502.09992">LLaDA</a> learn to recover tokens removed by a masking process. During generation, the prompt remains visible while response positions begin masked. Repeated model passes predict and refine several response positions. A toy state sequence might be <code>the [MASK] [MASK]</code> followed by <code>the cat [MASK]</code> and then <code>the cat sleeps</code>. The model still performs several sequential refinement steps. Updating several positions per step therefore does not imply that an answer arrives in one pass or that every workload becomes faster.</p>
 <div id="fig-m2-c18-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram showing iterative refinement of a noisy token sequence.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c18-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -602,9 +618,20 @@ Figure&nbsp;18.3: Iterative refinement offers a parallel alternative to left-to-
 </figcaption>
 </figure>
 </div>
-<p>The important contrast is computational: an autoregressive decoder has a sequential token bottleneck, while diffusion-style generation aims to refine many positions in parallel.</p>
+<p>The computational comparison now includes response length, the number of refinement passes, and quality at a fixed latency budget. This optional architecture overview is separate from the decoder cache analysis in <a href="ch-m2-c21.html">Chapter 21</a>.</p>
 <p>Transformer families differ mainly by attention visibility and by which logits the objective supervises.</p>
 <p>Pretraining data defines the distribution over which these objectives are optimized.</p>
+</section>
+<section id="sec-m2-c18-check" class="level2" data-number="18.6">
+<h2 data-number="18.6" class="anchored" data-anchor-id="sec-m2-c18-check"><span class="header-section-number">18.6</span> Chapter checkpoint</h2>
+<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
+<ol type="1">
+<li>An encoder-decoder instruction is concatenated with the answer and passed as the encoder input during training. What must be checked?</li>
+<li>A pruned model has fewer nonzero weights but unchanged latency. Does that contradict its parameter count?</li>
+</ol>
+<p><strong>Feedback</strong></p>
+<p><strong>1.</strong> The encoder should receive the intended source, while answer tokens are separate targets and shifted decoder inputs. Supplying the answer in the source can leak the target.</p>
+<p><strong>2.</strong> No.&nbsp;Runtime savings require an implementation that skips removed work. Distillation, pruning, and quantization change different objects and need separate quality and speed measurements.</p>
 
 
 </section>

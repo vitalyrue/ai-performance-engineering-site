@@ -47,7 +47,7 @@ ul.task-list li input[type="checkbox"] {
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -366,7 +366,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -399,8 +399,15 @@ window.Quarto = {
 </nav>
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
-        
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-m2-notation-symbols" id="toc-sec-m2-notation-symbols" class="nav-link active" data-scroll-target="#sec-m2-notation-symbols">Symbols and dimensions</a></li>
+  <li><a href="#sec-m2-notation-conventions" id="toc-sec-m2-notation-conventions" class="nav-link" data-scroll-target="#sec-m2-notation-conventions">Masks and matrix orientation</a></li>
+  </ul>
+</nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
@@ -424,6 +431,7 @@ window.Quarto = {
 </header>
 
 
+<p>Connect recurring symbols, dimensions, and representation conventions.</p>
 <p>The symbols below recur in data, model, training, and inference equations. Each chapter adds local indices or dimensions when a computation needs them.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Corpus:</strong></span></p>
 <p><span id="eq-m2-notation-e01"><span class="math display">\[
@@ -441,8 +449,150 @@ x_i = \operatorname{id}(t_i),\quad x \in \{0,\ldots,\lvert V\rvert-1\}^{T}
 <p><span id="eq-m2-notation-e04"><span class="math display">\[
 X \in \mathbb{Z}^{B\times T}
 \tag{4}\]</span></span></p>
+<section id="sec-m2-notation-symbols" class="level2">
+<h2 class="anchored" data-anchor-id="sec-m2-notation-symbols">Symbols and dimensions</h2>
+<p>The same letter can have a local meaning in different equations. Read the dimensions beside the equation first. This table collects the recurring conventions rather than changing symbols used by an original source.</p>
+<div id="tbl-m2-notation-rev01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m2-notation-rev01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;1: Recurring quantities and their dimensions.
+</figcaption>
+<div aria-describedby="tbl-m2-notation-rev01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symbol</th>
+<th>Meaning and dimensions</th>
+<th>Explanation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">\(B,T,V,D\)</span></td>
+<td>Batch size, sequence length, vocabulary size, representation width</td>
+<td>Token batches</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(X\)</span></td>
+<td>Feature rows <span class="math inline">\([B,D]\)</span> or integer token IDs <span class="math inline">\([B,T]\)</span>, as stated locally</td>
+<td>Batch scores</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(E\)</span></td>
+<td>Embedding table <span class="math inline">\([V,D]\)</span></td>
+<td>Embedding lookup</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(\theta,W,b\)</span></td>
+<td>All trainable parameters, a weight matrix, and a bias</td>
+<td>Linear models</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(z,p,y\)</span></td>
+<td>Logits, probabilities, and observed targets</td>
+<td>Probability outputs</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(L,\widehat R\)</span></td>
+<td>Per-example loss and its average over an observed sample</td>
+<td>Loss reduction</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(\sigma,\phi\)</span></td>
+<td>Sigmoid and a locally specified activation function</td>
+<td>Sigmoid, activations</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(\nabla_\theta L,\eta\)</span></td>
+<td>Parameter gradient, with the dimensions of <span class="math inline">\(\theta\)</span>, and learning rate</td>
+<td>Gradients, updates</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(Q,K,V\)</span></td>
+<td>Query, key, and value arrays, commonly <span class="math inline">\([B,H,T,d_h]\)</span></td>
+<td>Attention</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(H,d_h,d_k\)</span></td>
+<td>Number of heads, per-head width, query/key width used for score scaling</td>
+<td>Multiple heads</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(m,v\)</span></td>
+<td>First and second optimizer moments, with parameter dimensions</td>
+<td>Adam</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(r,\alpha\)</span></td>
+<td>Adapter rank and scale numerator, giving scale <span class="math inline">\(\alpha/r\)</span></td>
+<td>LoRA</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Return to the corresponding explanations: <a href="../chapters/ch-m2-c02.html#sec-m2-c02-s02">Token batches</a>, <a href="../chapters/ch-m2-c05.html#sec-m2-c05-s03">Batch scores</a>, <a href="../chapters/ch-m2-c13.html#sec-m2-c13-s01">Embedding lookup</a>, <a href="../chapters/ch-m2-c05.html">Linear models</a>, <a href="../chapters/ch-m2-c06.html">Probability outputs</a>, <a href="../chapters/ch-m2-c08.html#sec-m2-c08-s03">Loss reduction</a>, <a href="../chapters/ch-m2-c06.html#sec-m2-c06-s01">Sigmoid</a>, <a href="../chapters/ch-m2-c12.html#sec-m2-c12-s02">activations</a>, <a href="../chapters/ch-m2-c11.html">Gradients</a>, <a href="../chapters/ch-m2-c10.html">updates</a>, <a href="../chapters/ch-m2-c16.html">Attention</a>, <a href="../chapters/ch-m2-c17.html#sec-m2-c17-s02">Multiple heads</a>, <a href="../chapters/ch-m2-c10.html">Adam</a>, <a href="../chapters/ch-m2-c20.html#sec-m2-c20-s04">LoRA</a>.</p>
+<p>In a vocabulary discussion, <span class="math inline">\(V\)</span> is a size. In attention, <span class="math inline">\(V\)</span> is an array of value vectors. Likewise, <span class="math inline">\(L\)</span> can mean scalar loss or a layer count in a cache estimate. The local definitions resolve these uses. Natural logarithms give losses in nats, with perplexity computed by exponentiating the average negative log probability. Base-two logs give bits and require base-two exponentiation.</p>
+</section>
+<section id="sec-m2-notation-conventions" class="level2">
+<h2 class="anchored" data-anchor-id="sec-m2-notation-conventions">Masks and matrix orientation</h2>
+<p>Masks exclude contributions at different stages. A padding token value by itself is insufficient when the tokenizer also uses that value for a real end-of-sequence token.</p>
+<div id="tbl-m2-notation-rev02" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m2-notation-rev02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;2: Masks affect different consumers and reductions.
+</figcaption>
+<div aria-describedby="tbl-m2-notation-rev02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Object</th>
+<th>Values and dimensions</th>
+<th>Consumer and effect</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Tokenizer <code>attention_mask</code></td>
+<td>Usually <span class="math inline">\(1\)</span> for a real token and <span class="math inline">\(0\)</span> for inserted padding, <span class="math inline">\([B,T]\)</span></td>
+<td>Supplies padding visibility to the model</td>
+</tr>
+<tr class="even">
+<td>Additive attention mask</td>
+<td><span class="math inline">\(0\)</span> for permitted positions and <span class="math inline">\(-\infty\)</span> for blocked positions, broadcastable to scores</td>
+<td>Added before softmax, making blocked attention weights zero</td>
+</tr>
+<tr class="odd">
+<td>Loss labels with <code>ignore_index</code></td>
+<td>Target IDs with a sentinel such as <span class="math inline">\(-100\)</span>, <span class="math inline">\([B,T]\)</span></td>
+<td>Excludes positions from both summed loss and the supervised-position count</td>
+</tr>
+<tr class="even">
+<td>Pooling mask</td>
+<td><span class="math inline">\(1\)</span> for included vectors and <span class="math inline">\(0\)</span> otherwise, <span class="math inline">\([B,T]\)</span></td>
+<td>Excludes padding vectors and sets the mean’s denominator</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Boolean mask conventions depend on the receiving API. Check whether <code>True</code> means permitted or blocked before converting a tokenizer mask. <a href="../chapters/ch-m2-c02.html#sec-m2-c02-s02">Chapter 2</a> establishes token validity, <a href="../chapters/ch-m2-c13.html#sec-m2-c13-s01">§13.1</a> applies masked pooling, and <a href="../chapters/ch-m2-c16.html#sec-m2-c16-s03">§16.3</a> constructs attention visibility.</p>
+<p>For a row-vector batch, mathematical weights have dimensions <span class="math inline">\([D_{in},D_{out}]\)</span>. A stored PyTorch linear weight has dimensions <span class="math inline">\([D_{out},D_{in}]\)</span>. Denote the stored tensor by <span class="math inline">\(A\)</span> and write <span class="math inline">\(X A^{\mathsf T}+b\)</span>, with <span class="math inline">\(W=A^{\mathsf T}\)</span>. Neither transposition nor broadcasting changes the number of output examples.</p>
 
 
+</section>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">

@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -443,6 +443,7 @@ window.Quarto = {
   <li><a href="#sec-m2-c13-s02" id="toc-sec-m2-c13-s02" class="nav-link" data-scroll-target="#sec-m2-c13-s02"><span class="header-section-number">13.2</span> Fast Batch Lookups via Learnable Embedding Matrices</a></li>
   <li><a href="#sec-m2-c13-s03" id="toc-sec-m2-c13-s03" class="nav-link" data-scroll-target="#sec-m2-c13-s03"><span class="header-section-number">13.3</span> Pooling Token Vectors into Sequence Representations</a></li>
   <li><a href="#sec-m2-c13-s04" id="toc-sec-m2-c13-s04" class="nav-link" data-scroll-target="#sec-m2-c13-s04"><span class="header-section-number">13.4</span> Embedding lookup trace</a></li>
+  <li><a href="#sec-m2-c13-check" id="toc-sec-m2-c13-check" class="nav-link" data-scroll-target="#sec-m2-c13-check"><span class="header-section-number">13.5</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -468,6 +469,7 @@ window.Quarto = {
 </header>
 
 
+<p>Follow embedding lookup gradients and pool valid token vectors.</p>
 <p>A token ID names a row in a vocabulary; it is not a meaningful numeric quantity by itself. An embedding table gives each token a trainable vector that a model can combine with other vectors.</p>
 <p>Token IDs are addresses, not meaningful numeric values. An embedding table maps each address to a learned vector, and pooling shows one way to turn several token vectors into one sequence representation.</p>
 <p>In code, <code>torch.nn.Embedding</code> maps integer IDs to floating-point rows, and <code>torch.mean</code> or masked reductions pool token vectors into one sequence representation.</p>
@@ -524,7 +526,7 @@ E\in\mathbb{R}^{\lvert V\rvert\times d}
 <p><strong>One-hot equivalence:</strong></p>
 <p>If <span class="math inline">\(\operatorname{onehot}(2)=(0,0,1,0)\)</span>, then <span class="math inline">\(\operatorname{onehot}(2)^T E\)</span> returns the row of <span class="math inline">\(E\)</span> indexed by token ID <span class="math inline">\(2\)</span>.</p>
 </div>
-<p>The following runnable PyTorch example receives two sequences of token IDs, looks up four-coordinate rows, mean-pools across the sequence axis, and backpropagates the sum of the pooled values. The final printout reports one gradient magnitude per vocabulary row: rows used by the batch can be nonzero, while unused rows remain zero. The unmasked mean is deliberate here; padded batches require the masked reduction introduced in Chapter 2.</p>
+<p>The following runnable PyTorch example receives two sequences of token IDs, looks up four-coordinate rows, mean-pools across the sequence axis, and backpropagates the sum of the pooled values. The final printout reports one gradient magnitude per vocabulary row: rows used by the batch can be nonzero, while unused rows remain zero. The unmasked mean is deliberate here; padded batches require the masked reduction introduced in <a href="ch-m2-c02.html">Chapter 2</a>.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Embedding lookup, pooling, and selected-row gradients</p>
 </div>
@@ -544,6 +546,9 @@ E\in\mathbb{R}^{\lvert V\rvert\times d}
 <p>Rows 0-3 receive gradients because those IDs occur; unused rows remain zero.</p>
 <p>Mean pooling ignores order and padding unless a mask is applied.</p>
 <p>An embedding replaces a token ID with one learned row of a matrix. A batch lookup gathers many such rows before a sequence model or pooling layer combines them.</p>
+<p><strong>Pooling only real tokens.</strong> A padded document should have the same representation before and after extra padding is added. Let <span class="math inline">\(e_{bt}\in\mathbb R^d\)</span> be token vector <span class="math inline">\(t\)</span> in example <span class="math inline">\(b\)</span>, and let <span class="math inline">\(m_{bt}\)</span> be 1 for a real token and 0 for padding. Its masked mean is</p>
+<p><span class="math display">\[\bar e_b=\frac{\sum_t m_{bt}e_{bt}}{\sum_t m_{bt}}.\]</span></p>
+<p>The output has dimensions <span class="math inline">\([B,d]\)</span>. For vectors <span class="math inline">\((2,0)\)</span>, <span class="math inline">\((0,4)\)</span>, and padding <span class="math inline">\((0,0)\)</span>, with mask <span class="math inline">\((1,1,0)\)</span>, the mean is <span class="math inline">\((1,2)\)</span>. Dividing by the padded length would incorrectly return <span class="math inline">\((2/3,4/3)\)</span>. Reject or explicitly handle an empty document before division because it has no real-token mean. <a href="ch-m2-c02.html#sec-m2-c02-s02">Chapter 2</a> supplies the padding indicator, and the <a href="ch-m2-c24.html#sec-m2-c24-s02">text-classification lab</a> uses this reduction before its classifier.</p>
 </section>
 <section id="sec-m2-c13-s02" class="level2" data-number="13.2">
 <h2 data-number="13.2" class="anchored" data-anchor-id="sec-m2-c13-s02"><span class="header-section-number">13.2</span> Fast Batch Lookups via Learnable Embedding Matrices</h2>
@@ -623,12 +628,13 @@ s=\frac{1}{T}\sum_{t}h_{t}
 <li>Use contrastive training when the embedding space must support retrieval or similarity search.</li>
 </ul>
 <p>Pooling creates one fixed-width vector from a variable-length token sequence. Representation-learning objectives determine which relationships the embedding rows learn to encode.</p>
+<p>Concatenation offers a different trade-off. With a maximum of four tokens and embedding width three, placing their vectors side by side gives twelve input features. Each position keeps its own three coordinates, so swapping tokens changes the vector. Longer inputs need truncation, shorter ones need padding, and the classifier’s parameter count grows with the maximum length. Mean pooling produces only three features regardless of length, but loses order for static vectors. A recurrent or attention layer can model order before a final reduction. This distinction explains the transition to <a href="ch-m2-c15.html">Chapter 15</a>.</p>
 </section>
 <section id="sec-m2-c13-s04" class="level2" data-number="13.4">
 <h2 data-number="13.4" class="anchored" data-anchor-id="sec-m2-c13-s04"><span class="header-section-number">13.4</span> Embedding lookup trace</h2>
-<p>An embedding layer is a trainable lookup table. The input ids select rows from a matrix, and only the selected rows participate in that forward computation. This is why embeddings are both simple and powerful: symbolic ids become dense vectors without multiplying by a one-hot vector explicitly.</p>
-<p>Word2Vec adds a training objective to that lookup table. A center word and a context word are scored by a dot product, and negative samples provide contrast. The learned geometry is not magic; it is the result of repeatedly pushing observed pairs closer and sampled non-pairs farther apart.</p>
-<p>Learned vectors become useful when training makes geometric relationships reflect task-relevant similarity.</p>
+<p>The <a href="#sec-m2-c13-s01">lookup in §13.1</a> selects vocabulary rows. This trace isolates which rows contribute to an update before <a href="ch-m2-c14.html#sec-m2-c14-s01">Chapter 14</a> introduces a particular objective for training their geometry.</p>
+<p>Take a table with rows <span class="math inline">\(E_0=(0,0)\)</span>, <span class="math inline">\(E_1=(2,0)\)</span>, and <span class="math inline">\(E_2=(0,4)\)</span>. IDs <span class="math inline">\((1,2,1)\)</span> produce the vectors <span class="math inline">\((2,0),(0,4),(2,0)\)</span>. The first and third positions read the same parameter row, rather than creating independent copies of its parameters.</p>
+<p>Suppose the downstream calculation returns vector gradients <span class="math inline">\((1,0)\)</span>, <span class="math inline">\((0,2)\)</span>, and <span class="math inline">\((3,0)\)</span> at those positions. The lookup backward pass adds the two contributions to row 1, giving <span class="math inline">\(\nabla E_1=(4,0)\)</span>. Row 2 receives <span class="math inline">\((0,2)\)</span> and row 0 receives zero. An optimizer may still change an unselected row through weight decay or existing optimizer state, so zero lookup gradient alone does not imply an unchanged parameter.</p>
 <div id="fig-m2-c13-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram showing neighborhoods and relations in an embedding space.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c13-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -639,63 +645,20 @@ Figure&nbsp;13.2: Training moves rows of the embedding table so useful similarit
 </figcaption>
 </figure>
 </div>
-<p>An embedding is not just a lookup result; training changes rows so useful relations become distances and directions in vector space.</p>
-<p>An embedding lookup selects rows from a trainable matrix and optionally optimizes geometry by contrastive objectives. The embedding matrix is <code>[|V|,d]</code>; IDs <code>[B,T]</code> become embeddings <code>[B,T,d]</code>. Integer IDs index rows, selected rows flow through the model, and gradients return to rows used in the batch.</p>
-<p>In PyTorch, <code>nn.Embedding</code>, tensor indexing, pooling operations, and dot products implement the lookup and objectives.</p>
-<p><strong>Performance note:</strong> Embedding lookup is memory-bandwidth heavy; sparse row access can limit throughput.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Example: Skip-gram pair generation for ‘The cat sat on the mat’</strong></p>
-<p>Center word: ‘sat’ (index 2 in sequence).</p>
-<p>Context window (2 left, 2 right): [‘The’,‘cat’,‘on’,‘the’].</p>
-<p>Positive training pairs: (sat,The), (sat,cat), (sat,on), (sat,the).</p>
-<p><strong>Negative sampling:</strong></p>
-<p><strong>For pair (sat,cat):</strong></p>
-<p>Positive score: <span class="math inline">\(\operatorname{dot}(v_{\mathrm{sat}},u_{\mathrm{cat}})\)</span></p>
-<p>Negative-pair scores: <span class="math inline">\(\operatorname{dot}(v_{\mathrm{sat}},u_{\mathrm{mat}})\)</span> and <span class="math inline">\(\operatorname{dot}(v_{\mathrm{sat}},u_{\mathrm{on}})\)</span>.</p>
-<p><strong>With toy <span class="math inline">\(d=3\)</span> embeddings:</strong></p>
-<p><span class="math inline">\(v_{\mathrm{sat}}=[0.2,-0.5,0.8]\)</span>, <span class="math inline">\(u_{\mathrm{cat}}=[0.1,0.4,-0.3]\)</span></p>
-<p><strong>Positive-pair dot product:</strong> <span class="math inline">\(0.2\cdot0.1+(-0.5)\cdot0.4+0.8\cdot(-0.3)=0.02-0.20-0.24=-0.42\)</span></p>
-<p>σ(-0.42) = 0.397 – low confidence in (sat,cat) co-occurrence.</p>
-<p>Training will push <span class="math inline">\(v_{\mathrm{sat}}\)</span> and <span class="math inline">\(u_{\mathrm{cat}}\)</span> closer (positive pair).</p>
-<p><span class="math inline">\(v_{\mathrm{sat}}\)</span> and <span class="math inline">\(u_{\mathrm{mat}}\)</span> will be pushed apart (negative sample).</p>
-<p>After convergence, the dot product between one word’s center vector and another word’s context vector reflects their co-occurrence frequency.</p>
-<p>Gradient only flows through the embedding rows that appear in the current batch.</p>
-<p>Other vocabulary rows receive zero gradient for this step.</p>
-</div>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Embedding lookup:</strong></span></p>
-<p><span id="eq-m2-c13-e08"><span class="math display">\[
-E_{\mathrm{ids}}=W_{\mathrm{embed}}[\mathrm{input\,ids}]
-\tag{13.8}\]</span></span></p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Skip-gram objective:</strong></span></p>
-<p><span id="eq-m2-c13-e09"><span class="math display">\[
-\operatorname*{maximize}\;\log P(\mathrm{context\,word}\mid\mathrm{center\,word})
-\tag{13.9}\]</span></span></p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Negative sampling:</strong></span></p>
-<p><span id="eq-m2-c13-e10"><span class="math display">\[
--\log\sigma(u_{o}^{T}v_{c})-\sum_{k}\log\sigma(-u_{k}^{T}v_{c})
-\tag{13.10}\]</span></span></p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Mean pooling:</strong></span></p>
-<p><span id="eq-m2-c13-e11"><span class="math display">\[
-\operatorname{sentence}=\operatorname{mean}_{t}\!\left(E_{\mathrm{ids}}[t]\right)
-\tag{13.11}\]</span></span></p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
-<p>These dimensions appear in the computation in order.</p>
-<ul>
-<li>Embedding matrix W: [V, D], V vocabulary rows and D features.</li>
-<li>Input ids: [B, T].</li>
-<li>Token embeddings: [B, T, D].</li>
-<li>Pooled sequence vector: [B, D].</li>
-<li>Negative sample ids: [B, K].</li>
-</ul>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
-<ul>
-<li><code>nn.Embedding(vocab_size, dim)</code> performs row lookup rather than a dense projection over the entire vocabulary.</li>
-<li>Pooling removes the token axis; after pooling the model no longer sees token order unless order was encoded earlier.</li>
-<li>Negative sampling code should show both positive and sampled negative scores.</li>
-</ul>
-<p>Embeddings turn token IDs into trainable vectors, and only selected rows move on a lookup step.</p>
-<p>Representation objectives give embedding geometry a training signal.</p>
+<p>The figure previews the geometry that training can produce. <a href="ch-m2-c14.html#sec-m2-c14-s01">Word2Vec’s context objective</a> explains the positive and negative pair calculations. Here the input/output contract is IDs <span class="math inline">\([B,T]\)</span>, table <span class="math inline">\([V,D]\)</span>, token vectors <span class="math inline">\([B,T,D]\)</span>, and a table gradient with dimensions <span class="math inline">\([V,D]\)</span>.</p>
+<p>For document classification, the <a href="#sec-m2-c13-s01">masked mean</a> reduces token vectors to <span class="math inline">\([B,D]\)</span>. This discards position order unless the vectors already contain contextual information. The <a href="ch-m2-c24.html#sec-m2-c24-s02">text lab</a> checks padding invariance before the classifier uses that pooled vector.</p>
+<p>Lookup establishes how parameters are read and how their gradients accumulate. The next chapter explains which objective makes those rows useful for context prediction.</p>
+</section>
+<section id="sec-m2-c13-check" class="level2" data-number="13.5">
+<h2 data-number="13.5" class="anchored" data-anchor-id="sec-m2-c13-check"><span class="header-section-number">13.5</span> Chapter checkpoint</h2>
+<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
+<ol type="1">
+<li>The same ID occurs twice in a sequence. Do its two positions update independent embedding parameters?</li>
+<li>A document representation changes after appending a zero padding vector. What reduction error should be checked first?</li>
+</ol>
+<p><strong>Feedback</strong></p>
+<p><strong>1.</strong> No.&nbsp;Both positions read one shared row and their backward contributions add to that row.</p>
+<p><strong>2.</strong> The denominator may count padded positions. A masked mean divides by the number of real tokens and rejects or separately handles an all-padding input.</p>
 
 
 </section>

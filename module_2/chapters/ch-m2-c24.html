@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -447,6 +447,7 @@ window.Quarto = {
   <li><a href="#sec-m2-c24-s06" id="toc-sec-m2-c24-s06" class="nav-link" data-scroll-target="#sec-m2-c24-s06"><span class="header-section-number">24.6</span> Lab: Training an N-Gram Language Model and Perplexity Evaluator</a></li>
   <li><a href="#sec-m2-c24-s07" id="toc-sec-m2-c24-s07" class="nav-link" data-scroll-target="#sec-m2-c24-s07"><span class="header-section-number">24.7</span> Lab: End-to-End Multimodal Vision-Language Inference Trace</a></li>
   <li><a href="#sec-m2-c24-s08" id="toc-sec-m2-c24-s08" class="nav-link" data-scroll-target="#sec-m2-c24-s08"><span class="header-section-number">24.8</span> Visualizing End-to-End Course Lab Pipelines</a></li>
+  <li><a href="#sec-m2-c24-check" id="toc-sec-m2-c24-check" class="nav-link" data-scroll-target="#sec-m2-c24-check"><span class="header-section-number">24.9</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -472,6 +473,7 @@ window.Quarto = {
 </header>
 
 
+<p>Combine controlled experiments, component-level checks, and held-out evaluation into a system decision.</p>
 <p>The calculations become reliable only when they can be reproduced in code. These labs expose the inputs, intermediate tensors, losses, gradients, and outputs of the main workflows.</p>
 <p>The course notebooks turn the preceding calculations into complete workflows: linear classification, text classification, attention, QLoRA, character-level recurrence, n-gram modeling, and vision-language inference.</p>
 <p>In code, each lab begins with the imports used by its source notebook, then adds <code>assert</code>, <code>torch.allclose</code>, plots, or printed tensor metadata to verify the computation.</p>
@@ -485,68 +487,91 @@ Figure&nbsp;24.1: The course notebooks connect inputs, intermediate values, metr
 </figcaption>
 </figure>
 </div>
+<p><strong>Lab execution guide</strong></p>
+<p>Use the labs at the point where their prerequisites are complete. The suggested order is the classifier (§24.1), text features (§24.2), n-gram baseline (§24.6), recurrence (§24.5), attention (§24.3), adaptation (§24.4), and multimodal integration (§24.7). Section numbers remain stable so earlier references continue to locate the same experiment.</p>
+<p>The examples embedded here are small checks. A complete experiment also retains its dataset split, model configuration, outputs, and interpretation. <a href="ch-m2-c09.html">Chapter 9</a> explains why test data must not guide training or threshold choices.</p>
+<div id="tbl-m2-c24-rev01" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m2-c24-rev01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;24.1: Execution requirements and evidence for each type of experiment.
+</figcaption>
+<div aria-describedby="tbl-m2-c24-rev01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Experiment type</th>
+<th>Environment and inputs</th>
+<th>Evidence to retain</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Local tensor and arithmetic checks</td>
+<td>Python with PyTorch, CPU sufficient, no model download</td>
+<td>Printed dimensions, numerical comparisons, assertion results</td>
+</tr>
+<tr class="even">
+<td>NLTK and Word2Vec experiments</td>
+<td>NLTK or Gensim, fixed tokenized corpus and vocabulary</td>
+<td>Counts, excluded tokens, smoothing choice, held-out scores</td>
+</tr>
+<tr class="odd">
+<td>Adapter training</td>
+<td>Transformers, PEFT, bitsandbytes, datasets, a compatible device and model checkpoint</td>
+<td>Package versions, checkpoint revision, trainable tensors, memory measurement, training history, base/adapted outputs</td>
+</tr>
+<tr class="even">
+<td>Image retrieval with captioning or VQA</td>
+<td>The chosen model’s processor and checkpoint, an image dataset, saved reference/query split</td>
+<td>Input image IDs, embeddings, scores, generated answers, per-component errors</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The local tensor checks in this revision use Python 3.14, PyTorch 2.11.0 with CUDA 13.0 support, and NumPy 2.4.3. CUDA support in a package does not imply that a particular model fits the available GPU. The complete pretrained-model experiments are exercise protocols, not supplied benchmark results. Record the actual Transformers, PEFT, bitsandbytes, tokenizer, and checkpoint versions when running them. Fix random seeds where possible and record differences that remain across devices.</p>
+<p>For a GPU experiment, report the device, available memory, dtype, batch and sequence dimensions, and peak allocated memory. Preserve a CPU calculation that checks the same dimensions or arithmetic when practical. If a model cannot run in the chosen environment, report the failed stage rather than replacing its missing outputs with the local toy result.</p>
 <section id="sec-m2-c24-s01" class="level2" data-number="24.1">
 <h2 data-number="24.1" class="anchored" data-anchor-id="sec-m2-c24-s01"><span class="header-section-number">24.1</span> Lab: Building Logistic Regression and SGD from Scratch</h2>
-<p>This lab reproduces the two-feature classifier from the PyTorch notebook, verifies the decision boundary, and compares manual gradients with PyTorch autograd.</p>
-<ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Trace:</strong></span> A step-by-step path from input object through computation to output, loss, gradient, or cache state.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Implementation mapping:</strong></span> The connection between mathematical notation, tensor dimensions, dtype, and code object.</li>
-</ul>
-<p>Start with two-feature examples so the forward pass can be checked by hand. Record the feature batch, logits, binary loss, gradients, and one SGD update before comparing the manual result with PyTorch autograd.</p>
-<p>Then vary learning rate or weight decay while keeping the data split fixed. The comparison should show how an update setting changes training loss and held-out classification errors.</p>
-<p>A binary logistic-regression lab should produce one scalar logit for each example in the batch.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Lab logits dimensions:</strong></span></p>
-<p><span id="eq-m2-c24-e01"><span class="math display">\[
-X\in\mathbb{R}^{B\times D},\quad w\in\mathbb{R}^{D},\quad z=Xw+b\in\mathbb{R}^{B}
-\tag{24.1}\]</span></span></p>
-<p>Here, <span class="math inline">\(X\in\mathbb{R}^{B\times D}\)</span> contains <span class="math inline">\(B\)</span> examples with <span class="math inline">\(D\)</span> features, <span class="math inline">\(w\in\mathbb{R}^{D}\)</span> and <span class="math inline">\(b\in\mathbb{R}\)</span> are trainable parameters, and <span class="math inline">\(z\in\mathbb{R}^{B}\)</span> contains one logit per example.</p>
-<p>Each row of <span class="math inline">\(X\)</span> contributes one affine score before the sigmoid or binary cross-entropy calculation.</p>
-<p>Checking these dimensions prevents accidental broadcasting between examples and features.</p>
-<p>The binary loss averages the positive- and negative-class log losses across the batch.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Masked lab loss:</strong></span></p>
-<p><span id="eq-m2-c24-e02"><span class="math display">\[
-L=-\frac{1}{B}\sum_{i=1}^{B}\left[y_i\log p_i+(1-y_i)\log(1-p_i)\right],\quad p_i=\sigma(z_i)
-\tag{24.2}\]</span></span></p>
-<p>Here, <span class="math inline">\(y_i\in\{0,1\}\)</span> is the label for example <span class="math inline">\(i\)</span>, <span class="math inline">\(p_i=\sigma(z_i)\)</span> is its predicted positive-class probability, and <span class="math inline">\(B\)</span> is the batch size.</p>
-<p>Each example contributes the log loss for its observed class, and division by <span class="math inline">\(B\)</span> forms the batch mean.</p>
-<p>The stable PyTorch implementation computes this expression directly from logits with <code>binary_cross_entropy_with_logits</code>.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Example: Logistic-regression dimensions</strong></p>
-<p>With <span class="math inline">\(B=2\)</span> examples and <span class="math inline">\(D=5\)</span> features, <span class="math inline">\(X\)</span> has dimensions <span class="math inline">\([2,5]\)</span>, <span class="math inline">\(w\)</span> has dimensions <span class="math inline">\([5]\)</span>, and <span class="math inline">\(z=Xw+b\)</span> has dimensions <span class="math inline">\([2]\)</span>.</p>
-</div>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Example: Binary cross-entropy</strong></p>
-<p>For labels <span class="math inline">\(y=(1,0)\)</span> and probabilities <span class="math inline">\(p=(0.8,0.25)\)</span>, the mean loss is <span class="math inline">\([-\log 0.8-\log(1-0.25)]/2\approx0.255\)</span> nats.</p>
-</div>
-<ul>
-<li>Train a binary linear classifier with BCE-with-logits or a multi-class classifier with cross-entropy.</li>
-<li>Print the dimensions of the feature batch, target vector, logits, scalar loss, and gradients.</li>
-<li>Verify that gradients are cleared between optimizer updates.</li>
-<li>Plot training loss beside one held-out metric and inspect one false positive and one false negative.</li>
-</ul>
-<p>The code takes a two-row feature matrix and binary labels, then produces logits, one scalar loss, and gradients for <span class="math inline">\(w\)</span> and <span class="math inline">\(b\)</span>. The assertions catch a missing batch axis or a gradient with the wrong dimensions.</p>
+<p>This lab connects the three-example calculation from <a href="ch-m2-c05.html#sec-m2-c05-s03">§5.3</a>, the <a href="ch-m2-c06.html#sec-m2-c06-s01">probability transform</a>, and the <a href="ch-m2-c08.html#sec-m2-c08-s03">loss reduction</a>. Its new task is to compare manually assembled gradients with autograd and observe one parameter update.</p>
+<p>Use <span class="math inline">\(X=((1,0),(0,1),(1,1))\)</span>, <span class="math inline">\(y=(1,0,1)\)</span>, <span class="math inline">\(w=(0.8,-0.3)\)</span>, and <span class="math inline">\(b=0.1\)</span>. The logits are <span class="math inline">\((0.9,-0.2,0.6)\)</span> and mean binary cross-entropy is approximately <span class="math inline">\(0.459\)</span>. The mean logit derivative is <span class="math inline">\((p-y)/3\)</span>. Multiplying by <span class="math inline">\(X^{\mathsf T}\)</span> produces the weight gradient, and summing produces the bias gradient. <a href="ch-m2-c11.html">Chapter 11</a> derives this backward path.</p>
+<p>The following runnable CPU check verifies these arrays before taking one SGD step. It then evaluates the new loss using the updated parameters. A smaller loss on these three training examples says nothing yet about generalization.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Logistic-regression forward, loss, and backward checks</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c24-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c24-c01-1"><a href="#lst-m2-c24-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
-<span id="lst-m2-c24-c01-2"><a href="#lst-m2-c24-c01-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c24-c01-3"><a href="#lst-m2-c24-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m2-c24-c01-4"><a href="#lst-m2-c24-c01-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c24-c01-5"><a href="#lst-m2-c24-c01-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Rows are examples; columns are features.</span></span>
-<span id="lst-m2-c24-c01-6"><a href="#lst-m2-c24-c01-6" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> torch.tensor([[<span class="fl">1.0</span>, <span class="fl">0.0</span>], [<span class="fl">0.0</span>, <span class="fl">1.0</span>]])</span>
-<span id="lst-m2-c24-c01-7"><a href="#lst-m2-c24-c01-7" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> torch.tensor([<span class="fl">1.0</span>, <span class="fl">0.0</span>])</span>
-<span id="lst-m2-c24-c01-8"><a href="#lst-m2-c24-c01-8" aria-hidden="true" tabindex="-1"></a>w <span class="op">=</span> torch.tensor([<span class="fl">0.2</span>, <span class="op">-</span><span class="fl">0.1</span>], requires_grad<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m2-c24-c01-9"><a href="#lst-m2-c24-c01-9" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> torch.tensor(<span class="fl">0.0</span>, requires_grad<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m2-c24-c01-10"><a href="#lst-m2-c24-c01-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c24-c01-11"><a href="#lst-m2-c24-c01-11" aria-hidden="true" tabindex="-1"></a><span class="co"># The affine score is the logistic-regression logit.</span></span>
-<span id="lst-m2-c24-c01-12"><a href="#lst-m2-c24-c01-12" aria-hidden="true" tabindex="-1"></a>logits <span class="op">=</span> X <span class="op">@</span> w <span class="op">+</span> b</span>
-<span id="lst-m2-c24-c01-13"><a href="#lst-m2-c24-c01-13" aria-hidden="true" tabindex="-1"></a>loss <span class="op">=</span> torch.nn.functional.binary_cross_entropy_with_logits(logits, y)</span>
-<span id="lst-m2-c24-c01-14"><a href="#lst-m2-c24-c01-14" aria-hidden="true" tabindex="-1"></a>loss.backward()</span>
-<span id="lst-m2-c24-c01-15"><a href="#lst-m2-c24-c01-15" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> logits.shape <span class="op">==</span> (<span class="dv">2</span>,)</span>
-<span id="lst-m2-c24-c01-16"><a href="#lst-m2-c24-c01-16" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> w.grad.shape <span class="op">==</span> w.shape</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The assertions verify one score per row and one gradient per trainable parameter.</p>
-<p>The lab must add training history and decision-boundary plots before drawing convergence conclusions.</p>
-<p>This baseline exposes every value used by a gradient update. The next lab applies the same path to text features and held-out evaluation.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c24-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c24-c01-1"><a href="#lst-m2-c24-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m2-c24-c01-2"><a href="#lst-m2-c24-c01-2" aria-hidden="true" tabindex="-1"></a>torch.set_default_dtype(torch.float64)</span>
+<span id="lst-m2-c24-c01-3"><a href="#lst-m2-c24-c01-3" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> torch.tensor([[<span class="fl">1.</span>, <span class="fl">0.</span>], [<span class="fl">0.</span>, <span class="fl">1.</span>], [<span class="fl">1.</span>, <span class="fl">1.</span>]])</span>
+<span id="lst-m2-c24-c01-4"><a href="#lst-m2-c24-c01-4" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> torch.tensor([<span class="fl">1.</span>, <span class="fl">0.</span>, <span class="fl">1.</span>])</span>
+<span id="lst-m2-c24-c01-5"><a href="#lst-m2-c24-c01-5" aria-hidden="true" tabindex="-1"></a>w <span class="op">=</span> torch.tensor([<span class="fl">0.8</span>, <span class="op">-</span><span class="fl">0.3</span>], requires_grad<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m2-c24-c01-6"><a href="#lst-m2-c24-c01-6" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> torch.tensor(<span class="fl">0.1</span>, requires_grad<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m2-c24-c01-7"><a href="#lst-m2-c24-c01-7" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> X <span class="op">@</span> w <span class="op">+</span> b</span>
+<span id="lst-m2-c24-c01-8"><a href="#lst-m2-c24-c01-8" aria-hidden="true" tabindex="-1"></a>loss <span class="op">=</span> torch.nn.functional.binary_cross_entropy_with_logits(z, y)</span>
+<span id="lst-m2-c24-c01-9"><a href="#lst-m2-c24-c01-9" aria-hidden="true" tabindex="-1"></a>g_z <span class="op">=</span> (z.detach().sigmoid() <span class="op">-</span> y) <span class="op">/</span> <span class="bu">len</span>(y)</span>
+<span id="lst-m2-c24-c01-10"><a href="#lst-m2-c24-c01-10" aria-hidden="true" tabindex="-1"></a>expected_w, expected_b <span class="op">=</span> X.T <span class="op">@</span> g_z, g_z.<span class="bu">sum</span>()</span>
+<span id="lst-m2-c24-c01-11"><a href="#lst-m2-c24-c01-11" aria-hidden="true" tabindex="-1"></a>loss.backward()</span>
+<span id="lst-m2-c24-c01-12"><a href="#lst-m2-c24-c01-12" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> torch.allclose(w.grad, expected_w)</span>
+<span id="lst-m2-c24-c01-13"><a href="#lst-m2-c24-c01-13" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> torch.allclose(b.grad, expected_b)</span>
+<span id="lst-m2-c24-c01-14"><a href="#lst-m2-c24-c01-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'loss, gradients:'</span>, loss.item(), w.grad.tolist(), b.grad.item())</span>
+<span id="lst-m2-c24-c01-15"><a href="#lst-m2-c24-c01-15" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
+<span id="lst-m2-c24-c01-16"><a href="#lst-m2-c24-c01-16" aria-hidden="true" tabindex="-1"></a>    w <span class="op">-=</span> <span class="fl">0.1</span> <span class="op">*</span> w.grad</span>
+<span id="lst-m2-c24-c01-17"><a href="#lst-m2-c24-c01-17" aria-hidden="true" tabindex="-1"></a>    b <span class="op">-=</span> <span class="fl">0.1</span> <span class="op">*</span> b.grad</span>
+<span id="lst-m2-c24-c01-18"><a href="#lst-m2-c24-c01-18" aria-hidden="true" tabindex="-1"></a>new_loss <span class="op">=</span> torch.nn.functional.binary_cross_entropy_with_logits(X <span class="op">@</span> w <span class="op">+</span> b, y)</span>
+<span id="lst-m2-c24-c01-19"><a href="#lst-m2-c24-c01-19" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> new_loss <span class="op">&lt;</span> loss</span>
+<span id="lst-m2-c24-c01-20"><a href="#lst-m2-c24-c01-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'updated parameters:'</span>, w.tolist(), b.item())</span>
+<span id="lst-m2-c24-c01-21"><a href="#lst-m2-c24-c01-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'new loss:'</span>, new_loss.item())</span>
+<span id="lst-m2-c24-c01-22"><a href="#lst-m2-c24-c01-22" aria-hidden="true" tabindex="-1"></a>w.grad <span class="op">=</span> <span class="va">None</span></span>
+<span id="lst-m2-c24-c01-23"><a href="#lst-m2-c24-c01-23" aria-hidden="true" tabindex="-1"></a>b.grad <span class="op">=</span> <span class="va">None</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Expected weight gradients are approximately <span class="math inline">\((-0.21446,0.03194)\)</span> and the bias gradient is <span class="math inline">\(-0.06441\)</span>. With learning rate <span class="math inline">\(0.1\)</span>, the updated weights are approximately <span class="math inline">\((0.82145,-0.30319)\)</span> and bias <span class="math inline">\(0.10644\)</span>. Keep the printed values at full precision when comparing implementations.</p>
+<p>Extend the calculation to several updates and a separate validation set. Plot training loss beside a held-out metric, inspect both false-positive and false-negative cases, and compare two learning rates while keeping the split fixed. The <a href="ch-m2-c09.html#sec-m2-c09-s02">evaluation chapter</a> supplies the metric definitions. The experiment should explain the observed change, not just list a final score.</p>
+<p><strong>Source experiment requirements.</strong> Use the supplied SST-2 workflow to build the feature vocabulary from training data only. Compare binary logits with the equivalent two-class formulation using <a href="ch-m2-c06.html">Chapter 6</a>, and prefer the <a href="ch-m2-c08.html#sec-m2-c08-s01">stable logits loss</a> to probability clamping. Keep learning rates <span class="math inline">\((0.01,0.03,0.1,0.3,1.0)\)</span> and batch sizes <span class="math inline">\((50,100,200)\)</span> in a declared search grid. For each setting, retain training and validation loss, the chosen metric, and parameter values after each update. Plot comparable heatmaps and explain speed, stability, and held-out behavior.</p>
+<p>Then vary L1 strength over <span class="math inline">\((0,10^{-4},10^{-3},10^{-2},10^{-1})\)</span> with other settings fixed. Compare zero and small-random initialization, count coefficients above <span class="math inline">\(10^{-7}\)</span>, and plot selected coefficient trajectories. <a href="ch-m2-c10.html#sec-m2-c10-s06">§10.6</a> explains why near-zero coefficients are not necessarily exact zeros. Finally compare gradient descent, momentum, AdaGrad, and Adam on <span class="math inline">\(f(x,y)=x^2+4y^2\)</span> and the source’s six-hump Camel function. Use the same initial point for each comparison, record both loss and the path through parameter space, and repeat from another starting point before claiming global convergence. The source skeleton uses a different bowl coefficient and an unsafe log contour near negative minima. Keep the equation and code consistent, and use ordinary contours or a documented positive offset for display.</p>
 </section>
 <section id="sec-m2-c24-s02" class="level2" data-number="24.2">
 <h2 data-number="24.2" class="anchored" data-anchor-id="sec-m2-c24-s02"><span class="header-section-number">24.2</span> Lab: End-to-End Text Classification and Evaluation Pipeline</h2>
@@ -559,30 +584,37 @@ L=-\frac{1}{B}\sum_{i=1}^{B}\left[y_i\log p_i+(1-y_i)\log(1-p_i)\right],\quad p_
 <li>Train a four-class MLP head and record validation loss and F1 or accuracy.</li>
 <li>Inspect several incorrect predictions and connect each error to the tokenized input or representation.</li>
 </ul>
-<p>The abbreviated code accepts two batches of token vectors, mean-pools each document, and returns four class logits and a scalar cross-entropy loss. The real assignment must learn the vectors from the training split; fixed toy vectors only verify the dimensions and library calls.</p>
+<p>The abbreviated code accepts two batches of token vectors, pools only the real tokens in each document, and returns four class logits and a scalar cross-entropy loss. The real assignment must learn the vectors from the training split; fixed toy vectors only verify the dimensions and library calls.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Pooled token vectors and four-class MLP logits</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c24-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c24-c02-1"><a href="#lst-m2-c24-c02-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
 <span id="lst-m2-c24-c02-2"><a href="#lst-m2-c24-c02-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
-<span id="lst-m2-c24-c02-3"><a href="#lst-m2-c24-c02-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c24-c02-4"><a href="#lst-m2-c24-c02-4" aria-hidden="true" tabindex="-1"></a><span class="co"># A real run obtains these token vectors from the trained Word2Vec model.</span></span>
-<span id="lst-m2-c24-c02-5"><a href="#lst-m2-c24-c02-5" aria-hidden="true" tabindex="-1"></a>token_vectors <span class="op">=</span> torch.tensor([</span>
-<span id="lst-m2-c24-c02-6"><a href="#lst-m2-c24-c02-6" aria-hidden="true" tabindex="-1"></a>    [[<span class="fl">1.0</span>, <span class="fl">0.0</span>, <span class="fl">0.5</span>], [<span class="fl">0.5</span>, <span class="fl">1.0</span>, <span class="fl">0.0</span>]],</span>
-<span id="lst-m2-c24-c02-7"><a href="#lst-m2-c24-c02-7" aria-hidden="true" tabindex="-1"></a>    [[<span class="fl">0.0</span>, <span class="fl">1.0</span>, <span class="fl">0.5</span>], [<span class="fl">1.0</span>, <span class="fl">0.5</span>, <span class="fl">0.0</span>]],</span>
-<span id="lst-m2-c24-c02-8"><a href="#lst-m2-c24-c02-8" aria-hidden="true" tabindex="-1"></a>])</span>
-<span id="lst-m2-c24-c02-9"><a href="#lst-m2-c24-c02-9" aria-hidden="true" tabindex="-1"></a>article_vectors <span class="op">=</span> token_vectors.mean(dim<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="lst-m2-c24-c02-10"><a href="#lst-m2-c24-c02-10" aria-hidden="true" tabindex="-1"></a>classifier <span class="op">=</span> nn.Sequential(nn.Linear(<span class="dv">3</span>, <span class="dv">8</span>), nn.ReLU(), nn.Linear(<span class="dv">8</span>, <span class="dv">4</span>))</span>
-<span id="lst-m2-c24-c02-11"><a href="#lst-m2-c24-c02-11" aria-hidden="true" tabindex="-1"></a>labels <span class="op">=</span> torch.tensor([<span class="dv">0</span>, <span class="dv">2</span>])</span>
-<span id="lst-m2-c24-c02-12"><a href="#lst-m2-c24-c02-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c24-c02-13"><a href="#lst-m2-c24-c02-13" aria-hidden="true" tabindex="-1"></a>logits <span class="op">=</span> classifier(article_vectors)</span>
-<span id="lst-m2-c24-c02-14"><a href="#lst-m2-c24-c02-14" aria-hidden="true" tabindex="-1"></a>loss <span class="op">=</span> nn.CrossEntropyLoss()(logits, labels)</span>
-<span id="lst-m2-c24-c02-15"><a href="#lst-m2-c24-c02-15" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> article_vectors.shape <span class="op">==</span> (<span class="dv">2</span>, <span class="dv">3</span>)</span>
-<span id="lst-m2-c24-c02-16"><a href="#lst-m2-c24-c02-16" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> logits.shape <span class="op">==</span> (<span class="dv">2</span>, <span class="dv">4</span>)</span>
-<span id="lst-m2-c24-c02-17"><a href="#lst-m2-c24-c02-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(loss.item())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The dimensions connect token embeddings to one four-class prediction per article.</p>
+<span id="lst-m2-c24-c02-3"><a href="#lst-m2-c24-c02-3" aria-hidden="true" tabindex="-1"></a>torch.manual_seed(<span class="dv">7</span>)</span>
+<span id="lst-m2-c24-c02-4"><a href="#lst-m2-c24-c02-4" aria-hidden="true" tabindex="-1"></a>token_vectors <span class="op">=</span> torch.tensor([</span>
+<span id="lst-m2-c24-c02-5"><a href="#lst-m2-c24-c02-5" aria-hidden="true" tabindex="-1"></a>    [[<span class="fl">2.</span>, <span class="fl">0.</span>], [<span class="fl">0.</span>, <span class="fl">4.</span>], [<span class="fl">0.</span>, <span class="fl">0.</span>]],</span>
+<span id="lst-m2-c24-c02-6"><a href="#lst-m2-c24-c02-6" aria-hidden="true" tabindex="-1"></a>    [[<span class="fl">1.</span>, <span class="fl">1.</span>], [<span class="fl">0.</span>, <span class="fl">0.</span>], [<span class="fl">0.</span>, <span class="fl">0.</span>]],</span>
+<span id="lst-m2-c24-c02-7"><a href="#lst-m2-c24-c02-7" aria-hidden="true" tabindex="-1"></a>])</span>
+<span id="lst-m2-c24-c02-8"><a href="#lst-m2-c24-c02-8" aria-hidden="true" tabindex="-1"></a>mask <span class="op">=</span> torch.tensor([[<span class="fl">1.</span>, <span class="fl">1.</span>, <span class="fl">0.</span>], [<span class="fl">1.</span>, <span class="fl">0.</span>, <span class="fl">0.</span>]])</span>
+<span id="lst-m2-c24-c02-9"><a href="#lst-m2-c24-c02-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> pool(values, valid):</span>
+<span id="lst-m2-c24-c02-10"><a href="#lst-m2-c24-c02-10" aria-hidden="true" tabindex="-1"></a>    counts <span class="op">=</span> valid.<span class="bu">sum</span>(dim<span class="op">=</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m2-c24-c02-11"><a href="#lst-m2-c24-c02-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (counts <span class="op">==</span> <span class="dv">0</span>).<span class="bu">any</span>():</span>
+<span id="lst-m2-c24-c02-12"><a href="#lst-m2-c24-c02-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">'Each article needs at least one real token'</span>)</span>
+<span id="lst-m2-c24-c02-13"><a href="#lst-m2-c24-c02-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (values <span class="op">*</span> valid.unsqueeze(<span class="op">-</span><span class="dv">1</span>)).<span class="bu">sum</span>(dim<span class="op">=</span><span class="dv">1</span>) <span class="op">/</span> counts</span>
+<span id="lst-m2-c24-c02-14"><a href="#lst-m2-c24-c02-14" aria-hidden="true" tabindex="-1"></a>article_vectors <span class="op">=</span> pool(token_vectors, mask)</span>
+<span id="lst-m2-c24-c02-15"><a href="#lst-m2-c24-c02-15" aria-hidden="true" tabindex="-1"></a>padded <span class="op">=</span> torch.cat([token_vectors, torch.zeros(<span class="dv">2</span>, <span class="dv">1</span>, <span class="dv">2</span>)], dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="lst-m2-c24-c02-16"><a href="#lst-m2-c24-c02-16" aria-hidden="true" tabindex="-1"></a>padded_mask <span class="op">=</span> torch.cat([mask, torch.zeros(<span class="dv">2</span>, <span class="dv">1</span>)], dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="lst-m2-c24-c02-17"><a href="#lst-m2-c24-c02-17" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> torch.allclose(pool(padded, padded_mask), article_vectors)</span>
+<span id="lst-m2-c24-c02-18"><a href="#lst-m2-c24-c02-18" aria-hidden="true" tabindex="-1"></a>classifier <span class="op">=</span> nn.Sequential(nn.Linear(<span class="dv">2</span>, <span class="dv">8</span>), nn.ReLU(), nn.Linear(<span class="dv">8</span>, <span class="dv">4</span>))</span>
+<span id="lst-m2-c24-c02-19"><a href="#lst-m2-c24-c02-19" aria-hidden="true" tabindex="-1"></a>logits <span class="op">=</span> classifier(article_vectors)</span>
+<span id="lst-m2-c24-c02-20"><a href="#lst-m2-c24-c02-20" aria-hidden="true" tabindex="-1"></a>loss <span class="op">=</span> nn.CrossEntropyLoss()(logits, torch.tensor([<span class="dv">0</span>, <span class="dv">2</span>]))</span>
+<span id="lst-m2-c24-c02-21"><a href="#lst-m2-c24-c02-21" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> logits.shape <span class="op">==</span> (<span class="dv">2</span>, <span class="dv">4</span>)</span>
+<span id="lst-m2-c24-c02-22"><a href="#lst-m2-c24-c02-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(article_vectors.tolist(), loss.item())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The dimensions connect token embeddings to one four-class prediction per article. The padding-invariance assertion checks the <a href="ch-m2-c13.html#sec-m2-c13-s01">masked mean from §13.1</a>: adding an ignored token must not change an article vector.</p>
 <p>The real assignment trains Word2Vec and the classifier on AG News rather than using fixed toy vectors.</p>
 <p>The classification pipeline ends with a loss and metrics. Attention makes the sequence representation itself inspectable.</p>
+<p>For the full AG News experiment, compare BPE and WordPiece on five sentences using tokenizers fitted only to training text. Train both CBOW and skip-gram with embedding widths 50, 100, and 200. Inspect three token-neighbor examples and report why <code>min_count</code> makes the embedding vocabulary differ from the tokenizer vocabulary. Select the representation using validation data. The classifier has one to three hidden layers, a nonlinear activation, and four output logits. Record all dimensions and training settings.</p>
+<p>After the settings are fixed, report test accuracy and a confusion matrix, then show at least three errors with the original article, true label, and predicted label. To investigate a suspected trigger word, remove or replace that word and compare the prediction while keeping the rest of the input fixed. This perturbation tests sensitivity to that edit, not a complete explanation of the model’s reasoning.</p>
 </section>
 <section id="sec-m2-c24-s03" class="level2" data-number="24.3">
 <h2 data-number="24.3" class="anchored" data-anchor-id="sec-m2-c24-s03"><span class="header-section-number">24.3</span> Lab: Tracing Scaled Dot-Product Attention and Causal Masks</h2>
@@ -593,7 +625,7 @@ L=-\frac{1}{B}\sum_{i=1}^{B}\left[y_i\log p_i+(1-y_i)\log(1-p_i)\right],\quad p_
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Attention lab output:</strong></span></p>
 <p><span id="eq-m2-c24-e03"><span class="math display">\[
 O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
-\tag{24.3}\]</span></span></p>
+\tag{24.1}\]</span></span></p>
 <p>where Q is query vectors for the positions being updated; K is key vectors for the positions that may be read; V is value vectors mixed after the attention weights are computed; <span class="math inline">\(d_{k}\)</span> is query/key vector dimension used for scaling; M is attention mask added to disallowed scores before softmax; O is output vectors after the weighted sum of values.</p>
 <p>The lab forms scores from query-key dot products, adds the mask, normalizes each query row with softmax, and uses the resulting weights to average value vectors.</p>
 <p>A mismatch usually means a dimension, mask, scaling, or softmax-axis error.</p>
@@ -630,19 +662,23 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 <p>The output dimensions and row sums verify the core attention calculation.</p>
 <p>A complete lab also plots the matrix and repeats the calculation after changing one token.</p>
 <p>The saved score, mask, weight, and context tensors make attention a calculation that can be checked position by position.</p>
+<p>The source also asks for at least two heads. Hold the token embeddings fixed while giving each head separate projection matrices, then compare their score matrices. For a word replacement, change only the relevant token vector and reuse every other input and projection. Regenerating all random vectors between plots would confound the comparison. Random projections demonstrate the calculation but do not establish learned linguistic roles for the heads.</p>
 </section>
 <section id="sec-m2-c24-s04" class="level2" data-number="24.4">
 <h2 data-number="24.4" class="anchored" data-anchor-id="sec-m2-c24-s04"><span class="header-section-number">24.4</span> Lab: Executing QLoRA Fine-Tuning on a Transformer Checkpoint</h2>
-<p>This lab prepares instruction-answer examples, configures four-bit loading and Quantized Low-Rank Adaptation (QLoRA) adapters, and reports trainable parameters and evaluation changes.</p>
-<p>Use instruction-answer examples to inspect a four-bit base model with low-rank adapter matrices. The base weights remain frozen; the optimizer tracks only the adapter parameters and their state.</p>
-<p>A small run is sufficient when hardware is limited. The report should distinguish trainable parameter count, base-weight storage, training loss, and behavior on held-out prompts rather than treating a generated answer as the only result.</p>
-<ul>
-<li>State the base checkpoint, tokenizer, dataset, and target LoRA modules.</li>
-<li>Count trainable adapter parameters as a fraction of total parameters.</li>
-<li>Reconstruct one quantized value from a code and its stored scale.</li>
-<li>Compare the same prompt before and after adaptation, then note one overfitting or safety risk.</li>
-</ul>
-<p>The local code checks the parameter count for one Low-Rank Adaptation (LoRA) update and reconstructs one affine-quantized value. It does not load or fine-tune a checkpoint; the full lab must add the model, data, optimizer, and held-out evaluation.</p>
+<p>The source assignment compares a causal decoder and an encoder-decoder on answers written for three audiences: child, student, and expert. This makes the <a href="ch-m2-c18.html#sec-m2-c18-s03">architecture/objective distinction</a> observable in both dataset formatting and generated answers. <a href="ch-m2-c20.html#sec-m2-c20-s04">Chapter 20</a> supplies the adapter mechanism.</p>
+<p>Use the assignment’s checkpoints, <code>HuggingFaceTB/SmolLM2-360M-Instruct</code> and <code>google/flan-t5-small</code>, and questions drawn from the filtered Dolly dataset. These are course choices rather than a current ranking. Inspect each model configuration and its adapter-compatible layers before configuring a run.</p>
+<ol type="1">
+<li>Split question IDs before creating audience-specific variants. For each training question, prepare child, student, and expert answers. Validate the fields and all three levels on a small batch before saving JSONL. Display the training and test tables in the notebook.</li>
+<li>Reserve 20 manually reviewed test examples covering all three levels. Exclude their underlying questions from training, including paraphrases and other audience variants. Fix this set before comparing models.</li>
+<li>For the causal decoder, serialize question, requested level, answer marker, and answer in one sequence. Use answer-only labels if that is the chosen objective, with instruction and padding positions ignored. Check whether the model shifts labels internally so they are not shifted twice.</li>
+<li>For the encoder-decoder, tokenize question and level as encoder input and answer as a separate target. Padding labels are ignored. Decoder inputs must follow the model’s target-shift convention rather than concatenating the source as causal training text.</li>
+<li>Run both base models on the frozen test set before training. Save the full decoded answers and decoding settings. These provide the control condition for the adaptation comparison.</li>
+<li>Load each frozen base in four-bit form where the environment supports it, prepare it for adapter training, attach LoRA to verified target modules, and inspect the trainable parameter list. Every trainable tensor should belong to an intended adapter or explicitly permitted module. Optimizer state is allocated for these tensors.</li>
+<li>Train using training data and select settings using validation data. Record batch size, accumulated batch size, sequence limit, learning rate, rank, adapter scale, target modules, and peak memory. Save adapter weights together with the base checkpoint revision and tokenizer configuration.</li>
+<li>Reload the adapter with its matching base, repeat the same 20 test prompts, and compare against the saved base outputs. A successful reload and equivalent evaluation setup are part of the experiment.</li>
+</ol>
+<p>The local code below checks only adapter parameter count and a dequantization calculation. It is a prerequisite check for the model experiment, not evidence that either checkpoint was fine-tuned.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> LoRA parameter count and affine dequantization checks</p>
 </div>
@@ -659,9 +695,9 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 <span id="lst-m2-c24-c04-11"><a href="#lst-m2-c24-c04-11" aria-hidden="true" tabindex="-1"></a>scale, q, zero_point <span class="op">=</span> <span class="fl">0.1</span>, <span class="dv">13</span>, <span class="dv">3</span></span>
 <span id="lst-m2-c24-c04-12"><a href="#lst-m2-c24-c04-12" aria-hidden="true" tabindex="-1"></a>x_hat <span class="op">=</span> scale <span class="op">*</span> (q <span class="op">-</span> zero_point)</span>
 <span id="lst-m2-c24-c04-13"><a href="#lst-m2-c24-c04-13" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> x_hat <span class="op">==</span> <span class="fl">1.0</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The assertions verify the low-rank parameter formula and one dequantization step.</p>
-<p>The full notebook adds pretrained-model loading, instruction data, training, and evaluation.</p>
-<p>Adapter training changes a small parameter set while the base model remains fixed. Recurrent generation provides a contrasting sequence-model lab.</p>
+<p>For every model and test example, retain the question, level, expected answer, base output, adapted output, “better after adaptation?” decision, and notes. Use three independent criteria: factual agreement with the reviewed reference, relevance to the question, and suitability for the requested level. A child-level response should be understandable without unexplained specialist terms. An expert response should preserve necessary precision. Shorter is not automatically better.</p>
+<p>Assign each criterion 0 for a clear failure, 1 for partial success, or 2 for success, with a short explanation tied to the answer. Compare the same example before and after adaptation, report regressions as well as improvements, and show results by level. With only 20 cases, avoid general claims about architecture superiority. Explain whether the observed difference could arise from model size, prior instruction training, tokenization, or training settings as well as architecture.</p>
+<p>The completed notebook includes the executed data preparation, training, reload, and evaluation cells, their visible outputs, and an error analysis. It should explain what changed in the adapters, what stayed fixed in the base, and whether the measured task benefit justifies the added training and maintenance cost. That decision connects <a href="ch-m2-c19.html">pretraining</a>, <a href="ch-m2-c20.html">adaptation</a>, and <a href="ch-m2-c21.html">inference settings</a>.</p>
 </section>
 <section id="sec-m2-c24-s05" class="level2" data-number="24.5">
 <h2 data-number="24.5" class="anchored" data-anchor-id="sec-m2-c24-s05"><span class="header-section-number">24.5</span> Lab: Implementing a Character-Level RNN and Generation Loop</h2>
@@ -700,7 +736,9 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 <span id="lst-m2-c24-c05-19"><a href="#lst-m2-c24-c05-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(top_ids, probabilities)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The last recurrent state produces one distribution over the character vocabulary.</p>
 <p>Training and recurrent-state carryover must be added before the sample represents a learned name model.</p>
-<p>The recurrent loop exposes the serial form of next-token prediction. An n-gram model provides the fixed-history comparison.</p>
+<p>Compare this recurrent result with the <a href="#sec-m2-c24-s06">n-gram baseline</a>, which should be completed first. Use the same held-out text and explain any change in tokenization before comparing scores.</p>
+<p>For the source dinosaur-name task, split whole names before creating overlapping windows so a validation name cannot leak into training through a neighboring window. Add start and end markers, build the character vocabulary from training names, and construct input windows with targets shifted by one character. One-hot inputs have dimensions <span class="math inline">\([B,T,V]\)</span> and LSTM outputs <span class="math inline">\([B,T,H]\)</span>. The output projection produces <span class="math inline">\([B,T,V]\)</span> logits for the target character IDs. Verify this one-batch path before training.</p>
+<p>Reset recurrent state for independent or shuffled windows. Carry and detach state only when consecutive batches truly continue the same streams. Assign the tensors returned by <code>.to(device)</code> rather than discarding them, use the actual last-batch size, and evaluate with <code>model.eval()</code> and disabled gradient recording. Restore training mode afterward. Compare greedy, random, and top-k sampling at several temperatures from fixed prefixes, stopping at the end marker or a declared length limit. Keep validation loss and generated examples together when discussing memorization and variation.</p>
 </section>
 <section id="sec-m2-c24-s06" class="level2" data-number="24.6">
 <h2 data-number="24.6" class="anchored" data-anchor-id="sec-m2-c24-s06"><span class="header-section-number">24.6</span> Lab: Training an N-Gram Language Model and Perplexity Evaluator</h2>
@@ -714,38 +752,44 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 <li>Generate a short continuation and calculate held-out perplexity.</li>
 <li>Explain the fixed-context limitation exposed by a sparse or unseen history.</li>
 </ul>
-<p>The code counts bigrams in two short sentences and computes <span class="math inline">\(P(\text{cat}\mid\text{the})\)</span>. It has no smoothing, so an unseen history has no usable probability estimate; the full notebook adds unknown-token handling and compares smoothing choices.</p>
+<p>The runnable count check uses the <a href="ch-m2-c15.html#sec-m2-c15-s02">additive smoothing calculation in §15.2</a>. It verifies normalization for observed and unseen histories and calculates a held-out perplexity. The complete NLTK experiment then adds corpus preparation, boundary tokens, vocabulary cutoffs, and generation.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Padded bigram counts and maximum-likelihood probability</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c24-c06"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c24-c06-1"><a href="#lst-m2-c24-c06-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> collections <span class="im">import</span> Counter</span>
-<span id="lst-m2-c24-c06-2"><a href="#lst-m2-c24-c06-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c24-c06-3"><a href="#lst-m2-c24-c06-3" aria-hidden="true" tabindex="-1"></a>sentences <span class="op">=</span> [[<span class="st">"&lt;s&gt;"</span>, <span class="st">"the"</span>, <span class="st">"cat"</span>, <span class="st">"&lt;/s&gt;"</span>], [<span class="st">"&lt;s&gt;"</span>, <span class="st">"the"</span>, <span class="st">"dog"</span>, <span class="st">"&lt;/s&gt;"</span>]]</span>
-<span id="lst-m2-c24-c06-4"><a href="#lst-m2-c24-c06-4" aria-hidden="true" tabindex="-1"></a>bigrams <span class="op">=</span> Counter(</span>
-<span id="lst-m2-c24-c06-5"><a href="#lst-m2-c24-c06-5" aria-hidden="true" tabindex="-1"></a>    (left, right)</span>
-<span id="lst-m2-c24-c06-6"><a href="#lst-m2-c24-c06-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> sentence <span class="kw">in</span> sentences</span>
-<span id="lst-m2-c24-c06-7"><a href="#lst-m2-c24-c06-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> left, right <span class="kw">in</span> <span class="bu">zip</span>(sentence, sentence[<span class="dv">1</span>:])</span>
-<span id="lst-m2-c24-c06-8"><a href="#lst-m2-c24-c06-8" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="lst-m2-c24-c06-9"><a href="#lst-m2-c24-c06-9" aria-hidden="true" tabindex="-1"></a>contexts <span class="op">=</span> Counter(left <span class="cf">for</span> left, _ <span class="kw">in</span> bigrams.elements())</span>
-<span id="lst-m2-c24-c06-10"><a href="#lst-m2-c24-c06-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m2-c24-c06-11"><a href="#lst-m2-c24-c06-11" aria-hidden="true" tabindex="-1"></a>probability <span class="op">=</span> bigrams[(<span class="st">"the"</span>, <span class="st">"cat"</span>)] <span class="op">/</span> contexts[<span class="st">"the"</span>]</span>
-<span id="lst-m2-c24-c06-12"><a href="#lst-m2-c24-c06-12" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> probability <span class="op">==</span> <span class="fl">0.5</span></span>
-<span id="lst-m2-c24-c06-13"><a href="#lst-m2-c24-c06-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bigrams, probability)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The context <code>the</code> is followed once by <code>cat</code> and once by <code>dog</code>, giving probability one half.</p>
+<span id="lst-m2-c24-c06-2"><a href="#lst-m2-c24-c06-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> math <span class="im">import</span> exp, log, isclose</span>
+<span id="lst-m2-c24-c06-3"><a href="#lst-m2-c24-c06-3" aria-hidden="true" tabindex="-1"></a>vocabulary <span class="op">=</span> (<span class="st">'cat'</span>, <span class="st">'dog'</span>, <span class="st">'UNK'</span>)</span>
+<span id="lst-m2-c24-c06-4"><a href="#lst-m2-c24-c06-4" aria-hidden="true" tabindex="-1"></a>counts <span class="op">=</span> {<span class="st">'the'</span>: Counter({<span class="st">'cat'</span>: <span class="dv">1</span>, <span class="st">'dog'</span>: <span class="dv">1</span>})}</span>
+<span id="lst-m2-c24-c06-5"><a href="#lst-m2-c24-c06-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> probability(word, history, alpha<span class="op">=</span><span class="fl">1.0</span>):</span>
+<span id="lst-m2-c24-c06-6"><a href="#lst-m2-c24-c06-6" aria-hidden="true" tabindex="-1"></a>    word <span class="op">=</span> word <span class="cf">if</span> word <span class="kw">in</span> vocabulary <span class="cf">else</span> <span class="st">'UNK'</span></span>
+<span id="lst-m2-c24-c06-7"><a href="#lst-m2-c24-c06-7" aria-hidden="true" tabindex="-1"></a>    row <span class="op">=</span> counts.get(history, Counter())</span>
+<span id="lst-m2-c24-c06-8"><a href="#lst-m2-c24-c06-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (row[word] <span class="op">+</span> alpha) <span class="op">/</span> (<span class="bu">sum</span>(row.values()) <span class="op">+</span> alpha <span class="op">*</span> <span class="bu">len</span>(vocabulary))</span>
+<span id="lst-m2-c24-c06-9"><a href="#lst-m2-c24-c06-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> history <span class="kw">in</span> (<span class="st">'the'</span>, <span class="st">'unseen'</span>):</span>
+<span id="lst-m2-c24-c06-10"><a href="#lst-m2-c24-c06-10" aria-hidden="true" tabindex="-1"></a>    values <span class="op">=</span> [probability(w, history) <span class="cf">for</span> w <span class="kw">in</span> vocabulary]</span>
+<span id="lst-m2-c24-c06-11"><a href="#lst-m2-c24-c06-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> isclose(<span class="bu">sum</span>(values), <span class="fl">1.0</span>)</span>
+<span id="lst-m2-c24-c06-12"><a href="#lst-m2-c24-c06-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(history, values)</span>
+<span id="lst-m2-c24-c06-13"><a href="#lst-m2-c24-c06-13" aria-hidden="true" tabindex="-1"></a>test_pairs <span class="op">=</span> [(<span class="st">'the'</span>, <span class="st">'cat'</span>), (<span class="st">'the'</span>, <span class="st">'unlisted'</span>)]</span>
+<span id="lst-m2-c24-c06-14"><a href="#lst-m2-c24-c06-14" aria-hidden="true" tabindex="-1"></a>mean_nll <span class="op">=</span> <span class="op">-</span><span class="bu">sum</span>(log(probability(w, h)) <span class="cf">for</span> h, w <span class="kw">in</span> test_pairs) <span class="op">/</span> <span class="bu">len</span>(test_pairs)</span>
+<span id="lst-m2-c24-c06-15"><a href="#lst-m2-c24-c06-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">'perplexity:'</span>, exp(mean_nll))</span>
+<span id="lst-m2-c24-c06-16"><a href="#lst-m2-c24-c06-16" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> isclose(exp(mean_nll), <span class="dv">1</span> <span class="op">/</span> (<span class="fl">0.08</span> <span class="op">**</span> <span class="fl">0.5</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The observed context <code>the</code> gives smoothed probabilities 0.4, 0.4, and 0.2 over the fixed three-item vocabulary. An unseen history gives one third to each item. The two scored continuation probabilities give perplexity approximately 3.54.</p>
 <p>The NLTK notebook adds vocabulary cutoffs, unknown tokens, smoothing alternatives, and generation.</p>
 <p>Counts, smoothing, and perplexity make the fixed-history baseline measurable before a neural model replaces it.</p>
 </section>
 <section id="sec-m2-c24-s07" class="level2" data-number="24.7">
 <h2 data-number="24.7" class="anchored" data-anchor-id="sec-m2-c24-s07"><span class="header-section-number">24.7</span> Lab: End-to-End Multimodal Vision-Language Inference Trace</h2>
-<p>A vision-language inference pipeline converts pixels and text prompts into tensors, generates output token IDs, and decodes those IDs into a caption or answer.</p>
-<p>A vision-language pipeline converts pixels and a text prompt into processor outputs, then generates token IDs and decodes them into a caption or answer. The model has the same broad structure as a language system, but its first representation is an image tensor or patch sequence.</p>
-<p>Keep the input image, prompt, output IDs, decoded text, and error category together in the result. Captioning and visual question answering (VQA) should be evaluated separately because they ask for different outputs from the same visual evidence.</p>
-<ul>
-<li>Identify the image processor, visual encoder, projection or fusion step, language decoder, and decoding rule.</li>
-<li>Print image, patch or visual-feature, prompt-token, and output-token dimensions.</li>
-<li>Compare one correct and one incorrect output, naming whether the failure concerns objects, attributes, counting, or the question condition.</li>
-</ul>
-<p>The local code converts a four-by-four grayscale image into four two-by-two patches and projects every flattened patch from four values to width three. It verifies only the visual representation step; a complete vision-language run must also process the prompt and decode model outputs.</p>
+<p>This case connects image representation, retrieval, generated answers, and evaluation. It follows the source homework’s three-stage teaching pattern, using object categories or landmarks for the retrieval task. Choose, for example, bicycles, kettles, and backpacks rather than identifying people from faces.</p>
+<p>First establish the captioning and VQA controls. Caption at least five images covering different scenes and object arrangements. For at least three images, ask an object-recognition question, a counting question, and an attribute question. Save the image, prompt, generated answer, reviewed expected answer, and at least two failure examples for each task. A plausible sentence is not sufficient evidence that its objects, counts, or attributes match the image.</p>
+<p>For the integrated case, select three to five object categories and at least eight images per category. Split each category into five or six reference images and two or three query images, keeping near-duplicates on the same side. Freeze query labels before choosing retrieval settings. If thresholds or aggregation rules need tuning, reserve a separate validation subset from the reference collection.</p>
+<ol type="1">
+<li>Use the chosen image encoder and its matching processor to transform every reference image into one vector. Save image IDs, category labels, checkpoint revision, preprocessing settings, and embeddings together. <a href="ch-m2-c22.html#sec-m2-c22-s02">Chapter 22</a> explains the contrastive representation, while <a href="ch-m2-c14.html#sec-m2-c14-s02">§14.2</a> supplies cosine similarity.</li>
+<li>Transform each query with the same processor and encoder. Normalize nonzero vectors, compute its similarities to the reference collection, and apply one declared rule, such as the category of the nearest reference image. Save the full score row so an incorrect result can be investigated.</li>
+<li>Ask a separate captioning or VQA model about visible attributes, counts, or actions in the query image. Keep the retrieval result out of that prompt for the baseline run so its category error cannot silently steer the visual answer.</li>
+<li>Compose an answer from the two recorded outputs, retaining their uncertainty. For example, “The nearest reference is in the bicycle category. The visual answer reports a red frame.” Do not convert cosine similarity into an unsupported probability of correctness.</li>
+<li>Score retrieval category correctness separately from answer correctness. For counting, compare against a reviewed count. For attribute questions, declare accepted values or equivalent phrases. For captions, inspect whether each asserted object and attribute is supported by the image. Record omissions separately from invented details.</li>
+</ol>
+<p>The result table contains query ID, expected category, selected reference and category, similarity score, visual question, visual answer, combined answer, and error category. Distinguish wrong retrieval with a correct visual answer, correct retrieval with a wrong visual answer, both wrong, and a composition error. This prevents one aggregate score from hiding a failing component.</p>
+<p>The patch code isolates the visual input calculation. It converts a four-by-four grayscale image into four two-by-two patches and projects each flattened patch to width three.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Patch tokens as inputs to a vision-language pipeline</p>
 </div>
@@ -760,14 +804,33 @@ O=\operatorname{softmax}\left(\frac{QK^{T}}{\sqrt{d_k}}+M\right)V
 <span id="lst-m2-c24-c07-9"><a href="#lst-m2-c24-c07-9" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> patches.shape <span class="op">==</span> (<span class="dv">1</span>, <span class="dv">4</span>, <span class="dv">4</span>)</span>
 <span id="lst-m2-c24-c07-10"><a href="#lst-m2-c24-c07-10" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> patch_tokens.shape <span class="op">==</span> (<span class="dv">1</span>, <span class="dv">4</span>, <span class="dv">3</span>)</span>
 <span id="lst-m2-c24-c07-11"><a href="#lst-m2-c24-c07-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(patch_tokens)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The image becomes four patch positions with three-coordinate representations.</p>
-<p>The homework uses pretrained captioning and VQA models; this local check isolates the representation step.</p>
-<p>The multimodal trace reuses the same representation, scoring, and output-selection pattern with a different input modality.</p>
+<p>The output has four patch positions with three coordinates each. A pretrained encoder, matching processor, and language model are still required for the complete image experiment. The additional runnable check below starts from supplied object vectors and saved visual answers. It tests score computation and result composition without claiming that an image encoder or VQA model produced those fixtures.</p>
+<div class="publisher-code-caption" data-custom-style="Code Caption">
+<p><strong>Code example:</strong> Object retrieval and answer composition from supplied fixtures</p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c24-c08"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c24-c08-1"><a href="#lst-m2-c24-c08-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="lst-m2-c24-c08-2"><a href="#lst-m2-c24-c08-2" aria-hidden="true" tabindex="-1"></a>references <span class="op">=</span> np.array([[<span class="fl">1.</span>, <span class="fl">0.</span>], [<span class="fl">0.</span>, <span class="fl">1.</span>], [<span class="op">-</span><span class="fl">1.</span>, <span class="fl">0.</span>]])</span>
+<span id="lst-m2-c24-c08-3"><a href="#lst-m2-c24-c08-3" aria-hidden="true" tabindex="-1"></a>categories <span class="op">=</span> [<span class="st">'bicycle'</span>, <span class="st">'kettle'</span>, <span class="st">'backpack'</span>]</span>
+<span id="lst-m2-c24-c08-4"><a href="#lst-m2-c24-c08-4" aria-hidden="true" tabindex="-1"></a>queries <span class="op">=</span> np.array([[<span class="fl">0.9</span>, <span class="fl">0.1</span>], [<span class="fl">0.1</span>, <span class="fl">0.9</span>]])</span>
+<span id="lst-m2-c24-c08-5"><a href="#lst-m2-c24-c08-5" aria-hidden="true" tabindex="-1"></a>visual_answers <span class="op">=</span> [<span class="st">'a red frame'</span>, <span class="st">'a silver handle'</span>]</span>
+<span id="lst-m2-c24-c08-6"><a href="#lst-m2-c24-c08-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> unit_rows(x):</span>
+<span id="lst-m2-c24-c08-7"><a href="#lst-m2-c24-c08-7" aria-hidden="true" tabindex="-1"></a>    lengths <span class="op">=</span> np.linalg.norm(x, axis<span class="op">=</span><span class="dv">1</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m2-c24-c08-8"><a href="#lst-m2-c24-c08-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> np.<span class="bu">any</span>(lengths <span class="op">==</span> <span class="dv">0</span>):</span>
+<span id="lst-m2-c24-c08-9"><a href="#lst-m2-c24-c08-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">'Zero vectors have no cosine direction'</span>)</span>
+<span id="lst-m2-c24-c08-10"><a href="#lst-m2-c24-c08-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x <span class="op">/</span> lengths</span>
+<span id="lst-m2-c24-c08-11"><a href="#lst-m2-c24-c08-11" aria-hidden="true" tabindex="-1"></a>scores <span class="op">=</span> unit_rows(queries) <span class="op">@</span> unit_rows(references).T</span>
+<span id="lst-m2-c24-c08-12"><a href="#lst-m2-c24-c08-12" aria-hidden="true" tabindex="-1"></a>chosen <span class="op">=</span> scores.argmax(axis<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="lst-m2-c24-c08-13"><a href="#lst-m2-c24-c08-13" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> chosen.tolist() <span class="op">==</span> [<span class="dv">0</span>, <span class="dv">1</span>]</span>
+<span id="lst-m2-c24-c08-14"><a href="#lst-m2-c24-c08-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, j <span class="kw">in</span> <span class="bu">enumerate</span>(chosen):</span>
+<span id="lst-m2-c24-c08-15"><a href="#lst-m2-c24-c08-15" aria-hidden="true" tabindex="-1"></a>    result <span class="op">=</span> {<span class="st">'query_id'</span>: i, <span class="st">'category'</span>: categories[j],</span>
+<span id="lst-m2-c24-c08-16"><a href="#lst-m2-c24-c08-16" aria-hidden="true" tabindex="-1"></a>              <span class="st">'similarity'</span>: <span class="bu">float</span>(scores[i, j]), <span class="st">'visual_answer'</span>: visual_answers[i]}</span>
+<span id="lst-m2-c24-c08-17"><a href="#lst-m2-c24-c08-17" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(result)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The first query selects the bicycle reference and combines that result with the supplied red-frame answer. To complete the experiment, replace the fixtures with saved model outputs, retain failures, and repeat the evaluation on the untouched query set. <a href="ch-m2-c09.html">Chapter 9</a> governs data separation, <a href="ch-m2-c20.html">Chapter 20</a> explains when adaptation is justified, and <a href="ch-m2-c21.html">Chapter 21</a> identifies the inference state to measure when latency matters.</p>
 </section>
 <section id="sec-m2-c24-s08" class="level2" data-number="24.8">
 <h2 data-number="24.8" class="anchored" data-anchor-id="sec-m2-c24-s08"><span class="header-section-number">24.8</span> Visualizing End-to-End Course Lab Pipelines</h2>
-<p>A complete lab trace follows stored inputs through outputs, loss, gradients, and verified results.</p>
-<p>A complete training trace connects model inputs and parameters to a scalar loss, then follows the backward calculation into stored parameter gradients.</p>
+<p>The labs now support one engineering decision: does a specified model or model combination meet a task’s requirements on held-out inputs? A complete trace must retain enough information to explain an incorrect answer or a changed measurement.</p>
+<p>The <a href="ch-m2-c11.html#sec-m2-c11-s05">training loop in Chapter 11</a> establishes forward calculation, loss, backward calculation, and update. The figure recalls that dependency. In the adaptation case, only the intended adapter parameters change. In the image-retrieval case, the encoders can remain fixed and the reference collection is the new task-specific state.</p>
 <div id="fig-m2-c24-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="PyTorch gradient slide connecting scalar loss to gradients with respect to tensor entries.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c24-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -778,9 +841,21 @@ Figure&nbsp;24.2: The scalar loss begins a reverse pass that produces the parame
 </figcaption>
 </figure>
 </div>
-<p>The loss is the starting value for reverse-mode differentiation. Each local derivative contributes to the gradients that the optimizer reads during the update.</p>
-<p>The labs should be read as executable traces from input tensors to outputs, losses, gradients, or cache state.</p>
-<p>A complete reading path now runs from raw examples through representations, architectures, objectives, updates, deployment state, and PyTorch implementation.</p>
+<p>For either case, begin with the input/target contract from <a href="ch-m2-c01.html">Chapter 1</a>, record the representation and architecture, fix the evaluation split, and compare a baseline against one controlled change. Then inspect failures at the stage that produced them. An improved training loss, a larger similarity score, and a faster decode step are different observations. Each supports a different claim.</p>
+<p>The final report should identify the task, model and data versions, baseline, controlled change, measured result, and the evidence behind the deployment or further-training decision. This closes the path from mathematical objects to a system whose behavior can be tested and explained.</p>
+</section>
+<section id="sec-m2-c24-check" class="level2" data-number="24.9">
+<h2 data-number="24.9" class="anchored" data-anchor-id="sec-m2-c24-check"><span class="header-section-number">24.9</span> Chapter checkpoint</h2>
+<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
+<ol type="1">
+<li>The adapted model produces clearer expert answers but worse child answers on the same test set. Is a single average sufficient?</li>
+<li>The combined image answer is wrong. Which saved outputs distinguish retrieval, VQA, and composition errors?</li>
+<li>The tensor checks pass, but no checkpoint experiment has run. What has been established?</li>
+</ol>
+<p><strong>Feedback</strong></p>
+<p><strong>1.</strong> No.&nbsp;Report results by requested level and include paired base/adapted outputs, regressions, and scoring reasons. Averages can hide failure on a required audience.</p>
+<p><strong>2.</strong> The reference score row and selected category, the visual prompt and answer, and the combined text. Compare each against the reviewed query labels and answer criteria.</p>
+<p><strong>3.</strong> The supplied calculations and interfaces pass their assertions. Training success, generated-answer quality, and performance remain unmeasured until the complete experiment runs.</p>
 
 
 </section>
@@ -1188,8 +1263,8 @@ Figure&nbsp;24.2: The scalar loss begins a reverse pass that produces the parame
   </script>
 <nav class="page-navigation">
   <div class="nav-page nav-page-previous">
-      <a href="../chapters/ch-m2-c23.html" class="pagination-link" aria-label="GPU Memory &amp; Strides: Maximizing Tensor Throughput">
-        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span>
+      <a href="../chapters/ch-m2-c23.html" class="pagination-link" aria-label="Tensor Storage and Devices: Memory Costs in PyTorch">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span>
       </a>          
   </div>
   <div class="nav-page nav-page-next">

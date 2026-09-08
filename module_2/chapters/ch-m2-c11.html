@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -445,6 +445,7 @@ window.Quarto = {
   <li><a href="#sec-m2-c11-s04" id="toc-sec-m2-c11-s04" class="nav-link" data-scroll-target="#sec-m2-c11-s04"><span class="header-section-number">11.4</span> Executing Reverse-Mode Automatic Differentiation</a></li>
   <li><a href="#sec-m2-c11-s05" id="toc-sec-m2-c11-s05" class="nav-link" data-scroll-target="#sec-m2-c11-s05"><span class="header-section-number">11.5</span> Managing Optimizer Memory State and Gradient Buffers</a></li>
   <li><a href="#sec-m2-c11-s06" id="toc-sec-m2-c11-s06" class="nav-link" data-scroll-target="#sec-m2-c11-s06"><span class="header-section-number">11.6</span> Backpropagation trace</a></li>
+  <li><a href="#sec-m2-c11-check" id="toc-sec-m2-c11-check" class="nav-link" data-scroll-target="#sec-m2-c11-check"><span class="header-section-number">11.7</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -470,6 +471,7 @@ window.Quarto = {
 </header>
 
 
+<p>Trace derivatives through a graph and manage accumulation before a parameter update.</p>
 <p>Every trainable parameter affects the loss through a sequence of intermediate calculations. The chain rule traces how a small change at one point changes the final loss.</p>
 <p>A loss depends on every parameter through many intermediate calculations. Computation graphs and the chain rule organize those dependencies so reverse-mode autodiff can calculate all required gradients efficiently.</p>
 <p>In code, <code>torch.autograd</code> records differentiable operations implicitly; <code>loss.backward()</code> populates <code>.grad</code>, and <code>torch.no_grad()</code> separates parameter updates from graph construction.</p>
@@ -689,6 +691,9 @@ J_{i,j}=\frac{\partial y_{i}}{\partial x_{j}}
 <li>Gradient reset: clear gradients for the next batch.</li>
 </ul>
 <p>Gradient buffers and optimizer state are the software form of repeated learning updates. Nonlinear networks use the same mechanism through more layers and intermediate representations.</p>
+<p><strong>Returning to the shared batch.</strong> For the logits <span class="math inline">\((0.9,-0.2,0.6)\)</span> and labels <span class="math inline">\((1,0,1)\)</span> from <a href="ch-m2-c08.html#sec-m2-c08-s01">Chapter 8</a>, the mean-loss logit derivative is <span class="math inline">\((p-y)/3\)</span>. Multiplying by <span class="math inline">\(X^{\mathsf T}\)</span> gives weight gradient approximately <span class="math inline">\((-0.21446,0.03194)\)</span>, and summing gives bias gradient <span class="math inline">\(-0.06441\)</span>. With learning rate <span class="math inline">\(0.1\)</span>, the new weights are <span class="math inline">\((0.82145,-0.30319)\)</span> and bias <span class="math inline">\(0.10644\)</span>. <a href="ch-m2-c24.html#sec-m2-c24-s01">§24.1</a> checks the manual gradient against autograd before applying that step.</p>
+<p><strong>Microbatches and one effective update.</strong> If memory allows only two examples at once, process the first two rows and then the third while keeping parameters unchanged. Backpropagate the first microbatch’s summed loss divided by three, then the second microbatch’s summed loss divided by three. The accumulated gradient equals the three-example mean gradient when each example’s computation is independent of the other batch members. Batch-dependent layers or different stochastic realizations can break that equivalence.</p>
+<p>Clear gradients before the first microbatch, accumulate both backward results, then clip if needed and update once. Dividing each microbatch mean by two would give equal weight to groups of unequal sizes. If mixed precision uses gradient scaling, unscale only after the complete accumulation and before clipping. <a href="ch-m2-c23.html#sec-m2-c23-s06">Chapter 23</a> explains the precision and memory trade-off.</p>
 </section>
 <section id="sec-m2-c11-s06" class="level2" data-number="11.6">
 <h2 data-number="11.6" class="anchored" data-anchor-id="sec-m2-c11-s06"><span class="header-section-number">11.6</span> Backpropagation trace</h2>
@@ -760,6 +765,17 @@ w_{\mathrm{next}}=w-\mathrm{lr}\,\frac{dL}{dw}
 </ul>
 <p>Backpropagation is reverse-mode chain rule over the computation graph created by the forward pass.</p>
 <p>Multilayer classifiers apply these gradients to affine maps and nonlinearities.</p>
+</section>
+<section id="sec-m2-c11-check" class="level2" data-number="11.7">
+<h2 data-number="11.7" class="anchored" data-anchor-id="sec-m2-c11-check"><span class="header-section-number">11.7</span> Chapter checkpoint</h2>
+<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
+<ol type="1">
+<li>Two paths use the same parameter. Why is overwriting its gradient with the second contribution wrong?</li>
+<li>Two microbatches have sizes two and one. Can their mean losses each be divided by two to reproduce the three-example mean gradient?</li>
+</ol>
+<p><strong>Feedback</strong></p>
+<p><strong>1.</strong> The total derivative sums both paths. Autograd accumulates their contributions in the parameter gradient buffer.</p>
+<p><strong>2.</strong> No.&nbsp;That gives equal weight to unequal groups. Weight their mean losses by 2/3 and 1/3, or divide each summed loss by three, then update once after both backward calls.</p>
 
 
 </section>

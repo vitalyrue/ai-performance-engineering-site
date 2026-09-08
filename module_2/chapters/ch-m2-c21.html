@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -445,6 +445,7 @@ window.Quarto = {
   <li><a href="#sec-m2-c21-s04" id="toc-sec-m2-c21-s04" class="nav-link" data-scroll-target="#sec-m2-c21-s04"><span class="header-section-number">21.4</span> Reusing Common Prompt States with Prefix Caching</a></li>
   <li><a href="#sec-m2-c21-s05" id="toc-sec-m2-c21-s05" class="nav-link" data-scroll-target="#sec-m2-c21-s05"><span class="header-section-number">21.5</span> Managing Non-Contiguous GPU Memory with PagedAttention</a></li>
   <li><a href="#sec-m2-c21-s06" id="toc-sec-m2-c21-s06" class="nav-link" data-scroll-target="#sec-m2-c21-s06"><span class="header-section-number">21.6</span> Inference-state trace</a></li>
+  <li><a href="#sec-m2-c21-check" id="toc-sec-m2-c21-check" class="nav-link" data-scroll-target="#sec-m2-c21-check"><span class="header-section-number">21.7</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -470,6 +471,7 @@ window.Quarto = {
 </header>
 
 
+<p>Trace inference state and separate cache sharing, allocation, and output policy.</p>
 <p>Autoregressive generation revisits the prompt and growing continuation for every new token. Storing prior attention keys and values avoids repeating that old work, at the cost of growing memory use.</p>
 <p>Generation repeatedly extends one sequence by one token. The KV cache stores attention state from earlier tokens, while batching and cache management determine latency, throughput, and memory use in a serving system.</p>
 <p>In code, <code>model.generate</code> exposes token generation and <code>past_key_values</code>; vLLM, SGLang, and TensorRT-LLM are supplementary engines for cache layout, batching, and scheduling.</p>
@@ -558,6 +560,8 @@ K,V\in\mathbb{R}^{B\times H_{\mathrm{KV}}\times T\times d_h}
 <p>For 32 layers, 8 KV heads, 8,192 positions, head width 128, and two-byte values, the keys and values require 1.0 GiB for one request.</p>
 <p>The estimate excludes allocator overhead, cache block fragmentation, temporary activations, model parameters, and other serving state.</p>
 <p>Caching avoids recomputing old keys and values, but it creates a memory footprint that grows with request length.</p>
+<p><strong>Key/value sharing after the multi-head baseline.</strong> In <a href="ch-m2-c17.html#sec-m2-c17-s02">§17.2</a>, each of <span class="math inline">\(H\)</span> query heads has its own key/value head. Multi-query attention uses one shared key/value head, and grouped-query attention uses <span class="math inline">\(G\)</span> key/value heads shared by groups of query heads, with <span class="math inline">\(1&lt;G&lt;H\)</span>. Query projections remain separate. At fixed width per head, layer count, context length, and dtype, KV storage scales with <span class="math inline">\(G\)</span> rather than <span class="math inline">\(H\)</span>.</p>
+<p>With eight query heads, using two KV heads stores one quarter as many key/value values as eight-head KV storage. This does not divide every attention cost by four: all query heads still score the permitted positions. Key/value sharing is an architecture choice that must match the checkpoint. It cannot be enabled by reinterpreting a cache produced by an incompatible model. Scheduling adds a separate choice about which requests use the available capacity.</p>
 </section>
 <section id="sec-m2-c21-s02" class="level2" data-number="21.2">
 <h2 data-number="21.2" class="anchored" data-anchor-id="sec-m2-c21-s02"><span class="header-section-number">21.2</span> Diagnosing Compute-Bound Prefill and Memory-Bound Decode Latency</h2>
@@ -660,12 +664,15 @@ Figure&nbsp;21.2: Prefill creates reusable cache entries, while decoding appends
 <p><code>model.generate</code> is the clearest starting point because it exposes the familiar model inputs, decoding settings, generated token IDs, and optional <code>past_key_values</code>. It is appropriate for inspecting the mathematics and for small local experiments. A serving engine becomes useful when many requests must share an accelerator without treating every prompt as an isolated call.</p>
 <p>vLLM, SGLang, and TensorRT-LLM make different implementation choices, but their controls correspond to the same guide objects: request batches, token positions, causal masks, KV-cache storage, and sampling rules. A cache or batching option changes storage and scheduling. It does not alter the model’s output probabilities unless decoding settings or model computations also change.</p>
 <p>Engine flags are implementation-specific. For example, <code>--enable-prefix-caching</code> is a vLLM flag, not a generic transformer operation. The key serving questions are practical. Which prompt prefixes are reused? Where are key/value blocks stored? How do requests enter a batch? These choices determine time to first token (TTFT), time per output token (TPOT), and GPU memory capacity.</p>
-<p>Serving changes the schedule and storage of the same attention computation. The next part applies the representation pattern to non-text inputs.</p>
+<p>Serving changes the schedule and storage of the same attention computation. The final trace connects cache allocation to the prompt and decode steps.</p>
+<p><strong>Logical positions and physical cache blocks.</strong> A request grows one token at a time, but a contiguous reservation sized for its maximum length can waste memory. PagedAttention divides the logical KV sequence into fixed-size token blocks and maps each to an available physical block. The attention kernel follows that mapping when reading earlier keys and values. Allocation can grow without requiring the whole sequence to occupy adjacent memory. This is the central mechanism in the <a href="https://arxiv.org/abs/2309.06180">PagedAttention paper</a>.</p>
+<p>For block capacity four and ten cached tokens, a request needs three blocks. Logical blocks 0, 1, and 2 might map to physical blocks 7, 2, and 11. Token position 9, counted from zero, is logical block 2 at offset 1, so its values are read from physical block 11 at offset 1. Two slots in the final block remain unused. Releasing the request returns its blocks to the allocator when no other request references them.</p>
+<p>Shared prefixes can let requests reference the same completed blocks. Reference counts prevent premature reuse, and a write to shared state needs a private copy when it would affect another request. Paging reduces fragmentation and supports sharing. It does not reduce the number of tokens the attention calculation must consider, and block size still trades allocation overhead against unused final-block space.</p>
 </section>
 <section id="sec-m2-c21-s06" class="level2" data-number="21.6">
 <h2 data-number="21.6" class="anchored" data-anchor-id="sec-m2-c21-s06"><span class="header-section-number">21.6</span> Inference-state trace</h2>
 <p>Inference is a stateful loop. During prefill, the model processes the whole prompt and builds key/value tensors for every layer. During decode, it processes only the newly generated token, but it attends to the cached keys and values from all previous positions.</p>
-<p>The sampling decision starts from the last-position logits. Greedy decoding selects the largest logit. Temperature rescales the logits before softmax. Top-k keeps a fixed number of candidates, and top-p keeps the shortest sorted probability prefix whose cumulative mass reaches the threshold. These operations change the decoding distribution even though the model weights do not change.</p>
+<p>The last-position logits pass to the <a href="ch-m2-c07.html">decoding rule from Chapter 7</a>. This trace adds the state read and appended at each iteration. Keep decoding settings fixed when measuring a cache change so output-policy changes do not confound the comparison.</p>
 <p>Autoregressive decoding is fast because previous keys and values are stored instead of recomputed.</p>
 <div id="fig-m2-c21-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Diagram showing stored key and value vectors growing by one position during decoding.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -728,22 +735,15 @@ Figure&nbsp;21.5: Processing the prompt once creates keys and values that later 
 <p>With cache: only the new token’s K and V are computed; old ones are reused.</p>
 </div>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Key calculations</strong></span></p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Temperature softmax:</strong></span></p>
-<p><span id="eq-m2-c21-e06"><span class="math display">\[
-p_i=\frac{\exp(z_i/\tau)}{\sum_j\exp(z_j/\tau)},\quad \tau&gt;0
-\tag{21.6}\]</span></span></p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Greedy decoding:</strong></span></p>
-<p><span id="eq-m2-c21-e07"><span class="math display">\[
-\mathrm{next}=\operatorname*{arg\,max}_{i}z_i
-\tag{21.7}\]</span></span></p>
+<p>Token selection follows <a href="ch-m2-c07.html">Chapter 7</a>. The new quantities here describe stored state.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>KV cache dimensions:</strong></span></p>
 <p><span id="eq-m2-c21-e08"><span class="math display">\[
 K^{(l)},V^{(l)}\in\mathbb{R}^{B\times H_{\mathrm{KV}}\times T_{\mathrm{cache}}\times d_h}
-\tag{21.8}\]</span></span></p>
+\tag{21.6}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Decode recurrence:</strong></span></p>
 <p><span id="eq-m2-c21-e09"><span class="math display">\[
 \mathrm{cache}_t=\operatorname{append}(\mathrm{cache}_{t-1},K_t,V_t)
-\tag{21.9}\]</span></span></p>
+\tag{21.7}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
 <p>These dimensions appear in the computation in order.</p>
 <ul>
@@ -761,6 +761,19 @@ K^{(l)},V^{(l)}\in\mathbb{R}^{B\times H_{\mathrm{KV}}\times T_{\mathrm{cache}}\t
 </ul>
 <p>Transformer inference is stateful because generated tokens reuse keys and values from earlier positions.</p>
 <p>Modern variants and non-text modalities reuse representation and compute patterns with different input structures.</p>
+</section>
+<section id="sec-m2-c21-check" class="level2" data-number="21.7">
+<h2 data-number="21.7" class="anchored" data-anchor-id="sec-m2-c21-check"><span class="header-section-number">21.7</span> Chapter checkpoint</h2>
+<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
+<ol type="1">
+<li>A request has ten cached tokens in blocks of four. Where is zero-based token position 9 when logical blocks map to physical blocks [7,2,11]?</li>
+<li>Two prompts begin with the same words but use different tokenization or model revisions. Can their KV prefixes be reused safely?</li>
+<li>Eight query heads share two KV heads. Does every attention cost fall to one quarter?</li>
+</ol>
+<p><strong>Feedback</strong></p>
+<p><strong>1.</strong> It is in logical block 2 at offset 1, hence physical block 11 at offset 1. The last physical block has two unused slots.</p>
+<p><strong>2.</strong> Textual resemblance is insufficient. Token IDs, model weights, and cache interpretation must match, along with the relevant attention settings.</p>
+<p><strong>3.</strong> No.&nbsp;KV storage falls in that ratio under the stated dimensions, but all query heads still score the permitted positions.</p>
 
 
 </section>
