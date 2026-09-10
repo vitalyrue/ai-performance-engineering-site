@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -445,7 +445,6 @@ window.Quarto = {
   <li><a href="#sec-m2-c22-s04" id="toc-sec-m2-c22-s04" class="nav-link" data-scroll-target="#sec-m2-c22-s04"><span class="header-section-number">22.4</span> Benchmarking Tabular Transformers against Gradient-Boosted Trees</a></li>
   <li><a href="#sec-m2-c22-s05" id="toc-sec-m2-c22-s05" class="nav-link" data-scroll-target="#sec-m2-c22-s05"><span class="header-section-number">22.5</span> Choosing a Model Family for a New Input Modality</a></li>
   <li><a href="#sec-m2-c22-s06" id="toc-sec-m2-c22-s06" class="nav-link" data-scroll-target="#sec-m2-c22-s06"><span class="header-section-number">22.6</span> Multimodal trace</a></li>
-  <li><a href="#sec-m2-c22-check" id="toc-sec-m2-c22-check" class="nav-link" data-scroll-target="#sec-m2-c22-check"><span class="header-section-number">22.7</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -471,7 +470,6 @@ window.Quarto = {
 </header>
 
 
-<p>Compare modality-specific representations and keep retrieval separate from generated answers.</p>
 <p>Transformer-style models can process more than text once images, audio, or table fields are converted into suitable input representations. The input structure and baseline model remain important when choosing an architecture.</p>
 <p>Images, audio, and tables need modality-specific inputs before transformer-style processing can begin. Patches, spectrograms, contrastive pairs, and strong baselines show what changes when the data is not ordinary text.</p>
 <p>In code, PyTorch image, audio, and tabular tensors feed modality-specific front ends; Hugging Face processors package images, audio, and text for pretrained multimodal models.</p>
@@ -496,7 +494,7 @@ Figure&nbsp;22.1: Images, audio, and table fields become vectors that can share 
 <p>A convolution keeps the image as a spatial grid and applies the same learned filter at many locations. A vision transformer first divides the image into patches, flattens each patch, and projects each patch into the same kind of vector sequence used by text transformers.</p>
 <p>The causal link to earlier chapters is sequence length. Smaller patches create more tokens, and more tokens make attention more expensive. The image preprocessing choice therefore changes both the mathematical input object and the compute cost of later transformer layers.</p>
 <p>A convolutional layer slides a learned kernel across local image neighborhoods. Stride controls how far the kernel moves, padding controls border treatment, and the output-size equation determines the spatial dimensions passed to the next layer.</p>
-<p>A residual network (ResNet) applies the <a href="ch-m2-c17.html#sec-m2-c17-s03">residual addition from §17.3</a> around convolutional transformations. If a block changes channel count or spatial size, its shortcut also needs a compatible projection before addition.</p>
+<p>A residual network (ResNet) adds an identity path around one or more convolutional transformations. The residual sum gives gradients a shorter route through deep networks and lets a block learn a correction to its input rather than a completely new representation.</p>
 <p>A vision transformer divides the image into fixed-size patches, flattens each patch, and projects it to the model width. The resulting patch sequence has the same mathematical role as a token sequence, although its positions refer to image regions rather than text tokens.</p>
 <p>A convolutional neural network keeps an image as a spatial grid. A convolutional kernel reads local pixel neighborhoods, reusing the same weights across the image. Stacked layers then build from edges and textures up to complex visual patterns. A ResNet adds a shortcut around convolutional transformations so a deep block learns a correction to its input.</p>
 <p>A vision transformer works differently. It divides an image into patches, projects each patch to a vector, adds position encodings, and applies standard transformer attention across all patches. CNNs therefore build in locality and translation reuse; vision transformers trade that prior for global patch interactions. Both ultimately produce features for classification, image-text matching, or generation.</p>
@@ -576,8 +574,7 @@ N_{\mathrm{patches}}=\left(\frac{H}{P}\right)\left(\frac{W}{P}\right)
 <p>Multimodal models either align representations from different encoders or condition a generator on projected visual representations.</p>
 <p>Contrastive Language-Image Pre-training (CLIP) aligns paired image and text examples in a shared embedding space.</p>
 <p>CLIP encodes images and text separately, compares every image with every caption in the batch, and uses a contrastive loss to raise matched similarities in both directions. The similarity matrix is therefore both a computational object and the set of candidate negatives for the batch.</p>
-<p>A <a href="https://arxiv.org/abs/1711.00937">vector-quantized variational autoencoder (VQ-VAE)</a> first produces continuous encoder features, replaces each feature with a nearby entry from a learned codebook, and reconstructs the image from those entries. The selected codebook indices provide discrete tokens. Reconstruction asks which information those tokens preserve, whereas CLIP’s matching objective asks which image and text representations belong together.</p>
-<p>Fusion introduces another choice. <strong>Merged attention</strong> places projected image and text vectors in one sequence, with position and modality indicators. <strong>Co-attention</strong> keeps separate streams and uses cross-attention between them. The Vision-and-Language Transformer (ViLT) illustrates the merged approach. CLIP’s independent encoders and similarity comparison are not themselves a co-attention mechanism. Follow the <a href="ch-m2-c16.html#sec-m2-c16-s01">query/key/value roles</a> to distinguish information exchange inside a model from a similarity calculation between its final vectors.</p>
+<p>A vector-quantized variational autoencoder (VQ-VAE) converts image regions into discrete codebook entries that can be modeled as tokens. The Vision-and-Language Transformer (ViLT) removes a separate heavy visual encoder and applies transformer computation more directly to projected image patches and text tokens.</p>
 <p>For image captioning or visual question answering, a vision encoder produces image features and a language decoder generates text conditioned on those features. The course homework evaluates both successful outputs and systematic failures such as counting or attribute errors.</p>
 <p>A batch similarity matrix S trains matching image-text pairs to align.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>CLIP contrastive loss:</strong></span></p>
@@ -595,7 +592,7 @@ L_{\mathrm{CLIP}}=\frac{1}{2}\left[\operatorname{CE}\!\left(\frac{S}{\tau},y\rig
 </section>
 <section id="sec-m2-c22-s03" class="level2" data-number="22.3">
 <h2 data-number="22.3" class="anchored" data-anchor-id="sec-m2-c22-s03"><span class="header-section-number">22.3</span> Converting Continuous Speech Spectrograms to Text with Whisper</h2>
-<p>Whisper converts a one-dimensional waveform into a time-frequency representation before sequence modeling begins. Other speech architectures can learn features directly from waveform samples.</p>
+<p>Speech models convert a one-dimensional waveform into a time-frequency representation before sequence modeling begins.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Waveform:</strong></span> A sequence of sampled audio amplitudes indexed by time.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Short-time Fourier transform:</strong></span> A Fourier transform applied to overlapping local windows of a waveform.</li>
@@ -626,15 +623,13 @@ X[m,k]=\sum_{n=0}^{N-1}x[n]w[n-mH]\exp\!\left(-\frac{2\pi i kn}{N}\right)
 <p><strong>Sequence representation:</strong></p>
 <p>Repeat the calculation for overlapping windows.</p>
 <p>The resulting spectral frames form a time-by-frequency matrix before mel filtering and speech encoding.</p>
-<p>Whisper receives these time-indexed feature vectors as its main sequence input.</p>
+<p>Speech models receive these time-indexed feature vectors rather than the raw waveform as their main sequence input.</p>
 </div>
 <p>Audio frames and image patches are modality-specific inputs. Tabular data requires a different baseline because its fields do not form a natural sequence.</p>
-<p>Raw pulse-code modulation (PCM) stores samples before this feature extraction. One second at 44,100 samples per second, two channels, and sixteen bits per channel requires <span class="math inline">\(44{,}100\times2\times16=1{,}411{,}200\)</span> bits, or 176,400 bytes, before headers or compression. Sampling rate sets the time resolution, bit depth sets amplitude precision, and channels keep separate waveforms. These are different dimensions from the later mel-band count.</p>
-<p>A complex Fourier representation includes both magnitude and phase. A mel magnitude representation discards information, so applying an inverse FFT to a mel spectrogram alone cannot recover the original waveform. Audio generation needs an additional reconstruction model or suitable acoustic representation. The course’s AudioLM example distinguishes semantic tokens that model content from acoustic tokens that retain sound detail. Such audio generation and the SpeechVerse speech-and-text interface are optional architecture examples here, rather than additional implemented labs.</p>
 </section>
 <section id="sec-m2-c22-s04" class="level2" data-number="22.4">
 <h2 data-number="22.4" class="anchored" data-anchor-id="sec-m2-c22-s04"><span class="header-section-number">22.4</span> Benchmarking Tabular Transformers against Gradient-Boosted Trees</h2>
-<p>Image patches and audio frames supplied spatial or temporal positions. Table fields instead identify different measurements, categories, or missing values. Their order need not carry sequence meaning, so the first comparison is whether attention across fields improves on a simpler predictor for the same records.</p>
+<p>Tabular models operate on named fields whose scales, types, and missing-value patterns differ from text-token sequences.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>TabTransformer:</strong></span> A model that embeds categorical fields and applies attention across field representations.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient-boosted decision trees:</strong></span> An ensemble of decision trees trained sequentially to correct earlier residuals.</li>
@@ -650,14 +645,14 @@ X[m,k]=\sum_{n=0}^{N-1}x[n]w[n-mH]\exp\!\left(-\frac{2\pi i kn}{N}\right)
 <p>The input structure determines the first representation and the useful comparison baseline; it does not automatically require a transformer.</p>
 <p>Images have local two-dimensional neighborhoods. A convolutional network uses shared local kernels and remains a strong baseline when translation-like local patterns matter. A vision transformer turns patches into a sequence and is useful when long-range patch relationships or transfer from large-scale pretraining matter.</p>
 <p>Audio begins as a waveform, but speech models commonly receive a time-frequency array such as a mel spectrogram. The sequence axis represents time frames, so recurrent, convolutional, and transformer encoders can all be relevant depending on context length and deployment constraints.</p>
-<p>Tables contain fields with different types rather than a natural spatial or token order. Gradient-boosted decision trees are often the practical baseline. Tabular transformers become compelling when categorical embeddings, field interactions, transfer learning, or multimodal connections justify their extra capacity.</p>
+<p>Tables contain heterogeneous named fields rather than a natural spatial or token order. Gradient-boosted decision trees are often the practical baseline. Tabular transformers become compelling when categorical embeddings, field interactions, transfer learning, or multimodal connections justify their extra capacity.</p>
 <p>Multimodal tasks need both a representation for each input type and a way to connect them. CLIP aligns independent image and text encoders for retrieval and matching. Captioning and visual question answering instead condition a language decoder on visual features, so the final output remains a token sequence.</p>
 <p>The next chapter maps these representations and computations to the tensors and operations that implement them.</p>
 </section>
 <section id="sec-m2-c22-s06" class="level2" data-number="22.6">
 <h2 data-number="22.6" class="anchored" data-anchor-id="sec-m2-c22-s06"><span class="header-section-number">22.6</span> Multimodal trace</h2>
 <p>Beyond-text transformers reuse the same central idea: turn the input into a sequence of vectors with a consistent hidden width. Images become patch tokens, audio becomes frame or spectrogram tokens, tables become field tokens, and multimodal systems align several token streams.</p>
-<p>The <a href="ch-m2-c24.html#sec-m2-c24-s07">object-retrieval and VQA case</a> combines two interfaces: an encoder returns a retrieval vector, while a captioning or VQA model returns text. Keeping their outputs separate makes it possible to identify which component caused an incorrect combined answer.</p>
+<p>Mixture-of-experts models add conditional computation. A router scores experts for each token representation, selects a small subset, and combines their outputs. The mathematical issue is no longer only representation quality; load balancing and routing stability become part of the model behavior.</p>
 <p>Residual connections let a deep vision block learn a correction while preserving a direct path for the input and its gradient.</p>
 <div id="fig-m2-c22-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Course page showing a ResNet residual block with an identity path around convolutional transformations.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -669,7 +664,7 @@ Figure&nbsp;22.2: The identity path preserves an input while the learned branch 
 </figcaption>
 </figure>
 </div>
-<p>The identity path and transformed path must have compatible dimensions before they are added, the constraint established for transformer residual connections in <a href="ch-m2-c17.html#sec-m2-c17-s03">§17.3</a>.</p>
+<p>The identity path and transformed path must have compatible dimensions before they are added, the same constraint later used by transformer residual connections.</p>
 <p>A vision transformer turns an image grid into a sequence by flattening and projecting fixed-size patches.</p>
 <div id="fig-m2-c22-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Course page showing image patches flattened and projected into a sequence of vision-transformer embeddings.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -718,9 +713,9 @@ Figure&nbsp;22.6: Sampling rate, channel count, and amplitude values define the 
 </figure>
 </div>
 <p>This figure grounds the audio formulas: sampling rate, channels, and amplitude values are the raw objects transformed into time-frequency features.</p>
-<p>Non-text models first convert modality-specific data into vectors with explicit feature and position axes. Images use <code>[B,C,H,W]</code> before patches <code>[B,N,D]</code>; audio frames and table fields become sequence axes. A modality-specific front end creates vectors, then transformer-style blocks or contrastive losses operate on them.</p>
+<p>Non-text models first convert modality-specific data into token-like vectors or routed expert computations. Images use <code>[B,C,H,W]</code> before patches <code>[B,N,D]</code>; audio frames and table fields become sequence axes. A modality-specific front end creates vectors, then transformer-style blocks or contrastive losses operate on them.</p>
 <p>In PyTorch, Convolutions, patch projections, spectrogram transforms, and contrastive losses implement the conversions.</p>
-<p><strong>Performance note:</strong> The expensive step can be front-end feature extraction, quadratic attention over many patches, or the language decoder used to generate an answer.</p>
+<p><strong>Performance note:</strong> The expensive step can be front-end feature extraction, quadratic attention over many patches, or MoE routing imbalance.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: Patch count example</strong></p>
 <p>A 32 by 32 RGB image split into 8 by 8 patches has <span class="math inline">\(\frac{32}{8}·\frac{32}{8}=16\)</span> patch tokens.</p>
@@ -736,10 +731,15 @@ N_{\mathrm{patches}}=\left(\frac{H}{P}\right)\left(\frac{W}{P}\right)
 <p><span id="eq-m2-c22-e07"><span class="math display">\[
 Z=\operatorname{flatten}(\mathrm{patches})W_{\mathrm{patch}},\quad Z\in\mathbb{R}^{B\times N\times D}
 \tag{22.7}\]</span></span></p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>MoE routing:</strong></span></p>
+<p><span id="eq-m2-c22-e08"><span class="math display">\[
+g=\operatorname{softmax}(W_{\mathrm{gate}}x),\quad y=\sum_{e\in\mathcal{T}_{k}(g)}g_{e}^{(k)}f_{e}(x)
+\tag{22.8}\]</span></span></p>
+<p>Here, <span class="math inline">\(x\in\mathbb{R}^{D}\)</span> is one token representation, <span class="math inline">\(g\in\mathbb{R}^{E}\)</span> contains router probabilities for <span class="math inline">\(E\)</span> experts, and <span class="math inline">\(\mathcal{T}_{k}(g)\)</span> contains the indices of its <span class="math inline">\(k\)</span> largest entries. Each selected expert <span class="math inline">\(f_e\)</span> returns a <span class="math inline">\(D\)</span>-dimensional vector, and <span class="math inline">\(g_e^{(k)}\)</span> renormalizes the selected weights so they sum to one. A separate balancing loss is normally needed because this equation alone can route too many tokens to the same expert.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Audio framing:</strong></span></p>
 <p><span id="eq-m2-c22-e09"><span class="math display">\[
 \mathrm{frames}=\left\lfloor\frac{\mathrm{samples}-\mathrm{window}}{\mathrm{hop}}\right\rfloor+1
-\tag{22.8}\]</span></span></p>
+\tag{22.9}\]</span></span></p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Dimension trace</strong></span></p>
 <p>These dimensions appear in the computation in order.</p>
 <ul>
@@ -747,27 +747,16 @@ Z=\operatorname{flatten}(\mathrm{patches})W_{\mathrm{patch}},\quad Z\in\mathbb{R
 <li>Flattened patches: [B, N, P·P·C].</li>
 <li>Patch embeddings: [B, N, D].</li>
 <li>Tabular field tokens: [B, F, D].</li>
-<li>Retrieval scores: [Q, R] for Q query images and R reference images.</li>
+<li>Router scores: [B, T, E] for E experts.</li>
 </ul>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch implementation notes</strong></span></p>
 <ul>
 <li>Patchification changes a spatial grid into a sequence before attention begins.</li>
 <li>Projection layers align modality-specific features with the transformer hidden width.</li>
-<li>Keep retrieval scores separate from generated answer tokens so each component can be evaluated.</li>
+<li>MoE routing creates conditional compute and therefore requires load-balancing checks.</li>
 </ul>
 <p>Beyond-text models first turn modality-specific inputs into vectors before reusing transformer-style computation.</p>
 <p>PyTorch maps these mathematical objects to tensors, modules, losses, and optimizers.</p>
-</section>
-<section id="sec-m2-c22-check" class="level2" data-number="22.7">
-<h2 data-number="22.7" class="anchored" data-anchor-id="sec-m2-c22-check"><span class="header-section-number">22.7</span> Chapter checkpoint</h2>
-<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
-<ol type="1">
-<li>Patch width is halved for the same square image. What changes before the transformer layers run?</li>
-<li>An image retrieval result is correct but its caption invents an attribute. Which component needs investigation?</li>
-</ol>
-<p><strong>Feedback</strong></p>
-<p><strong>1.</strong> The patch count grows by four, while values per flattened patch decrease. If full attention scores are materialized, their entry count grows by sixteen at the new sequence length.</p>
-<p><strong>2.</strong> Inspect the captioning or VQA model and its conditioning. A correct nearest-reference category does not validate the generated attribute.</p>
 
 
 </section>
@@ -1180,8 +1169,8 @@ Z=\operatorname{flatten}(\mathrm{patches})W_{\mathrm{patch}},\quad Z\in\mathbb{R
       </a>          
   </div>
   <div class="nav-page nav-page-next">
-      <a href="../chapters/ch-m2-c23.html" class="pagination-link" aria-label="Tensor Storage and Devices: Memory Costs in PyTorch">
-        <span class="nav-page-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span> <i class="bi bi-arrow-right-short"></i>
+      <a href="../chapters/ch-m2-c23.html" class="pagination-link" aria-label="GPU Memory &amp; Strides: Maximizing Tensor Throughput">
+        <span class="nav-page-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span> <i class="bi bi-arrow-right-short"></i>
       </a>
   </div>
 </nav>

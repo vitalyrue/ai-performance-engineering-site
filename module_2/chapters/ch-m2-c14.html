@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -444,7 +444,6 @@ window.Quarto = {
   <li><a href="#sec-m2-c14-s03" id="toc-sec-m2-c14-s03" class="nav-link" data-scroll-target="#sec-m2-c14-s03"><span class="header-section-number">14.3</span> Compressing Co-Occurrence Structure with Low-Rank Factors</a></li>
   <li><a href="#sec-m2-c14-s04" id="toc-sec-m2-c14-s04" class="nav-link" data-scroll-target="#sec-m2-c14-s04"><span class="header-section-number">14.4</span> Distinguishing Static Word Vectors from Contextual Sequence Representations</a></li>
   <li><a href="#sec-m2-c14-s05" id="toc-sec-m2-c14-s05" class="nav-link" data-scroll-target="#sec-m2-c14-s05"><span class="header-section-number">14.5</span> Visualizing Word2Vec Embedding Geometry and Vector Arithmetic</a></li>
-  <li><a href="#sec-m2-c14-check" id="toc-sec-m2-c14-check" class="nav-link" data-scroll-target="#sec-m2-c14-check"><span class="header-section-number">14.6</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -470,7 +469,6 @@ window.Quarto = {
 </header>
 
 
-<p>Relate context objectives, similarity, and compression to the limitations of static vectors.</p>
 <p>Embedding rows begin as arbitrary numbers. A context-prediction objective changes them until useful patterns of co-occurrence are reflected in the geometry of the space.</p>
 <p>Embeddings become useful when training pushes related contexts toward compatible vectors. Word2Vec, cosine similarity, and negative sampling show the objective and shortcuts behind that learning process.</p>
 <p>In code, PyTorch dot products and <code>logsigmoid</code> implement predictive embedding losses; Gensim provides a course-adjacent reference implementation for Word2Vec experiments.</p>
@@ -487,8 +485,14 @@ Figure&nbsp;14.1: Context objectives move vectors so useful linguistic relations
 <section id="sec-m2-c14-s01" class="level2" data-number="14.1">
 <h2 data-number="14.1" class="anchored" data-anchor-id="sec-m2-c14-s01"><span class="header-section-number">14.1</span> Learning Word Meaning from Co-Occurrence Windows (Word2Vec)</h2>
 <p>Word2Vec learns embeddings from local context. The training task is artificial but useful: predict a word from context or predict context from a word, so words used similarly obtain similar vectors.</p>
-<p><strong>Skip-gram</strong> predicts surrounding words from a center word. It scores a <strong>center vector</strong> against a separate <strong>context vector</strong> for a neighboring word. <strong>CBOW</strong>, or continuous bag-of-words, reverses that task: surrounding context predicts the center word.</p>
-<p><strong>Negative sampling</strong> replaces the full vocabulary comparison with a small set of sampled pairs. A <strong>negative sample</strong> supplies a word treated as non-context for that update. It does not assert that the pair can never occur elsewhere in the corpus.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Skip-gram:</strong></span> A task that predicts surrounding context words from a center word.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>CBOW:</strong></span> Continuous bag-of-words, a task that predicts a center word from surrounding context.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Negative sampling:</strong></span> Training against a small set of sampled non-context words instead of a full vocabulary softmax.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Center vector:</strong></span> The embedding used for the word whose context is being predicted.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Context vector:</strong></span> The embedding used for a neighboring word being scored against the center word.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Negative sample:</strong></span> A sampled word treated as a non-context pair for one update.</li>
+</ul>
 <p>The Word Embeddings notebook introduces this idea through training and visualization. The key lesson is that labels can be created from raw text itself, without human annotation.</p>
 <p>Negative sampling matters because a full vocabulary softmax is expensive. By contrasting true context pairs with sampled false pairs, the model receives a cheaper learning signal.</p>
 <p><strong>Origin note:</strong> Word2Vec builds on distributional semantics: words used in similar contexts tend to have related meanings. Skip-gram and CBOW turn that linguistic idea into predictive training objectives.</p>
@@ -556,7 +560,6 @@ Figure&nbsp;14.1: Context objectives move vectors so useful linguistic relations
 <p>The trained vocabulary exposes an eight-coordinate vector per token and similarity-based inspection methods.</p>
 <p>This corpus is far too small for semantic conclusions; it only demonstrates the API-to-math mapping.</p>
 <p>Word2Vec learns vector relationships by predicting nearby words from local context. Similarity measures and negative examples make those learned relationships visible and trainable.</p>
-<p>The source notebook varies the context window, embedding width, and minimum token count. The window chooses which neighbors become training evidence. <code>vector_size</code> sets the coordinates available per token. <code>min_count</code> removes tokens with too few observations, so the learned embedding vocabulary can be smaller than the tokenizer vocabulary. Compare skip-gram and CBOW on the same split and downstream task before interpreting a nearest-neighbor display as improved quality. The <a href="ch-m2-c24.html#sec-m2-c24-s02">news-classification lab</a> uses this comparison.</p>
 </section>
 <section id="sec-m2-c14-s02" class="level2" data-number="14.2">
 <h2 data-number="14.2" class="anchored" data-anchor-id="sec-m2-c14-s02"><span class="header-section-number">14.2</span> Measuring Semantic Closeness with Cosine Similarity and Vector Math</h2>
@@ -581,8 +584,7 @@ Figure&nbsp;14.1: Context objectives move vectors so useful linguistic relations
 <p><strong>Example: Cosine similarity</strong></p>
 <p>For vectors (1,0) and (1,1), the cosine similarity is about 0.707.</p>
 </div>
-<p>Cosine similarity compares the directions learned by the objective in <a href="#sec-m2-c14-s01">§14.1</a>. The next section provides a different route to dense coordinates: factor a count matrix rather than train context predictions.</p>
-<p>Two independently trained language spaces need not share coordinate directions. A bilingual seed dictionary can supply paired source and target vectors. Fit a linear map <span class="math inline">\(R\)</span> so the mapped source vectors <span class="math inline">\(uR\)</span> approach their paired target vectors <span class="math inline">\(v\)</span>, then retrieve nearby target words for unseen source entries. For a two-coordinate illustration, a map that swaps coordinates sends <span class="math inline">\((1,0)\)</span> to <span class="math inline">\((0,1)\)</span>. The mapping must be learned from paired evidence, and held-out translation pairs must test it. It is not valid to compare unrelated spaces merely because both have width 100. This is the principle behind <a href="https://arxiv.org/abs/1309.4168">linear bilingual embedding alignment</a>.</p>
+<p>Cosine similarity compares vector direction rather than raw magnitude. Negative sampling makes it feasible to train those vectors without scoring every vocabulary entry at every step.</p>
 </section>
 <section id="sec-m2-c14-s03" class="level2" data-number="14.3">
 <h2 data-number="14.3" class="anchored" data-anchor-id="sec-m2-c14-s03"><span class="header-section-number">14.3</span> Compressing Co-Occurrence Structure with Low-Rank Factors</h2>
@@ -616,7 +618,7 @@ M\approx U_{r}\Sigma_{r}V_{r}^{T}
 <p>The rank-50 factors contain 75,050 values instead of 500,000.</p>
 <p>The saving appears when r is much smaller than both original matrix dimensions.</p>
 </div>
-<p>Low-rank factors compress the observed count structure, while an autoencoder learns a reconstruction map. Both can produce a static vector for each item. The next section asks what is lost when that vector remains the same in every sentence.</p>
+<p>Negative sampling replaces one full-vocabulary normalization with a small set of positive and negative comparisons. Static vectors still give one row per token regardless of surrounding context.</p>
 </section>
 <section id="sec-m2-c14-s04" class="level2" data-number="14.4">
 <h2 data-number="14.4" class="anchored" data-anchor-id="sec-m2-c14-s04"><span class="header-section-number">14.4</span> Distinguishing Static Word Vectors from Contextual Sequence Representations</h2>
@@ -629,7 +631,6 @@ M\approx U_{r}\Sigma_{r}V_{r}^{T}
 <p>The word ‘bank’ has one row in a static embedding table but different contextual meanings in ‘river bank’ and ‘bank account’. Contextual models address this by updating representations through sequence layers.</p>
 <p>This transition from static to contextual representation is one of the central mathematical moves from Word2Vec to transformers.</p>
 <p>Contextual models compute a new representation for a token from neighboring positions. The next part introduces sequence mechanisms that can construct those context-dependent vectors.</p>
-<p>To inspect a trained space, the source notebook selects neighboring vectors and projects them to two dimensions with t-SNE. Each plotted point must correspond to one vector and one label. Keep the selected matrix at dimensions <span class="math inline">\([N,D]\)</span>, check the label count <span class="math inline">\(N\)</span>, and record the projection seed and settings. Use the plot to choose cases for inspection, then check similarities in the original space. A two-dimensional picture cannot preserve every relationship among hundreds of coordinates. Similarly, an odd-one-out query returns the least compatible vector under a chosen similarity rule, not a verified semantic category.</p>
 </section>
 <section id="sec-m2-c14-s05" class="level2" data-number="14.5">
 <h2 data-number="14.5" class="anchored" data-anchor-id="sec-m2-c14-s05"><span class="header-section-number">14.5</span> Visualizing Word2Vec Embedding Geometry and Vector Arithmetic</h2>
@@ -648,17 +649,6 @@ Figure&nbsp;14.2: One token type receives different vectors when its surrounding
 <p>The same surface word can receive different vectors in different contexts. This is the bridge from Word2Vec-style tables to transformer hidden states.</p>
 <p>Representation objectives make vector geometry meaningful by rewarding useful similarities and contrasts.</p>
 <p>Fixed-history and recurrent models establish the sequence-context problem that attention addresses.</p>
-</section>
-<section id="sec-m2-c14-check" class="level2" data-number="14.6">
-<h2 data-number="14.6" class="anchored" data-anchor-id="sec-m2-c14-check"><span class="header-section-number">14.6</span> Chapter checkpoint</h2>
-<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
-<ol type="1">
-<li>A negative sample appears near the center word elsewhere in the corpus. Does that make the algorithm inconsistent?</li>
-<li>An analogy succeeds in one embedding model but fails after retraining on another corpus. What can be concluded?</li>
-</ol>
-<p><strong>Feedback</strong></p>
-<p><strong>1.</strong> No.&nbsp;A sampled comparison is a training approximation for one pair, not a universal statement that the two words can never co-occur. Sampling and corpus statistics shape the learned geometry.</p>
-<p><strong>2.</strong> The relation is learned from a particular corpus and objective. It is not guaranteed symbolic algebra. Compare vocabulary coverage, training conditions, and nearest-neighbor scores.</p>
 
 
 </section>

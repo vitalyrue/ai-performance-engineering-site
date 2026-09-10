@@ -340,11 +340,14 @@ window.Quarto = {
 <p>How can one training job use many GPUs without turning communication, scheduling, or failure into the real bottleneck? Chapter 1 defined the versioned artifacts and software layers around a run. Single-GPU limits lead to network and process identities, then to recoverable distributed execution and measurement.</p>
 <p>The three panels move from the limits of an individual accelerator to coordinated workers, then to the recovery and efficiency measures that make a long run practical.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Chapter map</strong></p>
-<p><strong>2.1–2.2 Memory Limits &amp; Interconnects:</strong> Analyze single-GPU memory bounds across weights, optimizer states, and activations, and evaluate PCIe, NVLink, and InfiniBand network hierarchies.</p>
-<p><strong>2.3–2.4 Gradient Synchronization &amp; State Sharding:</strong> Trace PyTorch DDP ring all-reduce communication, and compare tensor and pipeline parallelism with Zero Redundancy Optimizer (ZeRO) and Fully Sharded Data Parallel (FSDP) model-state sharding.</p>
-<p><strong>2.5–2.6 Worker Coordination &amp; Gang Scheduling:</strong> Manage process group rendezvous, world size, and ranks, and configure Kubernetes gang scheduling and topology-aware pod placement.</p>
-<p><strong>2.7–2.8 Fault Recovery &amp; Hardware Efficiency:</strong> Structure distributed checkpoint recovery and atomic resumption, and measure Model FLOPs Utilization (MFU) to diagnose cluster stragglers.</p>
+<p><strong>Chapter map: distributed cluster training</strong></p>
+<p>This chapter scales model training from single devices to distributed clusters:</p>
+<ul>
+<li><strong>2.1–2.2 Memory Limits &amp; Interconnects:</strong> Analyze single-GPU memory bounds across weights, optimizer states, and activations, and evaluate PCIe, NVLink, and InfiniBand network hierarchies.</li>
+<li><strong>2.3–2.4 Gradient Synchronization &amp; State Sharding:</strong> Trace PyTorch DDP ring all-reduce communication, and compare tensor and pipeline parallelism with Zero Redundancy Optimizer (ZeRO) and Fully Sharded Data Parallel (FSDP) model-state sharding.</li>
+<li><strong>2.5–2.6 Worker Coordination &amp; Gang Scheduling:</strong> Manage process group rendezvous, world size, and ranks, and configure Kubernetes gang scheduling and topology-aware pod placement.</li>
+<li><strong>2.7–2.8 Fault Recovery &amp; Hardware Efficiency:</strong> Structure distributed checkpoint recovery and atomic resumption, and measure Model FLOPs Utilization (MFU) to diagnose cluster stragglers.</li>
+</ul>
 </div>
 <div id="fig-m3-c02-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled Chapter 2 map links device memory limits to distributed workers, communication, scheduling, checkpoints, and efficiency measurements.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -359,20 +362,25 @@ Figure&nbsp;2.1: How distributed training fits model state to coordinated hardwa
 <section id="sec-m3-c02-s01" class="level2" data-number="2.1">
 <h2 data-number="2.1" class="anchored" data-anchor-id="sec-m3-c02-s01"><span class="header-section-number">2.1</span> Accounting for single-GPU memory use</h2>
 <p>A reproducible run can still be physically impossible on one device. The first question is whether model state, optimizer state, and activations fit, followed by whether the run finishes in an acceptable time. The memory objects reveal which parallelism strategies can satisfy the constraint.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Device.</strong></span> one accelerator visible to a training process, such as one NVIDIA GPU.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Server or node.</strong></span> one physical or virtual machine containing CPUs, host memory, storage interfaces, networking, and one or more devices.</p>
+<ul>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Device:</strong></span> One accelerator visible to a training process, such as one NVIDIA GPU.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Server or node:</strong></span> One physical or virtual machine containing CPUs, host memory, storage interfaces, networking, and one or more devices.</p></li>
+</ul>
 <p><span id="eq-m3-c02-e01"><span class="math display">\[
 M_{\mathrm{train}} ≈ P\left(b_w + b_g + b_{\mathrm{master}} + b_{\mathrm{opt}}\right) + A
 \tag{2.1}\]</span></span></p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation: memory for an 8-billion-parameter Adam run</strong></p>
-<p><strong>Weights:</strong> Eight billion BF16 weights at 2 bytes each require 16 GB.</p>
-<p><strong>Gradients:</strong> BF16 gradients add 16 GB.</p>
-<p><strong>Master weights:</strong> Eight billion FP32 master weights at 4 bytes each add 32 GB.</p>
-<p><strong>Adam state:</strong> Two FP32 moment buffers use 8 bytes per parameter and add 64 GB.</p>
-<p><strong>Persistent subtotal:</strong> Weights, gradients, master weights, and Adam state total 128 GB before activations, temporary buffers, and allocator reserve.</p>
-<p><strong>Activations:</strong> For illustration, 40 GB at a short micro-batch gives about 168 GB total, while 160 GB at a longer sequence or larger micro-batch gives about 288 GB. A profiler or shape-based activation estimate supplies the value for a real run.</p>
-<p><strong>Conclusion:</strong> An 8B model that is easy to load for inference can require multiple high-memory GPUs for ordinary Adam training.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Memory breakdown: 8-billion-parameter model with Adam optimizer</strong></p>
+<p>Evaluating GPU memory consumption across training components highlights persistent versus transient allocations:</p>
+<ul>
+<li><strong>Weights:</strong> Eight billion BF16 weights at 2 bytes each require 16 GB.</li>
+<li><strong>Gradients:</strong> BF16 gradients add 16 GB.</li>
+<li><strong>Master weights:</strong> Eight billion FP32 master weights at 4 bytes each add 32 GB.</li>
+<li><strong>Adam state:</strong> Two FP32 moment buffers use 8 bytes per parameter and add 64 GB.</li>
+<li><strong>Persistent subtotal:</strong> Weights, gradients, master weights, and Adam state total 128 GB before activations, temporary buffers, and allocator reserve.</li>
+<li><strong>Activations:</strong> For illustration, 40 GB at a short micro-batch gives about 168 GB total, while 160 GB at a longer sequence or larger micro-batch gives about 288 GB. A profiler or shape-based activation estimate supplies the value for a real run.</li>
+<li><strong>Conclusion:</strong> An 8B model that is easy to load for inference can require multiple high-memory GPUs for ordinary Adam training.</li>
+</ul>
 </div>
 <div id="fig-m3-c02-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Distributed-training memory includes weights, gradients, master weights, optimizer state, and activations.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -384,7 +392,7 @@ Figure&nbsp;2.2: Distributed-training memory includes weights, gradients, master
 </figcaption>
 </figure>
 </div>
-<p>The second limit is elapsed time. Data parallelism can reduce time by processing more samples or tokens per step, but only while extra computation exceeds the communication and synchronization cost. Model sharding addresses memory; data replication addresses throughput. Large jobs usually combine both.</p>
+<p>The second limit is elapsed time. Data parallelism can reduce time by processing more samples or tokens per step, but only while extra computation exceeds the communication and synchronization cost. Model sharding addresses memory, data replication addresses throughput. Large jobs usually combine both.</p>
 </section>
 <section id="sec-m3-c02-s02" class="level2" data-number="2.2">
 <h2 data-number="2.2" class="anchored" data-anchor-id="sec-m3-c02-s02"><span class="header-section-number">2.2</span> Matching communication paths to model traffic</h2>
@@ -392,11 +400,11 @@ Figure&nbsp;2.2: Distributed-training memory includes weights, gradients, master
 <p>Distributed training uses four different kinds of technology:</p>
 <ul>
 <li><strong>Physical fabric:</strong> PCIe, NVLink/NVSwitch, InfiniBand, RoCE, or Ethernet moves bytes between devices or nodes.</li>
-<li><strong>Communication backend:</strong> NCCL implements GPU collectives and selects supported transport paths; Gloo or MPI cover other process and data patterns.</li>
+<li><strong>Communication backend:</strong> NCCL implements GPU collectives and selects supported transport paths, Gloo or MPI cover other process and data patterns.</li>
 <li><strong>Framework API:</strong> <code>torch.distributed</code> creates process groups and exposes collectives to PyTorch code.</li>
 <li><strong>Parallelism strategy:</strong> DDP, Fully Sharded Data Parallel (FSDP), tensor parallelism, pipeline parallelism, context parallelism, or expert parallelism decides which state and computation are split.</li>
 </ul>
-<p>NVLink is not NCCL: NVLink is a high-bandwidth intra-server fabric, whereas NCCL is a software library that may use NVLink, InfiniBand, RoCE, or sockets. <code>torch.distributed</code> is not a physical network either; it is the PyTorch API that requests collective operations from a backend.</p>
+<p>NVLink is not NCCL: NVLink is a high-bandwidth intra-server fabric, whereas NCCL is a software library that may use NVLink, InfiniBand, RoCE, or sockets. <code>torch.distributed</code> is not a physical network either, it is the PyTorch API that requests collective operations from a backend.</p>
 <div id="tbl-m3-c02-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c02-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -437,42 +445,53 @@ Table&nbsp;2.1: Fabric scope constrains the placement of communication-heavy par
 </div>
 </figure>
 </div>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation: placing one communication-heavy group</strong></p>
-<p><strong>Tensor payload:</strong> Four tensor-parallel ranks exchange layer outputs on nearly every transformer layer.</p>
-<p><strong>Fast local fabric:</strong> One server contains four GPUs connected through NVLink or NVSwitch, so the group remains inside that server.</p>
-<p><strong>Across servers:</strong> A larger data-parallel group crosses InfiniBand or RoCE only at gradient synchronization points.</p>
-<p><strong>Failure signal:</strong> If a tensor-parallel rank is placed across ordinary Ethernet, per-layer collective time rises and every downstream stage waits.</p>
-<p><strong>Conclusion:</strong> Communication frequency and payload size determine which parallel group benefits most from the fastest available link.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Device placement example: placing a tensor-parallel group across fast interconnects</strong></p>
+<p>Mapping parallel process groups to physical interconnects prevents cross-node communication bottlenecks:</p>
+<ul>
+<li><strong>Tensor payload:</strong> Four tensor-parallel ranks exchange layer outputs on nearly every transformer layer.</li>
+<li><strong>Fast local fabric:</strong> One server contains four GPUs connected through NVLink or NVSwitch, so the group remains inside that server.</li>
+<li><strong>Across servers:</strong> A larger data-parallel group crosses InfiniBand or RoCE only at gradient synchronization points.</li>
+<li><strong>Failure signal:</strong> If a tensor-parallel rank is placed across ordinary Ethernet, per-layer collective time rises and every downstream stage waits.</li>
+<li><strong>Conclusion:</strong> Communication frequency and payload size determine which parallel group benefits most from the fastest available link.</li>
+</ul>
 </div>
 </section>
 <section id="sec-m3-c02-s03" class="level2" data-number="2.3">
 <h2 data-number="2.3" class="anchored" data-anchor-id="sec-m3-c02-s03"><span class="header-section-number">2.3</span> Gradient synchronization in distributed training</h2>
 <p>The communication stack now has distinct layers. The simplest scaling baseline is a full model replica on each device, with one consistent update shared across replicas. Data sharding, local backpropagation, all-reduce, and optimizer stepping form the update sequence.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Distributed Data Parallel (DDP).</strong></span> a replicated-model strategy in which each process trains on a distinct batch shard and synchronizes gradients before applying the same optimizer update.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Distributed Data Parallel (DDP):</strong></span> A replicated-model strategy in which each process trains on a distinct batch shard and synchronizes gradients before applying the same optimizer update.</li>
+</ul>
 <p>A DDP process owns one model replica and usually one GPU. A <code>DistributedSampler</code> gives each rank a different sample subset. During backpropagation, DDP groups parameter gradients into buckets and launches asynchronous all-reduce operations as soon as a bucket is ready. Overlap hides some communication behind the remaining backward computation.</p>
 <p><span id="eq-m3-c02-e02"><span class="math display">\[
 g_{\mathrm{global}} = \frac{\sum_{r=1}^{N} g_r}{N}
 \tag{2.2}\]</span></span></p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation: one gradient component across four ranks</strong></p>
-<p><strong>Local values:</strong> The same bucket component is 0.8, 1.2, 1.0, and 1.4 on ranks 0 through 3.</p>
-<p><strong>Reduction:</strong> All-reduce sums the four values to 4.4.</p>
-<p><strong>Average:</strong> Dividing by world size 4 produces a synchronized component value of 1.1.</p>
-<p><strong>Update state:</strong> Every replica receives 1.1 before applying the optimizer step, so parameter values remain aligned.</p>
-<p><strong>Conclusion:</strong> Distinct data shards may produce different local gradients; synchronization makes the optimizer input identical on every replica.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Gradient synchronization example: all-reduce across four ranks</strong></p>
+<p>A simple four-rank collective demonstrates all-reduce arithmetic across distributed workers:</p>
+<ul>
+<li><strong>Local values:</strong> The same bucket component is 0.8, 1.2, 1.0, and 1.4 on ranks 0 through 3.</li>
+<li><strong>Reduction:</strong> All-reduce sums the four values to 4.4.</li>
+<li><strong>Average:</strong> Dividing by world size 4 produces a synchronized component value of 1.1.</li>
+<li><strong>Update state:</strong> Every replica receives 1.1 before applying the optimizer step, so parameter values remain aligned.</li>
+<li><strong>Conclusion:</strong> Distinct data shards may produce different local gradients, synchronization makes the optimizer input identical on every replica.</li>
+</ul>
 </div>
 <p>The equation does not require every implementation to perform a literal gather followed by division. Ring, tree, or hierarchical collective algorithms can produce the same result with different communication schedules.</p>
 <p><span id="eq-m3-c02-e03"><span class="math display">\[
 B_{\mathrm{ring}} ≈ \frac{2 \cdot \left(N-1\right)}{N} \cdot G
 \tag{2.3}\]</span></span></p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation: ring all-reduce traffic for eight ranks</strong></p>
-<p><strong>Gradient bucket:</strong> The synchronized bucket is 1 GB.</p>
-<p><strong>Rank count:</strong> Eight ranks participate.</p>
-<p><strong>Traffic:</strong> 2 × (8 - 1) ÷ 8 × 1 GB = 1.75 GB per rank.</p>
-<p><strong>Interpretation:</strong> That transfer repeats for many buckets each step; effective fabric bandwidth and overlap determine the exposed delay.</p>
-<p><strong>Conclusion:</strong> A compute-light model can become communication-bound even when every GPU reports activity.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Bandwidth calculation: ring all-reduce traffic for eight ranks</strong></p>
+<p>Calculating communication volume through a logical ring reveals per-rank bandwidth scaling:</p>
+<ul>
+<li><strong>Gradient bucket:</strong> The synchronized bucket is 1 GB.</li>
+<li><strong>Rank count:</strong> Eight ranks participate.</li>
+<li><strong>Traffic:</strong> 2 × (8 - 1) ÷ 8 × 1 GB = 1.75 GB per rank.</li>
+<li><strong>Interpretation:</strong> That transfer repeats for many buckets each step, effective fabric bandwidth and overlap determine the exposed delay.</li>
+<li><strong>Conclusion:</strong> A compute-light model can become communication-bound even when every GPU reports activity.</li>
+</ul>
 </div>
 <div id="fig-m3-c02-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Data parallelism replicates the model while each process consumes a different data shard.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -510,13 +529,16 @@ Figure&nbsp;2.3: Data parallelism replicates the model while each process consum
 <span id="lst-m3-c02-c01-21"><a href="#lst-m3-c02-c01-21" aria-hidden="true" tabindex="-1"></a>        optimizer.step()</span>
 <span id="lst-m3-c02-c01-22"><a href="#lst-m3-c02-c01-22" aria-hidden="true" tabindex="-1"></a>        optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Code walkthrough</strong></p>
-<p>Process group: <code>init_process_group</code> joins the rank to the NCCL collective group created by the launcher.</p>
-<p>Device assignment: <code>LOCAL_RANK</code> binds this process and its model replica to one GPU on the node.</p>
-<p>Data partition: <code>DistributedSampler</code> gives the rank a non-overlapping slice; <code>set_epoch</code> changes the deterministic shuffle between epochs.</p>
-<p>Synchronization point: <code>loss.backward()</code> activates DDP bucket hooks, and <code>optimizer.step()</code> consumes the reduced gradients after the required collectives finish.</p>
-<p>Result: Every rank computes on different examples but applies the same synchronized update.</p>
-<p>Limits: The compact loop omits mixed precision, gradient accumulation, checkpointing, validation, failure handling, and a sampler configuration for uneven dataset sizes.</p>
+<p><strong>Code walkthrough: PyTorch DDP training step</strong></p>
+<p>The distributed training loop coordinates rank processes and gradient synchronization:</p>
+<ul>
+<li><strong>Process group:</strong> <code>init_process_group</code> joins the rank to the NCCL collective group created by the launcher.</li>
+<li><strong>Device assignment:</strong> <code>LOCAL_RANK</code> binds this process and its model replica to one GPU on the node.</li>
+<li><strong>Data partition:</strong> <code>DistributedSampler</code> gives the rank a non-overlapping slice, <code>set_epoch</code> changes the deterministic shuffle between epochs.</li>
+<li><strong>Synchronization point:</strong> <code>loss.backward()</code> activates DDP bucket hooks, and <code>optimizer.step()</code> consumes the reduced gradients after the required collectives finish.</li>
+<li><strong>Result:</strong> Every rank computes on different examples but applies the same synchronized update.</li>
+<li><strong>Limits:</strong> The compact loop omits mixed precision, gradient accumulation, checkpointing, validation, failure handling, and a sampler configuration for uneven dataset sizes.</li>
+</ul>
 </div>
 </section>
 <section id="sec-m3-c02-s04" class="level2" data-number="2.4">
@@ -552,7 +574,7 @@ Table&nbsp;2.2: Parallelism selection begins with the resource that does not fit
 </thead>
 <tbody>
 <tr class="odd">
-<td>Model fits; training is too slow</td>
+<td>Model fits, training is too slow</td>
 <td>DDP</td>
 <td>Gradient all-reduce</td>
 </tr>
@@ -586,13 +608,16 @@ Table&nbsp;2.2: Parallelism selection begins with the resource that does not fit
 </div>
 </figure>
 </div>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation: how FSDP changes per-rank persistent state</strong></p>
-<p><strong>Replicated baseline:</strong> Four DDP ranks each hold the complete 128 GB persistent-state subtotal from the 8B Adam example.</p>
-<p><strong>Ideal four-way shard:</strong> Sharding parameters, gradients, master weights, and optimizer buffers divides that subtotal to about 32 GB per rank before temporary gathers and activations.</p>
-<p><strong>Execution trace:</strong> Before one layer executes, each rank gathers the required parameter shards; after backward computation, reduce-scatter leaves each rank with its gradient shard.</p>
-<p><strong>New constraint:</strong> Temporary all-gathers, activation memory, allocator reserve, and communication overlap still determine whether the run fits and performs well.</p>
-<p><strong>Conclusion:</strong> Sharding changes state residency rather than making memory free; the saved persistent state is exchanged for temporary buffers and communication.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>State sharding comparison: FSDP memory savings versus full replication</strong></p>
+<p>Sharding model states across ranks reduces per-GPU memory footprints in exchange for collective communication:</p>
+<ul>
+<li><strong>Replicated baseline:</strong> Four DDP ranks each hold the complete 128 GB persistent-state subtotal from the 8B Adam example.</li>
+<li><strong>Ideal four-way shard:</strong> Sharding parameters, gradients, master weights, and optimizer buffers divides that subtotal to about 32 GB per rank before temporary gathers and activations.</li>
+<li><strong>Execution trace:</strong> Before one layer executes, each rank gathers the required parameter shards, after backward computation, reduce-scatter leaves each rank with its gradient shard.</li>
+<li><strong>New constraint:</strong> Temporary all-gathers, activation memory, allocator reserve, and communication overlap still determine whether the run fits and performs well.</li>
+<li><strong>Conclusion:</strong> Sharding changes state residency rather than making memory free, the saved persistent state is exchanged for temporary buffers and communication.</li>
+</ul>
 </div>
 <div id="fig-m3-c02-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Hybrid parallelism places communication-heavy strategies according to network topology.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -608,11 +633,13 @@ Figure&nbsp;2.4: Hybrid parallelism places communication-heavy strategies accord
 <section id="sec-m3-c02-s05" class="level2" data-number="2.5">
 <h2 data-number="2.5" class="anchored" data-anchor-id="sec-m3-c02-s05"><span class="header-section-number">2.5</span> Coordinating workers through rendezvous</h2>
 <p>A selected strategy describes state placement. Processes still need unique identities and a common group before they can exchange any tensor. Ranks and rendezvous form the process group before the communication backend carries collective traffic.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Rank.</strong></span> the unique integer identity of one process inside a distributed process group.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>World size.</strong></span> the total number of participating processes in that group.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Local rank.</strong></span> the process index within one node, commonly used to select the local GPU.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Rendezvous.</strong></span> the control-plane handshake through which processes discover one another, agree on membership, and obtain group metadata.</p>
-<p><code>torchrun</code> starts processes and supplies <code>LOCAL_RANK</code>, <code>RANK</code>, and <code>WORLD_SIZE</code>. A store reachable through <code>MASTER_ADDR</code> and <code>MASTER_PORT</code> coordinates rendezvous. After <code>init_process_group</code> completes, NCCL establishes the data paths used for collectives; the rendezvous store is not the channel that carries every gradient.</p>
+<ul>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Rank:</strong></span> The unique integer identity of one process inside a distributed process group.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>World size:</strong></span> The total number of participating processes in that group.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Local rank:</strong></span> The process index within one node, commonly used to select the local GPU.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Rendezvous:</strong></span> The control-plane handshake through which processes discover one another, agree on membership, and obtain group metadata.</p></li>
+</ul>
+<p><code>torchrun</code> starts processes and supplies <code>LOCAL_RANK</code>, <code>RANK</code>, and <code>WORLD_SIZE</code>. A store reachable through <code>MASTER_ADDR</code> and <code>MASTER_PORT</code> coordinates rendezvous. After <code>init_process_group</code> completes, NCCL establishes the data paths used for collectives, the rendezvous store is not the channel that carries every gradient.</p>
 <div id="fig-m3-c02-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Global rank, node rank, and local rank identify every distributed process.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c02-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -635,24 +662,30 @@ Figure&nbsp;2.5: Global rank, node rank, and local rank identify every distribut
 <span id="lst-m3-c02-c02-7"><a href="#lst-m3-c02-c02-7" aria-hidden="true" tabindex="-1"></a>  <span class="op">--</span>master<span class="op">-</span>port<span class="op">=</span><span class="dv">29500</span> <span class="op">\</span></span>
 <span id="lst-m3-c02-c02-8"><a href="#lst-m3-c02-c02-8" aria-hidden="true" tabindex="-1"></a>  train.py</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Code walkthrough</strong></p>
-<p>Cluster shape: <code>--nnodes=2</code> and <code>--nproc-per-node=8</code> declare sixteen expected processes.</p>
-<p>Node identity: <code>--node-rank</code> gives each launcher a unique identity within the rendezvous.</p>
-<p>Rendezvous endpoint: The master address and port identify the shared control endpoint used to form the process group.</p>
-<p>Injected state: <code>torchrun</code> supplies global rank, local rank, and world size to each <code>train.py</code> process.</p>
-<p>Result: The launcher describes membership; the training program still initializes the process group and binds each local rank to a GPU.</p>
-<p>Limits: Both nodes share rendezvous settings, reachable networking, matching code and environment, and a scheduler allocation that starts the full group.</p>
+<p><strong>Code walkthrough: multi-node torchrun invocation</strong></p>
+<p>The launcher CLI coordinates cluster rendezvous and process rank binding:</p>
+<ul>
+<li><strong>Cluster shape:</strong> <code>--nnodes=2</code> and <code>--nproc-per-node=8</code> declare sixteen expected processes.</li>
+<li><strong>Node identity:</strong> <code>--node-rank</code> gives each launcher a unique identity within the rendezvous.</li>
+<li><strong>Rendezvous endpoint:</strong> The master address and port identify the shared control endpoint used to form the process group.</li>
+<li><strong>Injected state:</strong> <code>torchrun</code> supplies global rank, local rank, and world size to each <code>train.py</code> process.</li>
+<li><strong>Result:</strong> The launcher describes membership, the training program still initializes the process group and binds each local rank to a GPU.</li>
+<li><strong>Limits:</strong> Both nodes share rendezvous settings, reachable networking, matching code and environment, and a scheduler allocation that starts the full group.</li>
+</ul>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Rendezvous diagnosis</strong></p>
-<p>A wrong rank count, unreachable master address, blocked port, or partially scheduled job often looks like a hang because processes wait for missing peers.</p>
-<p>Process identities and control-plane connectivity are the first checks because either can create a hang before NCCL bandwidth becomes relevant.</p>
+<p><strong>Rendezvous diagnosis: root causes of distributed hangs</strong></p>
+<p>Process synchronization failures during initialization often appear as unresponsive jobs:</p>
+<ul>
+<li>A wrong rank count, unreachable master address, blocked port, or partially scheduled job often looks like a hang because processes wait for missing peers.</li>
+<li>Process identities and control-plane connectivity are the first checks because either can create a hang before NCCL bandwidth becomes relevant.</li>
+</ul>
 </div>
 </section>
 <section id="sec-m3-c02-s06" class="level2" data-number="2.6">
 <h2 data-number="2.6" class="anchored" data-anchor-id="sec-m3-c02-s06"><span class="header-section-number">2.6</span> Workload scheduling on GPU clusters</h2>
 <p>Rendezvous requires every expected rank to appear. A cluster scheduler that starts only part of a multi-node job can therefore consume GPUs while making no progress. A complete scheduling setup exposes devices, admits the full worker group together, and isolates resources.</p>
-<p>Kubernetes sees a GPU only after the host driver, container runtime integration, and NVIDIA device plugin or GPU Operator expose <code>nvidia.com/gpu</code>. A pod requests an integer device count; labels and node affinity select the GPU family, while taints keep ordinary CPU workloads from occupying expensive GPU nodes.</p>
+<p>Kubernetes sees a GPU only after the host driver, container runtime integration, and NVIDIA device plugin or GPU Operator expose <code>nvidia.com/gpu</code>. A pod requests an integer device count, labels and node affinity select the GPU family, while taints keep ordinary CPU workloads from occupying expensive GPU nodes.</p>
 <div id="fig-m3-c02-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Kubernetes exposes GPUs as schedulable resources and uses labels, taints, and tolerations to place workloads.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c02-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -698,15 +731,20 @@ Figure&nbsp;2.6: Kubernetes exposes GPUs as schedulable resources and uses label
 <span id="lst-m3-c02-c03-30"><a href="#lst-m3-c02-c03-30" aria-hidden="true" tabindex="-1"></a>            limits:</span>
 <span id="lst-m3-c02-c03-31"><a href="#lst-m3-c02-c03-31" aria-hidden="true" tabindex="-1"></a>              nvidia.com<span class="op">/</span>gpu: <span class="dv">8</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Code walkthrough</strong></p>
-<p>Replica state: <code>completions</code> and <code>parallelism</code> request two worker pods, but the base Job object does not give them distributed rank identities.</p>
-<p>GPU admission: Matching request and limit values reserve eight whole GPUs for each worker.</p>
-<p>Placement permission: The toleration allows the worker onto nodes protected by the GPU taint; node labels or affinity would further constrain GPU type.</p>
-<p>Artifact identity: The image digest makes both workers execute the same immutable training environment.</p>
-<p>Result: The manifest declares resources for sixteen GPUs, while a gang scheduler and launcher coordinate all-or-nothing admission and rendezvous.</p>
-<p>Limits: A complete deployment also needs worker indexing, service discovery, volumes, security context, retry policy, and a distributed-job controller or scheduler integration.</p>
+<p><strong>Code walkthrough: Kubernetes distributed worker manifest</strong></p>
+<p>The declarative pod specification defines resource allocation and cluster scheduling:</p>
+<ul>
+<li><strong>Replica state:</strong> <code>completions</code> and <code>parallelism</code> request two worker pods, but the base Job object does not give them distributed rank identities.</li>
+<li><strong>GPU admission:</strong> Matching request and limit values reserve eight whole GPUs for each worker.</li>
+<li><strong>Placement permission:</strong> The toleration allows the worker onto nodes protected by the GPU taint, node labels or affinity would further constrain GPU type.</li>
+<li><strong>Artifact identity:</strong> The image digest makes both workers execute the same immutable training environment.</li>
+<li><strong>Result:</strong> The manifest declares resources for sixteen GPUs, while a gang scheduler and launcher coordinate all-or-nothing admission and rendezvous.</li>
+<li><strong>Limits:</strong> A complete deployment also needs worker indexing, service discovery, volumes, security context, retry policy, and a distributed-job controller or scheduler integration.</li>
+</ul>
 </div>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Gang scheduling.</strong></span> an all-or-nothing allocation policy that starts a distributed job only when its complete resource set is available.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Gang scheduling:</strong></span> An all-or-nothing allocation policy that starts a distributed job only when its complete resource set is available.</li>
+</ul>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A gang-admission object declares that both workers and all sixteen GPUs form one scheduling unit.</p>
 </div>
@@ -729,13 +767,15 @@ Figure&nbsp;2.7: Gang scheduling prevents a distributed job from holding only pa
 </figcaption>
 </figure>
 </div>
-<p>Volcano provides HPC-style gang scheduling, while Kueue adds queue and quota management around the default Kubernetes scheduler. SkyPilot abstracts resource provisioning across clouds and clusters. Slurm provides mature queueing and accounting; Soperator runs the Slurm control plane on Kubernetes so Slurm manages jobs while Kubernetes manages pods and nodes.</p>
+<p>Volcano provides HPC-style gang scheduling, while Kueue adds queue and quota management around the default Kubernetes scheduler. SkyPilot abstracts resource provisioning across clouds and clusters. Slurm provides mature queueing and accounting, Soperator runs the Slurm control plane on Kubernetes so Slurm manages jobs while Kubernetes manages pods and nodes.</p>
 </section>
 <section id="sec-m3-c02-s07" class="level2" data-number="2.7">
 <h2 data-number="2.7" class="anchored" data-anchor-id="sec-m3-c02-s07"><span class="header-section-number">2.7</span> Recovering distributed jobs from checkpoints</h2>
 <p>Gang scheduling gets all ranks started together. At cluster scale, hardware, network, process, and preemptible-capacity failures make a long uninterrupted run unlikely. The acceptable progress loss and recovery time determine checkpoint frequency, layout, and persistence.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Recovery Point Objective (RPO).</strong></span> the maximum amount of completed training progress the system may lose after a failure.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Recovery Time Objective (RTO).</strong></span> the maximum acceptable time between failure and resumed useful training.</p>
+<ul>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Recovery Point Objective (RPO):</strong></span> The maximum amount of completed training progress the system may lose after a failure.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Recovery Time Objective (RTO):</strong></span> The maximum acceptable time between failure and resumed useful training.</p></li>
+</ul>
 <p>A resumable checkpoint includes model parameters, optimizer state, scheduler state, step or epoch, random-number-generator state, and data-loader position when exact sample order matters. DDP may let rank 0 save the unwrapped model, while sharded strategies require a compatible distributed-checkpoint format.</p>
 <div id="fig-m3-c02-f08" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Recovery objectives determine checkpoint frequency, layout, and asynchronous persistence.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -747,23 +787,26 @@ Figure&nbsp;2.8: Recovery objectives determine checkpoint frequency, layout, and
 </figcaption>
 </figure>
 </div>
-<p>A fast path writes shards to host memory or local NVMe, returns GPU control quickly, and copies asynchronously to shared or object storage. Local media minimizes the pause but is not durable; the node-loss case is covered only after the background copy completes.</p>
+<p>A fast path writes shards to host memory or local NVMe, returns GPU control quickly, and copies asynchronously to shared or object storage. Local media minimizes the pause but is not durable, the node-loss case is covered only after the background copy completes.</p>
 <p>A checkpoint becomes restorable through an ordered publication path:</p>
 <ol type="1">
-<li><strong>Write a temporary generation.</strong> Every rank writes its shard under a generation-specific temporary prefix; the live restore pointer remains unchanged.</li>
+<li><strong>Write a temporary generation.</strong> Every rank writes its shard under a generation-specific temporary prefix, the live restore pointer remains unchanged.</li>
 <li><strong>Verify the generation.</strong> The coordinator checks the expected shard count, file hashes, training step, model configuration, and writer completion from every rank.</li>
 <li><strong>Publish the commit record.</strong> A small manifest names the verified shards and compatibility metadata, then an atomic pointer or object-store marker makes that generation discoverable.</li>
 <li><strong>Validate restore.</strong> A test reader reconstructs model, optimizer, scheduler, random state, and data position before the generation enters the recovery set.</li>
 <li><strong>Ignore incomplete state.</strong> A missing shard or absent commit record leaves the previous committed generation as the restore target.</li>
 </ol>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation: checkpoint interval from expected lost work</strong></p>
-<p><strong>Run cost:</strong> A 64-GPU job costs $180 per GPU-hour, or $11,520 per wall-clock hour.</p>
-<p><strong>Allowed average lost work:</strong> The team accepts at most 15 minutes on average.</p>
-<p><strong>Periodic-failure assumption:</strong> A failure is equally likely within one checkpoint interval, so average lost work is approximately half the interval.</p>
-<p><strong>Interval:</strong> To keep the average at 15 minutes, checkpoint every 30 minutes.</p>
-<p><strong>I/O check:</strong> If a synchronous checkpoint pauses GPUs for 4 minutes, 13.3% of time is lost to checkpointing; asynchronous persistence is required.</p>
-<p><strong>Conclusion:</strong> Checkpoint frequency is an economic and recovery decision constrained by storage throughput.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Checkpoint sizing example: optimal interval from allowable lost compute</strong></p>
+<p>Balancing cluster cost and acceptable lost work determines optimal checkpoint frequency:</p>
+<ul>
+<li><strong>Run cost:</strong> A 64-GPU job costs $180 per GPU-hour, or $11,520 per wall-clock hour.</li>
+<li><strong>Allowed average lost work:</strong> The team accepts at most 15 minutes on average.</li>
+<li><strong>Periodic-failure assumption:</strong> A failure is equally likely within one checkpoint interval, so average lost work is approximately half the interval.</li>
+<li><strong>Interval:</strong> To keep the average at 15 minutes, checkpoint every 30 minutes.</li>
+<li><strong>I/O check:</strong> If a synchronous checkpoint pauses GPUs for 4 minutes, 13.3% of time is lost to checkpointing, asynchronous persistence is required.</li>
+<li><strong>Conclusion:</strong> Checkpoint frequency is an economic and recovery decision constrained by storage throughput.</li>
+</ul>
 </div>
 </section>
 <section id="sec-m3-c02-s08" class="level2" data-number="2.8">
@@ -772,21 +815,27 @@ Figure&nbsp;2.8: Recovery objectives determine checkpoint frequency, layout, and
 <p><span id="eq-m3-c02-e04"><span class="math display">\[
 \mathrm{MFU} = \frac{F_{\mathrm{observed}}}{F_{\mathrm{peak}}}
 \tag{2.4}\]</span></span></p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation: MFU for an eight-GPU training run</strong></p>
-<p><strong>Observed work per token:</strong> For an illustrative model and training objective, the arithmetic estimate is 120 GFLOPs per processed token.</p>
-<p><strong>Measured throughput:</strong> The eight-GPU run processes 20,000 tokens each second.</p>
-<p><strong>Observed rate:</strong> 20,000 tokens/s × 120 GFLOPs/token = 2.4 PFLOPs/s of model arithmetic.</p>
-<p><strong>Relevant peak:</strong> Eight devices provide a combined 8.0 PFLOPs/s peak at the precision used by the run.</p>
-<p><strong>Utilization:</strong> Dividing 2.4 by 8.0 gives 0.30, or 30% MFU.</p>
-<p><strong>Diagnosis:</strong> The remaining 70% may come from input wait, memory traffic, kernels, collectives, imbalance, or bubbles; it is not automatically communication loss.</p>
-<p><strong>Conclusion:</strong> MFU quantifies the gap, while correlated timelines and counters identify where the lost time originates.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>MFU calculation: Model FLOPs Utilization for an eight-GPU cluster</strong></p>
+<p>Comparing observed floating-point throughput against hardware peak quantifies compute efficiency:</p>
+<ul>
+<li><strong>Observed work per token:</strong> For an illustrative model and training objective, the arithmetic estimate is 120 GFLOPs per processed token.</li>
+<li><strong>Measured throughput:</strong> The eight-GPU run processes 20,000 tokens each second.</li>
+<li><strong>Observed rate:</strong> 20,000 tokens/s × 120 GFLOPs/token = 2.4 PFLOPs/s of model arithmetic.</li>
+<li><strong>Relevant peak:</strong> Eight devices provide a combined 8.0 PFLOPs/s peak at the precision used by the run.</li>
+<li><strong>Utilization:</strong> Dividing 2.4 by 8.0 gives 0.30, or 30% MFU.</li>
+<li><strong>Diagnosis:</strong> The remaining 70% may come from input wait, memory traffic, kernels, collectives, imbalance, or bubbles, it is not automatically communication loss.</li>
+<li><strong>Conclusion:</strong> MFU quantifies the gap, while correlated timelines and counters identify where the lost time originates.</li>
+</ul>
 </div>
 <p>GPU utilization alone can be misleading because a device may report activity while waiting on memory or communication. Throughput, MFU, power draw, memory-bandwidth utilization, NVLink or InfiniBand traffic, step-time variance, and collective traces provide the comparison. A straggler slows every synchronized rank.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Eight-rank timing trace</strong></p>
-<p>Ranks 0–6 finish input loading in 45 ms, while rank 7 takes 130 ms; all ranks then enter the same 70 ms all-reduce.</p>
-<p>The collective appears long on every timeline because seven ranks wait for rank 7 before useful transfer can complete. The unequal pre-collective gap identifies input or host work on rank 7 as the first cause to investigate.</p>
+<p><strong>Timeline diagnosis: identifying straggler ranks</strong></p>
+<p>Analyzing per-rank execution phases exposes load imbalance across cluster workers:</p>
+<ul>
+<li>Ranks 0–6 finish input loading in 45 ms, while rank 7 takes 130 ms, all ranks then enter the same 70 ms all-reduce.</li>
+<li>The collective appears long on every timeline because seven ranks wait for rank 7 before useful transfer can complete. The unequal pre-collective gap identifies input or host work on rank 7 as the first cause to investigate.</li>
+</ul>
 </div>
 <div id="fig-m3-c02-f09" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Training efficiency combines throughput, utilization, recovery, and cost rather than one GPU-utilization number.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -830,7 +879,7 @@ Table&nbsp;2.3: Distributed-training symptoms become useful when tied to specifi
 <td>Communication topology or parallelism</td>
 </tr>
 <tr class="odd">
-<td>GPU utilization high; power low</td>
+<td>GPU utilization high, power low</td>
 <td>Memory bandwidth, data-loader time, collective wait</td>
 <td>Input path or synchronization</td>
 </tr>
@@ -856,9 +905,19 @@ Table&nbsp;2.3: Distributed-training symptoms become useful when tied to specifi
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter 2 summary</strong></p>
-<p>Core mechanisms: PyTorch DDP ring all-reduce gradient synchronization; ZeRO-1/2/3 and FSDP model-state sharding; c10d rendezvous process groups; Kubernetes gang scheduling.</p>
-<p>Governing tradeoffs: All-reduce communication overhead vs.&nbsp;memory savings; sharding granularities vs.&nbsp;all-gather bandwidth saturation; MFU vs.&nbsp;cluster scale.</p>
-<p>Failure modes &amp; defenses: Atomic two-phase checkpoint validation; gang-scheduled pod coscheduling preventing partial-cluster deadlocks.</p>
+<p>Key distributed platform principles and tradeoffs established in this chapter:</p>
+<ul>
+<li><strong>Core mechanisms:</strong> PyTorch DDP ring all-reduce gradient synchronization, ZeRO-1/2/3 and FSDP model-state sharding, c10d rendezvous process groups, Kubernetes gang scheduling.</li>
+<li><strong>Governing tradeoffs:</strong> All-reduce communication overhead vs.&nbsp;memory savings, sharding granularities vs.&nbsp;all-gather bandwidth saturation, MFU vs.&nbsp;cluster scale.</li>
+<li><strong>Failure modes &amp; defenses:</strong> Atomic two-phase checkpoint validation, gang-scheduled pod coscheduling preventing partial-cluster deadlocks.</li>
+</ul>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chapter checkpoint</strong></p>
+<p>Review the self-study questions in Appendix C, Section C.1 (Questions 3, 4, and 5) to test understanding of memory accounting, ring all-reduce communication, gang scheduling, and checkpoint recovery before proceeding to serving architectures.</p>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Carry-forward result</strong></p>
 </div>
 <p>The healthy path is now complete: versioned inputs start as one allocation, each rank receives unique data, collectives produce consistent updates, checkpoints cross failure domains, and measurements show useful work. The next chapter changes the workload from synchronized training steps to independent user requests with persistent KV-cache state.</p>
 

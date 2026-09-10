@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -446,7 +446,6 @@ window.Quarto = {
   <li><a href="#sec-m2-c15-s05" id="toc-sec-m2-c15-s05" class="nav-link" data-scroll-target="#sec-m2-c15-s05"><span class="header-section-number">15.5</span> Executing Additive Cell State Updates in LSTMs</a></li>
   <li><a href="#sec-m2-c15-s06" id="toc-sec-m2-c15-s06" class="nav-link" data-scroll-target="#sec-m2-c15-s06"><span class="header-section-number">15.6</span> The Vanishing Gradient Problem and the O(T) Sequential Bottleneck</a></li>
   <li><a href="#sec-m2-c15-s07" id="toc-sec-m2-c15-s07" class="nav-link" data-scroll-target="#sec-m2-c15-s07"><span class="header-section-number">15.7</span> RNN state trace</a></li>
-  <li><a href="#sec-m2-c15-check" id="toc-sec-m2-c15-check" class="nav-link" data-scroll-target="#sec-m2-c15-check"><span class="header-section-number">15.8</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -472,7 +471,6 @@ window.Quarto = {
 </header>
 
 
-<p>Compare count-based context with learned recurrent state and its training constraints.</p>
 <p>Language has order: an earlier token can change the meaning of a later one. Recurrent models represent that order by carrying a state from one position to the next.</p>
 <p>Sequence tasks must retain both token content and token order. N-grams use a fixed history; RNNs and LSTMs carry a learned state through the sequence, which exposes the limits that motivate attention.</p>
 <p>In code, <code>torch.nn.RNN</code>, <code>GRU</code>, and <code>LSTM</code> return per-token outputs and final states; NLTK supports the count-based n-gram comparison.</p>
@@ -518,11 +516,6 @@ P(x_{t}\mid x_{&lt;t})\approx P\!\left(x_{t}\mid x_{t-n+1},\ldots,x_{t-1}\right)
 <p>A trigram model estimates P(‘sat’ | ‘the cat slept’) as P(‘sat’ | ‘cat slept’).</p>
 </div>
 <p>A fixed history is simple to count, while a learned state can compress earlier evidence. Training that state requires an unrolled recurrent computation.</p>
-<p><strong>Counts, unseen events, and smoothing.</strong> For history <span class="math inline">\(h\)</span>, the maximum-likelihood estimate is <span class="math inline">\(c(h,w)/c(h)\)</span>, where <span class="math inline">\(c(h,w)\)</span> counts continuation <span class="math inline">\(w\)</span> and <span class="math inline">\(c(h)=\sum_w c(h,w)\)</span>. A zero count assigns zero probability even to a plausible continuation. An entirely unseen history also makes the denominator zero.</p>
-<p>Additive smoothing distributes extra count <span class="math inline">\(\alpha&gt;0\)</span> over a fixed prediction vocabulary of size <span class="math inline">\(V\)</span>:</p>
-<p><span class="math display">\[P_\alpha(w\mid h)=\frac{c(h,w)+\alpha}{c(h)+\alpha V}.\]</span></p>
-<p>For continuations <code>cat</code>, <code>dog</code>, and <code>UNK</code> after <code>the</code>, use counts <span class="math inline">\((1,1,0)\)</span>. With <span class="math inline">\(\alpha=1\)</span>, probabilities are <span class="math inline">\((2/5,2/5,1/5)\)</span>, which sum to one. For an unseen history, they are all <span class="math inline">\(1/3\)</span>. This solves the zero-probability problem at the cost of moving probability away from observed events. Excessive smoothing can make frequent and rare continuations too similar.</p>
-<p>Build the vocabulary and counts from training data only, map excluded words to <code>UNK</code>, and choose <span class="math inline">\(\alpha\)</span> on validation data. For held-out continuation probabilities <span class="math inline">\(0.4\)</span> and <span class="math inline">\(0.2\)</span>, mean negative log probability is <span class="math inline">\(-\log(0.4\cdot0.2)/2\)</span>, and perplexity is <span class="math inline">\(1/\sqrt{0.08}\approx3.54\)</span>. Compare methods only with the same tokenization, vocabulary, boundaries, and scored positions. The <a href="ch-m2-c24.html#sec-m2-c24-s06">n-gram lab</a> checks this baseline before recurrence replaces a fixed history with learned state.</p>
 </section>
 <section id="sec-m2-c15-s03" class="level2" data-number="15.3">
 <h2 data-number="15.3" class="anchored" data-anchor-id="sec-m2-c15-s03"><span class="header-section-number">15.3</span> Training Recurrent Networks with Backpropagation Through Time</h2>
@@ -729,17 +722,6 @@ h_{t}=\tanh(W_{x}x_{t}+W_{h}h_{t-1}+b)
 </ul>
 <p>Sequence alternatives show what attention improves: recurrence, fixed context, and step-by-step state updates.</p>
 <p>Attention selects and combines value vectors through normalized query-key scores.</p>
-</section>
-<section id="sec-m2-c15-check" class="level2" data-number="15.8">
-<h2 data-number="15.8" class="anchored" data-anchor-id="sec-m2-c15-check"><span class="header-section-number">15.8</span> Chapter checkpoint</h2>
-<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
-<ol type="1">
-<li>An unseen history has no counts. Why is an unsmoothed conditional probability unusable, and what does additive smoothing supply?</li>
-<li>A recurrent model receives correct previous tokens during training but its own output during generation. Which failure can compound?</li>
-</ol>
-<p><strong>Feedback</strong></p>
-<p><strong>1.</strong> Both numerator and denominator can be zero. Positive additive counts define a normalized distribution over the fixed prediction vocabulary, uniform for an entirely unseen history.</p>
-<p><strong>2.</strong> An incorrect generated token becomes a later input, changing subsequent state and predictions. Low teacher-forced loss alone does not test that full generation behavior.</p>
 
 
 </section>

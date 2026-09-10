@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -392,7 +392,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </header>
 
 
-<p>Chapter 1 established how a checkpoint turns a token prefix into a continuation. A useful application must also define what the request means, which evidence the model may use, and which output formats the application accepts. This chapter turns those requirements into a repeatable request: task definition, token-generation parameters, demonstrations, structured output, and validation.</p>
+<p>Chapter 1 established how a checkpoint turns a token prefix into a continuation. A useful application must also define request semantics, permissible evidence, and acceptable output formats. This chapter turns those requirements into a repeatable request: task definition, token-generation parameters, demonstrations, structured output, and validation.</p>
 <div id="fig-m1-c02-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Task specifications, decoder controls, examples, and schema validation form an iterative generation loop.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m1-c02-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -421,12 +421,12 @@ Figure&nbsp;2.1: Task specifications, decoder controls, examples, and schema val
 <p>How should missing or conflicting evidence be reported?</p>
 </div>
 <p>The same specification must state what happens after the answer: whether the application displays a recommendation, enqueues the case, or requires human authorization. That decision remains in application code even when the model proposes the route.</p>
-<p>Some requirements can be checked directly. Application logic can validate schema types and permissions, verify that evidence is nonempty, and check cited identifiers. Those checks do not establish that the evidence supports the explanation. Support, usefulness, tone, and completeness may need task-specific tests or human/model judgment. Keeping these measurements separate makes a missing field distinguishable from a well-formed but unsupported answer.</p>
+<p>Some requirements admit direct checks. Application logic can validate schema types and permissions, verify that evidence is nonempty, and check cited identifiers. Those checks do not establish that the evidence supports the explanation. Support, usefulness, tone, and completeness may need task-specific tests or human/model judgment. Keeping these measurements separate makes a missing field distinguishable from a well-formed but unsupported answer.</p>
 </section>
 <section id="sec-m1-c02-s02" class="level2" data-number="2.2">
 <h2 data-number="2.2" class="anchored" data-anchor-id="sec-m1-c02-s02"><span class="header-section-number">2.2</span> Task-specific token generation parameters</h2>
 <p>The previous chapter defined temperature, top-k, top-p, greedy selection, and sampling as transformations of one next-token distribution. The remaining question is which differences between repeated answers are acceptable for this task and which are errors. Start with a low-variation baseline, change one token-generation parameter at a time, and measure answer quality, diversity, latency, and errors on fixed cases.</p>
-<p>Extraction, classification, routing, and schema-constrained tasks normally benefit from concentrated decoding because variation creates inconsistent labels without adding useful information. Brainstorming and candidate generation can use broader sampling when downstream ranking or human selection is part of the design. Neither setting is correct for every task. The task specification defines which differences count as acceptable alternatives and which count as defects.</p>
+<p>Extraction, classification, routing, and schema-constrained tasks normally benefit from concentrated decoding because variation creates inconsistent labels without adding useful information. Brainstorming and candidate generation can use broader sampling when downstream ranking or human selection is part of the design. Neither setting is intrinsically correct: the task specification defines which differences count as acceptable alternatives and which count as defects.</p>
 <p>Record top-k and top-p with the other request settings. A lower temperature can still produce different answers when retrieval, tools, batching, serving software, or provider versions change. Repeated evaluation should test the whole application, not one setting in isolation.</p>
 <div id="tbl-m1-c02-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
@@ -477,12 +477,8 @@ Table&nbsp;2.1: Decoder settings are justified by the task’s acceptance test r
 <section id="sec-m1-c02-s03" class="level2" data-number="2.3">
 <h2 data-number="2.3" class="anchored" data-anchor-id="sec-m1-c02-s03"><span class="header-section-number">2.3</span> Demonstrations and decision boundaries</h2>
 <p>A written task specification defines the desired behavior in prose. Some boundaries remain ambiguous until the model sees representative inputs and outputs. Zero-shot instructions establish a baseline. Few-shot examples then demonstrate edge cases, output shape, and category meaning only when the baseline needs them.</p>
-<p><strong>Zero-shot prompting</strong> supplies instructions without demonstrations. It is the simplest baseline and shows whether extra prompt structure is needed. <strong>Few-shot prompting</strong> adds examples inside the request. Examples are especially helpful for smaller models, uncommon labels, or formatting behavior that prose alone does not define reliably.</p>
+<p><strong>Zero-shot prompting</strong> supplies instructions without demonstrations. It is the simplest baseline and makes unnecessary scaffolding visible. <strong>Few-shot prompting</strong> adds examples inside the request. Examples are especially helpful for smaller models, uncommon labels, or formatting behavior that prose alone does not define reliably.</p>
 <p>Examples must cover the input dimensions that change the decision. Five nearly identical positive cases convey less information than a small set spanning clear positive, clear negative, ambiguous, and out-of-scope cases. Example selection can itself become a retrieval problem: storing a demonstration repository, embedding incoming queries, and retrieving only relevant demonstrations.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Example: Holding the test case constant</strong></p>
-<p>Suppose a support router must choose among <code>general_information</code>, <code>billing_review</code>, and <code>out_of_scope</code>. The held-out request is: <code>The invoice includes a fee I do not recognize.</code> A zero-shot prompt defines the three labels, the required response fields, and that request. A few-shot prompt uses the same instructions and settings, then adds three labelled cases: finding a receipt, disputing a duplicate charge, and asking for an unrelated poem. Both prompts should be graded on the same held-out request. The expected label is <code>billing_review</code> because the customer disputes a charge. If both responses are correct, the illustration shows no improvement. A benefit needs results across a held-out set, not a more flattering single output.</p>
-</div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Instruction, data, and a final reminder</strong></p>
 <p>Long requests can bury the task under a large block of source text. In that case, state the instruction first, clearly delimit the data, and end with one short reminder of the transformation or output required.</p>
@@ -493,11 +489,12 @@ Table&nbsp;2.1: Decoder settings are justified by the task’s acceptance test r
 </section>
 <section id="sec-m1-c02-s04" class="level2" data-number="2.4">
 <h2 data-number="2.4" class="anchored" data-anchor-id="sec-m1-c02-s04"><span class="header-section-number">2.4</span> Structured output and software validation</h2>
-<p>Examples can demonstrate categories and formatting, but downstream code still needs a stable parseable result. Natural-language formatting instructions do not guarantee valid fields or values supported by the supplied evidence. Structured output combines a schema, constrained generation when available, application validation, and evidence checks.</p>
+<p>Examples can demonstrate categories and formatting, but downstream code still needs a stable parseable result. Natural-language formatting instructions do not guarantee valid fields or values supported by the supplied evidence. A structured-output path combines a schema, constrained generation when available, application validation, and evidence checks.</p>
 <p>A JavaScript Object Notation (JSON) schema can restrict field names, types, required values, and allowed values. Provider-side schema enforcement reduces syntax failures, but it cannot prove that a label or cited identifier follows from the input. Validation has two layers: structural validation checks the response shape, while evidence validation checks each field against the supplied data and application rules.</p>
+<p><strong>Code example 2.1 - a typed classification request separates policy, data, and the accepted result shape.</strong></p>
 <p>This abbreviated Python example uses Pydantic 2, a library that checks data against declared Python types. The application supplies an already-authorized list of evidence records, each with an <code>id</code> and <code>text</code>. Its <code>generate_json(messages, schema)</code> adapter sends the messages through a provider that supports the requested output format and returns a Python dictionary, while handling transport errors and model refusals. This interface is separate from the Nebius Chat Completions example, so it does not assume that every provider supports the same structured-output endpoint.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
-<p><strong>Code example:</strong> 2.1: A classification request separates instructions, input data, and the required response fields.</p>
+<p><strong>Code example:</strong> Code example 2.1 - a typed classification request separates policy, data, and the accepted result shape.</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c02-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c02-c01-1"><a href="#lst-m1-c02-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
 <span id="lst-m1-c02-c01-2"><a href="#lst-m1-c02-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> Literal</span>
@@ -544,7 +541,7 @@ Table&nbsp;2.1: Decoder settings are justified by the task’s acceptance test r
 <p><strong>A valid structure is not evidence</strong></p>
 <p>A perfectly valid JSON object can still contain an unsupported claim. Treat schema success, evidence support, and permission to act as three separate checks.</p>
 </div>
-<p>Repair behavior depends on which layer failed. A parse error may justify one constrained retry or a deterministic repair. A claim not supported by the evidence triggers new evidence, a different route, or an insufficient-evidence outcome. Formatting alone cannot establish support. Recording raw output, parsed output, validation results, and retry reason makes these cases distinguishable during evaluation.</p>
+<p>Repair behavior depends on which layer failed. A parse error may justify one constrained retry or a deterministic repair. A semantically unsupported claim triggers new evidence, a different route, or an insufficient-evidence outcome. Formatting alone cannot establish support. Recording raw output, parsed output, validation results, and retry reason makes these cases distinguishable during evaluation.</p>
 <p>A model response becomes usable when token-generation parameters, instructions, examples, schemas, and validators work together. Chapter 3 adds the wider request context: history, evidence, tools, and stored information selected for one request.</p>
 
 

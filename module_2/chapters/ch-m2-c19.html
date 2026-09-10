@@ -47,7 +47,7 @@ ul.task-list li input[type="checkbox"] {
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -366,7 +366,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -409,7 +409,6 @@ window.Quarto = {
   <li><a href="#sec-m2-c19-s03" id="toc-sec-m2-c19-s03" class="nav-link" data-scroll-target="#sec-m2-c19-s03"><span class="header-section-number">19.3</span> Minimizing Next-Token Prediction Loss across Trillions of Tokens</a></li>
   <li><a href="#sec-m2-c19-s04" id="toc-sec-m2-c19-s04" class="nav-link" data-scroll-target="#sec-m2-c19-s04"><span class="header-section-number">19.4</span> Predicting Optimal Scale with Chinchilla Laws</a></li>
   <li><a href="#sec-m2-c19-s05" id="toc-sec-m2-c19-s05" class="nav-link" data-scroll-target="#sec-m2-c19-s05"><span class="header-section-number">19.5</span> Visualizing Pretraining Data Packing and Chinchilla Frontiers</a></li>
-  <li><a href="#sec-m2-c19-check" id="toc-sec-m2-c19-check" class="nav-link" data-scroll-target="#sec-m2-c19-check"><span class="header-section-number">19.6</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -435,7 +434,6 @@ window.Quarto = {
 </header>
 
 
-<p>Construct pretraining data and interpret loss weighting and compute allocation.</p>
 <p>Pretraining repeats the same prediction objective over very large corpora. The data, model size, and available compute jointly determine what can be learned and at what cost.</p>
 <p>Pretraining repeats next-token or masked-token learning over large, filtered corpora. Data quality, sequence packing, parameter count, and compute budget jointly affect the resulting model and the cost of producing it.</p>
 <p>In code, Hugging Face <code>datasets</code> loads and streams corpora, tokenizer calls create model-ready sequences, and data collators pack or pad them before loss computation.</p>
@@ -511,10 +509,15 @@ P(\mathrm{data})=\sum_s\alpha_sP_s(\mathrm{data}),\quad\sum_s\alpha_s=1
 </section>
 <section id="sec-m2-c19-s03" class="level2" data-number="19.3">
 <h2 data-number="19.3" class="anchored" data-anchor-id="sec-m2-c19-s03"><span class="header-section-number">19.3</span> Minimizing Next-Token Prediction Loss across Trillions of Tokens</h2>
-<p><a href="ch-m2-c18.html#sec-m2-c18-s03">Chapter 18</a> fixes the objective and inference interface. Pretraining now has to preserve that objective while packing many documents into efficient batches. <a href="ch-m2-c08.html#sec-m2-c08-s03">§8.3</a> supplies the masked token-loss reduction.</p>
-<p>Suppose two packed sequences contribute three and one supervised target positions. If the three losses are <span class="math inline">\(0.2,0.4,0.6\)</span> and the remaining loss is <span class="math inline">\(1.0\)</span>, the token-weighted mean is <span class="math inline">\(2.2/4=0.55\)</span>. Averaging the two sequence means instead gives <span class="math inline">\((0.4+1.0)/2=0.7\)</span>. Both are valid defined objectives, but they weight the documents differently. Record which one the training recipe intends.</p>
-<p>Packing also needs an explicit document-boundary policy. If separate documents must not condition on one another, the attention mask must block cross-document visibility as well as future positions. Ignoring a label changes the loss, while an attention mask changes what the prediction can read. <a href="../frontmatter/ch-m2-notation.html#sec-m2-notation-conventions">The mask reference</a> keeps those operations separate.</p>
-<p>Count the non-ignored target positions actually used in training when reporting the token budget. Padding, truncated text, or duplicated passages can make raw storage size a poor proxy. With the data and reduction defined, the next section relates that token budget to model size and available compute.</p>
+<p>A pretraining objective converts raw token sequences into input-target pairs without requiring manually assigned labels.</p>
+<p>Decoder-only LLMs are commonly trained with next-token prediction. Encoder models such as BERT-style systems often use masked language modeling. Encoder-decoder models can be trained for denoising or sequence-to-sequence objectives.</p>
+<p>The objective determines the inference interface. A next-token decoder naturally supports left-to-right generation; a masked encoder is stronger for representation and fill-in tasks but is not by itself a left-to-right generator.</p>
+<p>Self-supervision creates targets from the text itself. That is why enormous unlabeled corpora can be used: the next token or masked token supplies the label.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Autoregressive factorization</strong></p>
+<p>Conditional probabilities 0.5, 0.4, and 0.25 multiply to a sequence probability of 0.05.</p>
+</div>
+<p>The batch loss drives the same gradients and optimizer updates introduced earlier, now repeated over much larger data and model scales.</p>
 </section>
 <section id="sec-m2-c19-s04" class="level2" data-number="19.4">
 <h2 data-number="19.4" class="anchored" data-anchor-id="sec-m2-c19-s04"><span class="header-section-number">19.4</span> Predicting Optimal Scale with Chinchilla Laws</h2>
@@ -570,17 +573,6 @@ Figure&nbsp;19.2: Filtering and deduplication change the empirical distribution 
 <p>Data curation is part of the mathematical training setup because it changes the empirical distribution whose loss is minimized.</p>
 <p>Pretraining data defines the empirical distribution whose token losses produce gradients.</p>
 <p>Adaptation changes weights, adapters, or conditioning context after pretraining.</p>
-</section>
-<section id="sec-m2-c19-check" class="level2" data-number="19.6">
-<h2 data-number="19.6" class="anchored" data-anchor-id="sec-m2-c19-check"><span class="header-section-number">19.6</span> Chapter checkpoint</h2>
-<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
-<ol type="1">
-<li>One packed sequence has three target positions and another has one. Why does averaging sequence means differ from averaging token losses?</li>
-<li>A compute-scaling relationship suggests increasing both model size and token count. Can it predict a new task’s score without an experiment?</li>
-</ol>
-<p><strong>Feedback</strong></p>
-<p><strong>1.</strong> The first gives equal weight to the sequences, while the second gives equal weight to target positions. The chapter example gives 0.7 versus 0.55.</p>
-<p><strong>2.</strong> No.&nbsp;It describes an empirical relationship under studied conditions. Corpus quality, architecture, objective, and task protocol still constrain transfer to a new setting.</p>
 
 
 </section>

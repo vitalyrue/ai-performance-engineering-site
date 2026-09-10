@@ -341,10 +341,13 @@ window.Quarto = {
 <p>How can the system reproduce a multi-step ML result after partial failure, schedule delay, code change, or operator handoff? Chapter 5 established durable artifacts and rebuildable derived state. Dependency graphs replace manual command sequences with tasks that have explicit inputs, outputs, resources, retries, and evidence.</p>
 <p>The three panels connect a pipeline DAG to its execution engine, then to the reusable and governed components that make the workflow durable.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Chapter map</strong></p>
-<p><strong>6.1–6.3 Pipelines as DAGs &amp; Task Contracts:</strong> Replace brittle manual scripts with Directed Acyclic Graphs (DAGs), and define immutable task inputs, outputs, and parameters.</p>
-<p><strong>6.4–6.5 Airflow Architecture &amp; ML Workflows:</strong> Construct end-to-end Airflow DAGs across data validation, model training, and evaluation using Celery and Kubernetes executors.</p>
-<p><strong>6.6–6.9 Idempotent Tasks, Run Manifests &amp; Multi-Tenancy:</strong> Implement safe retries, atomic state transitions, and execution evidence manifests, while isolating multi-tenant research environments on shared clusters.</p>
+<p><strong>Chapter map: repeatable ML workflows</strong></p>
+<p>This chapter orchestrates multi-step machine learning pipelines:</p>
+<ul>
+<li><strong>6.1–6.3 Pipelines as DAGs &amp; Task Contracts:</strong> Replace brittle manual scripts with Directed Acyclic Graphs (DAGs), and define immutable task inputs, outputs, and parameters.</li>
+<li><strong>6.4–6.5 Airflow Architecture &amp; ML Workflows:</strong> Construct end-to-end Airflow DAGs across data validation, model training, and evaluation using Celery and Kubernetes executors.</li>
+<li><strong>6.6–6.9 Idempotent Tasks, Run Manifests &amp; Multi-Tenancy:</strong> Implement safe retries, atomic state transitions, and execution evidence manifests, while isolating multi-tenant research environments on shared clusters.</li>
+</ul>
 </div>
 <div id="fig-m3-c06-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled Chapter 6 map links a task dependency graph to orchestration, immutable outputs, retries, run manifests, and shared-cluster controls.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -359,7 +362,9 @@ Figure&nbsp;6.1: How task dependencies become repeatable workflow runs. The thre
 <section id="sec-m3-c06-s01" class="level2" data-number="6.1">
 <h2 data-number="6.1" class="anchored" data-anchor-id="sec-m3-c06-s01"><span class="header-section-number">6.1</span> From manual scripts to automated pipelines</h2>
 <p>A single script can run ingestion, training, evaluation, and deployment in sequence. As the workflow grows, a single process cannot reliably express parallel branches, selective retries, historical backfills, resource placement, responsibility, or persistent run state. Dependency definitions stay separate from execution, and task-attempt state persists across failures.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Pipeline.</strong></span> a reproducible set of tasks and dependencies that transforms versioned inputs into versioned outputs while recording execution state.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Pipeline:</strong></span> A reproducible set of tasks and dependencies that transforms versioned inputs into versioned outputs while recording execution state.</li>
+</ul>
 <p>Orchestration is not the model code. It decides when a task is eligible, where it runs, how its state is recorded, and what happens after failure. The task implementation performs domain work such as preprocessing or training. The artifact store carries large outputs. The metadata store carries orchestration state and small references.</p>
 <div id="tbl-m3-c06-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
@@ -420,7 +425,9 @@ Table&nbsp;6.1: Orchestration adds durable control-plane behavior around existin
 <section id="sec-m3-c06-s02" class="level2" data-number="6.2">
 <h2 data-number="6.2" class="anchored" data-anchor-id="sec-m3-c06-s02"><span class="header-section-number">6.2</span> Scheduling task dependencies with directed acyclic graphs</h2>
 <p>The workflow’s responsibilities are separated. The orchestrator still needs an unambiguous rule for which tasks may run and which work can happen in parallel. Tasks are nodes, and prerequisite relationships are directed edges without cycles.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Directed Acyclic Graph (DAG).</strong></span> a graph whose directed edges encode dependency order and whose lack of cycles guarantees that a topological execution order exists.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Directed Acyclic Graph (DAG):</strong></span> A graph whose directed edges encode dependency order and whose lack of cycles guarantees that a topological execution order exists.</li>
+</ul>
 <div id="fig-m3-c06-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A DAG makes dependencies and parallel branches explicit.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c06-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -431,30 +438,38 @@ Figure&nbsp;6.2: A DAG makes dependencies and parallel branches explicit.
 </figcaption>
 </figure>
 </div>
-<p>An edge A → B means B cannot start successfully until A’s required output is available; A does not directly invoke B. Independent branches can execute concurrently. A cycle leaves every node in the loop waiting, so feedback over time is represented by separate DAG runs or external events.</p>
+<p>An edge A → B means B cannot start successfully until A’s required output is available, A does not directly invoke B. Independent branches can execute concurrently. A cycle leaves every node in the loop waiting, so feedback over time is represented by separate DAG runs or external events.</p>
 <p><span id="eq-m3-c06-e01"><span class="math display">\[
 T_{\mathrm{DAG}} \ge \max_{p \in P} \sum_{i \in p} t_i
 \tag{6.1}\]</span></span></p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation: critical path in a two-branch pipeline</strong></p>
-<p><strong>Shared start:</strong> Validation takes 4 minutes.</p>
-<p><strong>Training branch:</strong> Training takes 38 minutes and model evaluation takes 8 minutes.</p>
-<p><strong>Retrieval branch:</strong> Embedding takes 20 minutes and index validation takes 6 minutes.</p>
-<p><strong>Shared release:</strong> The promotion gate takes 3 minutes after both branches finish.</p>
-<p><strong>Path sums:</strong> Adding the task durations gives 53 minutes for the training path and 33 minutes for the retrieval path.</p>
-<p><strong>Conclusion:</strong> The 53-minute training path controls the lower bound; accelerating the 33-minute branch alone cannot reduce end-to-end time below 53 minutes.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Critical path calculation: scheduling duration in a branched DAG</strong></p>
+<p>Summing task latencies along the longest dependency chain determines minimum workflow completion time:</p>
+<ul>
+<li><strong>Shared start:</strong> Validation takes 4 minutes.</li>
+<li><strong>Training branch:</strong> Training takes 38 minutes and model evaluation takes 8 minutes.</li>
+<li><strong>Retrieval branch:</strong> Embedding takes 20 minutes and index validation takes 6 minutes.</li>
+<li><strong>Shared release:</strong> The promotion gate takes 3 minutes after both branches finish.</li>
+<li><strong>Path sums:</strong> Adding the task durations gives 53 minutes for the training path and 33 minutes for the retrieval path.</li>
+<li><strong>Conclusion:</strong> The 53-minute training path controls the lower bound, accelerating the 33-minute branch alone cannot reduce end-to-end time below 53 minutes.</li>
+</ul>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Critical-path implication</strong></p>
-<p>Doubling workers does not accelerate a strictly serial chain. Only changes to tasks on the critical path reduce the completion-time lower bound.</p>
-<p>A slow off-path task can still consume capacity and delay later runs, so capacity and critical-path analysis remain separate.</p>
+<p><strong>Workflow analysis: critical path scheduling implications</strong></p>
+<p>Identifying workflow bottleneck dependencies directs pipeline optimization efforts:</p>
+<ul>
+<li>Doubling workers does not accelerate a strictly serial chain. Only changes to tasks on the critical path reduce the completion-time lower bound.</li>
+<li>A slow off-path task can still consume capacity and delay later runs, so capacity and critical-path analysis remain separate.</li>
+</ul>
 </div>
 </section>
 <section id="sec-m3-c06-s03" class="level2" data-number="6.3">
 <h2 data-number="6.3" class="anchored" data-anchor-id="sec-m3-c06-s03"><span class="header-section-number">6.3</span> Defining immutable task inputs and outputs</h2>
 <p>The DAG states dependency order. A box named ‘train’ is still too vague to retry safely or reproduce after an image, dataset, or configuration changes. Every task has immutable inputs, explicit outputs, resource needs, failure behavior, and validation.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Task specification.</strong></span> the complete contract for one pipeline task: identity, immutable inputs, outputs, runtime, resources, retry behavior, validation, and side effects.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Idempotent task.</strong></span> a task whose repeated execution with the same declared inputs reaches the same externally visible result without corrupting state or duplicating effects.</p>
+<ul>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Task specification:</strong></span> The complete contract for one pipeline task: identity, immutable inputs, outputs, runtime, resources, retry behavior, validation, and side effects.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Idempotent task:</strong></span> A task whose repeated execution with the same declared inputs reaches the same externally visible result without corrupting state or duplicating effects.</p></li>
+</ul>
 <p>Named task fields make repeatability inspectable by both the scheduler and the next task.</p>
 <div id="tbl-m3-c06-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
@@ -503,7 +518,7 @@ Table&nbsp;6.2: A task description makes retry, audit, responsibility, and downs
 </tr>
 <tr class="even">
 <td>Retry policy</td>
-<td>Two retries for temporary infrastructure failure; no retry on schema error</td>
+<td>Two retries for temporary infrastructure failure, no retry on schema error</td>
 <td>Separates recoverable from deterministic failure</td>
 </tr>
 <tr class="odd">
@@ -598,7 +613,7 @@ Figure&nbsp;6.4: The Airflow graph view exposes task state and dependency struct
 </figcaption>
 </figure>
 </div>
-<p>The UI is a view of persisted state, not the execution engine. A green task instance means the operator’s success criteria ran without error; it does not automatically prove the produced model is good. Domain validation belongs inside task descriptions and release gates.</p>
+<p>The UI is a view of persisted state, not the execution engine. A green task instance means the operator’s success criteria ran without error, it does not automatically prove the produced model is good. Domain validation belongs inside task descriptions and release gates.</p>
 </section>
 <section id="sec-m3-c06-s05" class="level2" data-number="6.5">
 <h2 data-number="6.5" class="anchored" data-anchor-id="sec-m3-c06-s05"><span class="header-section-number">6.5</span> Running complete ML workflows in Airflow</h2>
@@ -641,19 +656,25 @@ Figure&nbsp;6.4: The Airflow graph view exposes task state and dependency struct
 <span id="lst-m3-c06-c01-33"><a href="#lst-m3-c06-c01-33" aria-hidden="true" tabindex="-1"></a></span>
 <span id="lst-m3-c06-c01-34"><a href="#lst-m3-c06-c01-34" aria-hidden="true" tabindex="-1"></a>    validate <span class="op">&gt;&gt;</span> embed <span class="op">&gt;&gt;</span> evaluate</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Code walkthrough</strong></p>
-<p>DAG definition: The <code>DAG</code> object stores scheduling and concurrency policy; <code>schedule=None</code> makes release creation externally triggered.</p>
-<p>Concurrency guard: <code>max_active_runs=1</code> prevents two release workflows from racing to change the same mutable production alias.</p>
-<p>Task runtime: Each <code>KubernetesPodOperator</code> launches domain work in the immutable pipeline image after DAG import.</p>
-<p>Artifact lineage: Task arguments carry dataset, embedding, evaluation-suite, and candidate-collection identities.</p>
-<p>Dependency state: The shift operators create validation → embedding → evaluation edges; Airflow records each task instance and attempt.</p>
-<p>Result: The scheduler owns eligibility and task state, while isolated containers own validation, embedding, and evaluation work.</p>
-<p>Limits: A production DAG still needs explicit output manifests, retries by failure class, secrets and service accounts, resource requests, timeouts, alerts, and a separate gated promotion task.</p>
+<p><strong>Code walkthrough: Airflow task with retry policy</strong></p>
+<p>Declarative pipeline definitions specify idempotent task execution and failure recovery:</p>
+<ul>
+<li><strong>DAG definition:</strong> The <code>DAG</code> object stores scheduling and concurrency policy, <code>schedule=None</code> makes release creation externally triggered.</li>
+<li><strong>Concurrency guard:</strong> <code>max_active_runs=1</code> prevents two release workflows from racing to change the same mutable production alias.</li>
+<li><strong>Task runtime:</strong> Each <code>KubernetesPodOperator</code> launches domain work in the immutable pipeline image after DAG import.</li>
+<li><strong>Artifact lineage:</strong> Task arguments carry dataset, embedding, evaluation-suite, and candidate-collection identities.</li>
+<li><strong>Dependency state:</strong> The shift operators create validation → embedding → evaluation edges, Airflow records each task instance and attempt.</li>
+<li><strong>Result:</strong> The scheduler owns eligibility and task state, while isolated containers own validation, embedding, and evaluation work.</li>
+<li><strong>Limits:</strong> A production DAG still needs explicit output manifests, retries by failure class, secrets and service accounts, resource requests, timeouts, alerts, and a separate gated promotion task.</li>
+</ul>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>DAG-import rule</strong></p>
-<p>Import-time dataset downloads, GPU initialization, external API calls, and large namespace scans slow parsing and can make scheduler health depend on external systems.</p>
-<p>The scheduler repeatedly parses DAG files. Expensive or unreliable import-time work slows the control plane and can make every DAG appear broken.</p>
+<p><strong>Orchestration principle: DAG import performance safeguards</strong></p>
+<p>Maintaining lightweight DAG definitions protects orchestrator scheduler performance:</p>
+<ul>
+<li>Import-time dataset downloads, GPU initialization, external API calls, and large namespace scans slow parsing and can make scheduler health depend on external systems.</li>
+<li>The scheduler repeatedly parses DAG files. Expensive or unreliable import-time work slows the control plane and can make every DAG appear broken.</li>
+</ul>
 </div>
 </section>
 <section id="sec-m3-c06-s06" class="level2" data-number="6.6">
@@ -714,14 +735,17 @@ Table&nbsp;6.4: Re-execution is safe only when time, identity, and side effects 
 </div>
 </figure>
 </div>
-<p>Retries distinguish transient infrastructure failures from deterministic code or data failures. Exponential backoff helps a temporary dependency recover; it does not fix a schema mismatch. After the retry budget, the task state, relevant logs, input identities, and responsible component remain visible without reconstructing the run from a terminal.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Worked calculation: retrying a partition task safely</strong></p>
-<p><strong>Attempt 1:</strong> Partition 07 writes to an attempt-scoped path, loses its worker, and remains uncommitted.</p>
-<p><strong>Eligibility:</strong> The scheduler classifies the failure as transient and retries the same logical interval and input manifest.</p>
-<p><strong>Attempt 2:</strong> The task writes a new generation, validates row counts and hashes, and emits one completion record keyed by task, interval, and input identity.</p>
-<p><strong>Commit:</strong> A coordinator advances the manifest pointer exactly once; a late completion from Attempt 1 cannot overwrite the committed generation.</p>
-<p><strong>Conclusion:</strong> Attempt-scoped outputs and one publication step keep retries from duplicating or partially replacing state.</p>
+<p>Retries distinguish transient infrastructure failures from deterministic code or data failures. Exponential backoff helps a temporary dependency recover, it does not fix a schema mismatch. After the retry budget, the task state, relevant logs, input identities, and responsible component remain visible without reconstructing the run from a terminal.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Idempotency walkthrough: safe partition task retry without duplicate writes</strong></p>
+<p>Atomic two-phase commits ensure retried workflow tasks overwrite incomplete intermediate partitions safely:</p>
+<ul>
+<li><strong>Attempt 1:</strong> Partition 07 writes to an attempt-scoped path, loses its worker, and remains uncommitted.</li>
+<li><strong>Eligibility:</strong> The scheduler classifies the failure as transient and retries the same logical interval and input manifest.</li>
+<li><strong>Attempt 2:</strong> The task writes a new generation, validates row counts and hashes, and emits one completion record keyed by task, interval, and input identity.</li>
+<li><strong>Commit:</strong> A coordinator advances the manifest pointer exactly once, a late completion from Attempt 1 cannot overwrite the committed generation.</li>
+<li><strong>Conclusion:</strong> Attempt-scoped outputs and one publication step keep retries from duplicating or partially replacing state.</li>
+</ul>
 </div>
 </section>
 <section id="sec-m3-c06-s07" class="level2" data-number="6.7">
@@ -858,9 +882,12 @@ Table&nbsp;6.6: Stable identifiers join systems while each one retains a distinc
 </div>
 <p>A pipeline task can start an experiment run and emit its ID. The tracker records comparable parameters and metrics. The task publishes artifact URIs and commits its status. A later deployment writes the serving-bundle ID into traces. The same identifiers let an incident move backward from one request to its bundle, evaluation report, experiment, DAG run, and source artifacts.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Authority map</strong></p>
-<p>The orchestrator is authoritative for task attempts and dependency state; the experiment tracker is authoritative for comparable parameters and metrics; the artifact registry is authoritative for immutable files and promotion aliases; telemetry is authoritative for runtime observations; the evaluation store is authoritative for cases and raw judgments.</p>
-<p>Cross-links join these records without copying one system’s mutable state into another. A run manifest records the identifiers and the producer or consumer relationship.</p>
+<p><strong>Architecture boundary: authority mapping across systems</strong></p>
+<p>Partitioning state authority across platform systems prevents metadata divergence:</p>
+<ul>
+<li>The orchestrator is authoritative for task attempts and dependency state, the experiment tracker is authoritative for comparable parameters and metrics, the artifact registry is authoritative for immutable files and promotion aliases, telemetry is authoritative for runtime observations, the evaluation store is authoritative for cases and raw judgments.</li>
+<li>Cross-links join these records without copying one system’s mutable state into another. A run manifest records the identifiers and the producer or consumer relationship.</li>
+</ul>
 </div>
 </section>
 <section id="sec-m3-c06-s09" class="level2" data-number="6.9">
@@ -890,14 +917,23 @@ Figure&nbsp;6.7: A training dashboard correlates actor, learner, and trajectory 
 <p>A live dashboard correlates system evidence with algorithm-specific roles such as actors, learners, and trajectories. Operators need queue time, pod state, GPU/fabric/storage evidence, checkpoint health, and task logs. Researchers need reward, loss, sample efficiency, rollout length, evaluation quality, and experiment comparisons. Shared run and artifact identities connect both views.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Tenant boundary</strong></p>
-<p>A shared cluster needs separate namespaces or projects, resource quotas, queue limits, service accounts, network policy, and storage prefixes for each team or trust domain.</p>
-<p>Run and artifact identities remain globally traceable, while payload access follows tenant policy. A scheduler quota alone does not prevent one team from reading another team’s checkpoints or traces.</p>
+<ul>
+<li>A shared cluster needs separate namespaces or projects, resource quotas, queue limits, service accounts, network policy, and storage prefixes for each team or trust domain.</li>
+<li>Run and artifact identities remain globally traceable, while payload access follows tenant policy. A scheduler quota alone does not prevent one team from reading another team’s checkpoints or traces.</li>
+</ul>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter 6 summary</strong></p>
-<p>Core mechanisms: Declarative Apache Airflow DAGs; Celery and Kubernetes executors; idempotent task execution; execution evidence run manifests.</p>
-<p>Governing tradeoffs: Fine-grained task isolation overhead vs.&nbsp;debuggability; DAG re-run speed vs.&nbsp;strict state immutability; shared cluster resource utilization vs.&nbsp;tenant isolation.</p>
-<p>Failure modes &amp; defenses: Atomic state transitions; immutable artifact hashing; tenant resource quotas and queue concurrency limits.</p>
+<p>Key orchestration and workflow principles established in this chapter:</p>
+<ul>
+<li><strong>Core mechanisms:</strong> Declarative Apache Airflow DAGs, Celery and Kubernetes executors, idempotent task execution, execution evidence run manifests.</li>
+<li><strong>Governing tradeoffs:</strong> Fine-grained task isolation overhead vs.&nbsp;debuggability, DAG re-run speed vs.&nbsp;strict state immutability, shared cluster resource utilization vs.&nbsp;tenant isolation.</li>
+<li><strong>Failure modes &amp; defenses:</strong> Atomic state transitions, immutable artifact hashing, tenant resource quotas and queue concurrency limits.</li>
+</ul>
+</div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Chapter checkpoint</strong></p>
+<p>Review the self-study questions in Appendix C, Section C.1 (Questions 20, 21, and 22) to test understanding of workflow orchestration, idempotent task retries, and multi-tenant resource quotas before examining the complete operational case.</p>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Carry-forward result</strong></p>

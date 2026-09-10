@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>23&nbsp; Tensor Storage and Devices: Memory Costs in PyTorch – Mathematical Foundations of LLM Training and Inference</title>
+<title>23&nbsp; GPU Memory &amp; Strides: Maximizing Tensor Throughput – Mathematical Foundations of LLM Training and Inference</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -153,7 +153,7 @@ window.Quarto = {
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p06.html">Part VI: Implementation and Extensions</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c23.html"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p06.html">Part VI: Implementation and Extensions</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c23.html"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
       <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link active">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -439,23 +439,22 @@ window.Quarto = {
     <h2 id="toc-title">Table of contents</h2>
    
   <ul>
-  <li><a href="#sec-m2-c23-s01" id="toc-sec-m2-c23-s01" class="nav-link active" data-scroll-target="#sec-m2-c23-s01"><span class="header-section-number">23.1</span> Mapping Tensor Coordinates to Storage with Strides</a></li>
+  <li><a href="#sec-m2-c23-s01" id="toc-sec-m2-c23-s01" class="nav-link active" data-scroll-target="#sec-m2-c23-s01"><span class="header-section-number">23.1</span> Structuring Contiguous Tensor Memory and Strides for GPU Cache Locality</a></li>
   <li><a href="#sec-m2-c23-s02" id="toc-sec-m2-c23-s02" class="nav-link" data-scroll-target="#sec-m2-c23-s02"><span class="header-section-number">23.2</span> Eliminating Explicit Loops with Vectorized Broadcasting</a></li>
   <li><a href="#sec-m2-c23-s03" id="toc-sec-m2-c23-s03" class="nav-link" data-scroll-target="#sec-m2-c23-s03"><span class="header-section-number">23.3</span> Manipulating Tensor Strides and Views without Memory Copies</a></li>
   <li><a href="#sec-m2-c23-s04" id="toc-sec-m2-c23-s04" class="nav-link" data-scroll-target="#sec-m2-c23-s04"><span class="header-section-number">23.4</span> Tracking Autograd Computation Graphs and Optimizer Memory</a></li>
   <li><a href="#sec-m2-c23-s05" id="toc-sec-m2-c23-s05" class="nav-link" data-scroll-target="#sec-m2-c23-s05"><span class="header-section-number">23.5</span> Mapping Mathematical Formulations to Native PyTorch APIs</a></li>
   <li><a href="#sec-m2-c23-s06" id="toc-sec-m2-c23-s06" class="nav-link" data-scroll-target="#sec-m2-c23-s06"><span class="header-section-number">23.6</span> Running the Same Tensor Computation on a GPU</a></li>
   <li><a href="#sec-m2-c23-s07" id="toc-sec-m2-c23-s07" class="nav-link" data-scroll-target="#sec-m2-c23-s07"><span class="header-section-number">23.7</span> Tensor storage and autograd trace</a></li>
-  <li><a href="#sec-m2-c23-check" id="toc-sec-m2-c23-check" class="nav-link" data-scroll-target="#sec-m2-c23-check"><span class="header-section-number">23.8</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
 
-<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p06.html">Part VI: Implementation and Extensions</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c23.html"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></a></li></ol></nav>
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p06.html">Part VI: Implementation and Extensions</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c23.html"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></a></li></ol></nav>
 <div class="quarto-title">
-<h1 class="title"><span id="sec-ch-m2-c23" class="quarto-section-identifier"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></h1>
+<h1 class="title"><span id="sec-ch-m2-c23" class="quarto-section-identifier"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></h1>
 </div>
 
 
@@ -472,19 +471,28 @@ window.Quarto = {
 </header>
 
 
-<p>Inspect tensor layout, storage, and device lifetimes before drawing performance conclusions.</p>
-<p>The <a href="../frontmatter/ch-m2-roadmap.html#sec-m2-roadmap-start">tensor primer</a> established dimensions, dtype, and device before the model calculations. This chapter now examines storage, copies, and tensor lifetimes. These explain memory costs, while detailed kernel tuning and throughput benchmarking belong to the wider performance course.</p>
+<p>The equations introduced so far run on arrays stored in computer memory. Tensor layout, dtype, device, and autograd determine how the same mathematical operation behaves in PyTorch.</p>
 <p>The mathematical arrays used throughout the guide become tensors in code. Storage layout, views, devices, dtypes, autograd, and optimizer state explain why mathematically equivalent operations can have different memory and speed costs.</p>
 <p>In code, <code>torch.Tensor</code>, <code>dtype</code>, <code>device</code>, <code>view</code>, <code>reshape</code>, <code>transpose</code>, autograd, and <code>torch.optim</code> are the concrete APIs behind the mathematical objects already used in the guide.</p>
+<div id="fig-m2-c23-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 23 opener for PyTorch mapping of the mathematics, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m2-c23-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m2-c23-f01.png" class="img-fluid figure-img" style="width:5.9in" alt="Chapter 23 opener for PyTorch mapping of the mathematics, with numbered section panels, labeled inputs and operations, and the result of each stage.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c23-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;23.1: Tensor metadata, operations, autograd, and devices turn the guide’s equations into executable computations.
+</figcaption>
+</figure>
+</div>
 <section id="sec-m2-c23-s01" class="level2" data-number="23.1">
-<h2 data-number="23.1" class="anchored" data-anchor-id="sec-m2-c23-s01"><span class="header-section-number">23.1</span> Mapping Tensor Coordinates to Storage with Strides</h2>
+<h2 data-number="23.1" class="anchored" data-anchor-id="sec-m2-c23-s01"><span class="header-section-number">23.1</span> Structuring Contiguous Tensor Memory and Strides for GPU Cache Locality</h2>
 <p>A PyTorch tensor combines numerical values with dimensions, dtype, device, storage layout, and optional gradient history.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Tensor:</strong></span> A typed, multidimensional array with dimensions, dtype, device, and storage layout.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Dimensions:</strong></span> The length of each tensor axis, such as [batch, sequence, hidden].</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Dtype:</strong></span> The numerical type used to store each element, such as float32, bfloat16, int64, or bool.</li>
 </ul>
-<p>The tensor primer and earlier numerical examples established the arrays used in embeddings, attention, and inference. A model bug is often a tensor-dimension bug: the wrong rank, the wrong device, or an unintended dtype.</p>
+<p>Module 2 uses tensors first in PyTorch basics, then returns to them in embeddings, attention, and inference. A model bug is often a tensor-dimension bug: the wrong rank, the wrong device, or an unintended dtype.</p>
 <p>The most useful habit is to name axes in prose before writing code. For example, logits in a language model commonly have dimensions [batch, sequence, vocabulary].</p>
 <p>A PyTorch tensor describes a multidimensional array over storage that may live in CPU memory or GPU memory. Its dimensions, strides, and storage offset determine how logical coordinates map to stored values. Some view and transpose operations can share storage without copying; whether that is possible depends on the existing layout.</p>
 <p>Calling <code>.contiguous()</code> creates contiguous storage when the tensor is not already contiguous. This copy is useful only when a later operation requires that layout or runs enough faster to repay the allocation cost.</p>
@@ -541,7 +549,7 @@ window.Quarto = {
 <p><span id="eq-m2-c23-e03"><span class="math display">\[
 X\in\mathbb{R}^{B\times D_{\mathrm{in}}},\quad W\in\mathbb{R}^{D_{\mathrm{in}}\times D_{\mathrm{out}}},\quad Y=XW+b\in\mathbb{R}^{B\times D_{\mathrm{out}}}
 \tag{23.3}\]</span></span></p>
-<p>Here, <span class="math inline">\(X\in\mathbb{R}^{B\times D_{\mathrm{in}}}\)</span> is the batch input, <span class="math inline">\(W\in\mathbb{R}^{D_{\mathrm{in}}\times D_{\mathrm{out}}}\)</span> is the mathematical weight matrix, <span class="math inline">\(b\in\mathbb{R}^{D_{\mathrm{out}}}\)</span> is broadcast across rows, and <span class="math inline">\(Y\in\mathbb{R}^{B\times D_{\mathrm{out}}}\)</span> is the output. PyTorch <code>nn.Linear</code> stores a tensor <span class="math inline">\(A\)</span> with dimensions [<span class="math inline">\(D_{\mathrm{out}}\)</span>,<span class="math inline">\(D_{\mathrm{in}}\)</span>], where <span class="math inline">\(A=W^{\mathsf T}\)</span>, and evaluates <span class="math inline">\(XA^{\mathsf T}+b\)</span>.</p>
+<p>Here, <span class="math inline">\(X\in\mathbb{R}^{B\times D_{\mathrm{in}}}\)</span> is the batch input, <span class="math inline">\(W\in\mathbb{R}^{D_{\mathrm{in}}\times D_{\mathrm{out}}}\)</span> is the mathematical weight matrix, <span class="math inline">\(b\in\mathbb{R}^{D_{\mathrm{out}}}\)</span> is broadcast across rows, and <span class="math inline">\(Y\in\mathbb{R}^{B\times D_{\mathrm{out}}}\)</span> is the output. PyTorch <code>nn.Linear</code> stores the same weights with dimensions [<span class="math inline">\(D_{\mathrm{out}}\)</span>,<span class="math inline">\(D_{\mathrm{in}}\)</span>] and therefore evaluates <span class="math inline">\(XW^{T}+b\)</span>.</p>
 <p>The inner dimensions contract in matrix multiplication, leaving one output row per example and one column per output unit.</p>
 <p>Dimension agreement is a mathematical precondition for the corresponding PyTorch operation.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
@@ -600,7 +608,7 @@ X\in\mathbb{R}^{B\times D_{\mathrm{in}}},\quad W\in\mathbb{R}^{D_{\mathrm{in}}\t
 <img src="../assets/fig-m2-c23-f02.png" class="img-fluid figure-img" style="width:5.9in" alt="Native computation diagram: Training retains gradients and optimizer state; inference retains request-specific serving state instead.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c23-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;23.1: Training retains gradients and optimizer state; inference retains request-specific serving state instead.
+Figure&nbsp;23.2: Training retains gradients and optimizer state; inference retains request-specific serving state instead.
 </figcaption>
 </figure>
 </div>
@@ -681,7 +689,7 @@ Figure&nbsp;23.1: Training retains gradients and optimizer state; inference reta
 <img src="../assets/fig-m2-c23-f03.png" class="img-fluid figure-img" style="width:5.9in" alt="Diagram showing a PyTorch tensor as values plus dimensions, dtype, device, layout, grad function, gradient buffer, and optimizer state.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c23-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;23.2: Values share a tensor with metadata that determines storage, execution location, and gradient tracking.
+Figure&nbsp;23.3: Values share a tensor with metadata that determines storage, execution location, and gradient tracking.
 </figcaption>
 </figure>
 </div>
@@ -721,17 +729,6 @@ X\in\mathbb{R}^{B\times D},\quad W\in\mathbb{R}^{D\times H}\quad\to\quad XW\in\m
 </ul>
 <p>PyTorch is the storage and execution layer for the mathematical objects already introduced.</p>
 <p>Notebook labs check the math, tensor dimensions, code paths, and performance consequences.</p>
-</section>
-<section id="sec-m2-c23-check" class="level2" data-number="23.8">
-<h2 data-number="23.8" class="anchored" data-anchor-id="sec-m2-c23-check"><span class="header-section-number">23.8</span> Chapter checkpoint</h2>
-<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
-<ol type="1">
-<li>A transpose changes dimensions but allocated value storage does not grow. Is that evidence that no operation occurred?</li>
-<li>Parameters fit in GPU memory at inference, but training runs out of memory. Which additional arrays should be counted?</li>
-</ol>
-<p><strong>Feedback</strong></p>
-<p><strong>1.</strong> No.&nbsp;A view can change strides and the mapping from logical coordinates to shared storage without copying values. A later operation may still require a copy.</p>
-<p><strong>2.</strong> Gradients, optimizer moments, retained activations, and any higher-precision parameter copies. Their lifetimes differ, so parameter bytes alone do not predict training memory.</p>
 
 
 </section>

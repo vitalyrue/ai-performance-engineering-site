@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -445,7 +445,6 @@ window.Quarto = {
   <li><a href="#sec-m2-c08-s04" id="toc-sec-m2-c08-s04" class="nav-link" data-scroll-target="#sec-m2-c08-s04"><span class="header-section-number">8.4</span> Propagating Loss Gradients to Output Logits</a></li>
   <li><a href="#sec-m2-c08-s05" id="toc-sec-m2-c08-s05" class="nav-link" data-scroll-target="#sec-m2-c08-s05"><span class="header-section-number">8.5</span> Quantifying Language Model Uncertainty with Perplexity</a></li>
   <li><a href="#sec-m2-c08-s06" id="toc-sec-m2-c08-s06" class="nav-link" data-scroll-target="#sec-m2-c08-s06"><span class="header-section-number">8.6</span> Visualizing Cross-Entropy Loss and Perplexity Surfaces</a></li>
-  <li><a href="#sec-m2-c08-check" id="toc-sec-m2-c08-check" class="nav-link" data-scroll-target="#sec-m2-c08-check"><span class="header-section-number">8.7</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -471,7 +470,6 @@ window.Quarto = {
 </header>
 
 
-<p>Build a scalar loss with correct targets, reduction, and numerical interpretation.</p>
 <p>Training needs a scalar measure of how well predicted probabilities matched observed targets. A useful loss makes confident incorrect predictions more costly than uncertain ones.</p>
 <p>Training needs one number that says how well a probability model matched its targets. Cross-entropy and negative log likelihood provide that number; perplexity summarizes average next-token uncertainty.</p>
 <p>In code, <code>torch.nn.BCEWithLogitsLoss</code> and <code>CrossEntropyLoss</code> combine logits with stable log operations; <code>torch.nn.functional.cross_entropy</code> is the functional form used in compact examples.</p>
@@ -537,24 +535,30 @@ H(y,p)=-\sum_i y_i\log p_i=-\log p_y
 <p><strong>One-hot CE collapse:</strong></p>
 <p>If the true class probability is <span class="math inline">\(0.25\)</span>, the loss is <span class="math inline">\(-\log(0.25)\approx1.386\)</span> nats.</p>
 </div>
-<p>The following runnable PyTorch example receives the same three feature rows and labels used in <a href="ch-m2-c05.html#sec-m2-c05-s03">§5.3</a>. It computes logits and the binary loss for each example, then checks their mean. This isolates the objective before <a href="ch-m2-c11.html">Chapter 11</a> derives its gradients.</p>
+<p>The following runnable PyTorch example receives a random batch <span class="math inline">\(X\in\mathbb{R}^{32\times4}\)</span> and binary labels <span class="math inline">\(y\in\{0,1\}^{32\times1}\)</span>. It computes raw logits, evaluates a numerically stable binary cross-entropy loss, fills the parameter gradients, and applies one stochastic-gradient step. Because the data are random, the example demonstrates tensor flow rather than expected model quality.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
-<p><strong>Code example:</strong> Per-example binary loss and reduction on the shared three-example batch</p>
+<p><strong>Code example:</strong> A minimal binary logistic regression step.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c08-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c08-c01-1"><a href="#lst-m2-c08-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
-<span id="lst-m2-c08-c01-2"><a href="#lst-m2-c08-c01-2" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> torch.tensor([[<span class="fl">1.</span>, <span class="fl">0.</span>], [<span class="fl">0.</span>, <span class="fl">1.</span>], [<span class="fl">1.</span>, <span class="fl">1.</span>]], dtype<span class="op">=</span>torch.float64)</span>
-<span id="lst-m2-c08-c01-3"><a href="#lst-m2-c08-c01-3" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> torch.tensor([<span class="fl">1.</span>, <span class="fl">0.</span>, <span class="fl">1.</span>], dtype<span class="op">=</span>torch.float64)</span>
-<span id="lst-m2-c08-c01-4"><a href="#lst-m2-c08-c01-4" aria-hidden="true" tabindex="-1"></a>w <span class="op">=</span> torch.tensor([<span class="fl">0.8</span>, <span class="op">-</span><span class="fl">0.3</span>], dtype<span class="op">=</span>torch.float64)</span>
-<span id="lst-m2-c08-c01-5"><a href="#lst-m2-c08-c01-5" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> torch.tensor(<span class="fl">0.1</span>, dtype<span class="op">=</span>torch.float64)</span>
-<span id="lst-m2-c08-c01-6"><a href="#lst-m2-c08-c01-6" aria-hidden="true" tabindex="-1"></a>logits <span class="op">=</span> X <span class="op">@</span> w <span class="op">+</span> b</span>
-<span id="lst-m2-c08-c01-7"><a href="#lst-m2-c08-c01-7" aria-hidden="true" tabindex="-1"></a>losses <span class="op">=</span> torch.nn.functional.binary_cross_entropy_with_logits(logits, y, reduction<span class="op">=</span><span class="st">'none'</span>)</span>
-<span id="lst-m2-c08-c01-8"><a href="#lst-m2-c08-c01-8" aria-hidden="true" tabindex="-1"></a>mean_loss <span class="op">=</span> losses.mean()</span>
-<span id="lst-m2-c08-c01-9"><a href="#lst-m2-c08-c01-9" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> torch.allclose(mean_loss, torch.nn.functional.binary_cross_entropy_with_logits(logits, y))</span>
-<span id="lst-m2-c08-c01-10"><a href="#lst-m2-c08-c01-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(logits.tolist(), losses.tolist(), mean_loss.item())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The printed logits remain [0.9, -0.2, 0.6]. The losses are approximately [0.341, 0.598, 0.437], giving a mean near 0.459.</p>
-<p>The numbers connect the probability calculation to a scalar training objective. <a href="ch-m2-c24.html#sec-m2-c24-s01">§24.1</a> later verifies the complete update using the same inputs.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m2-c08-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m2-c08-c01-1"><a href="#lst-m2-c08-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="lst-m2-c08-c01-2"><a href="#lst-m2-c08-c01-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c08-c01-3"><a href="#lst-m2-c08-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m2-c08-c01-4"><a href="#lst-m2-c08-c01-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c08-c01-5"><a href="#lst-m2-c08-c01-5" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> torch.randn(<span class="dv">32</span>, <span class="dv">4</span>)</span>
+<span id="lst-m2-c08-c01-6"><a href="#lst-m2-c08-c01-6" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> torch.randint(<span class="dv">0</span>, <span class="dv">2</span>, (<span class="dv">32</span>, <span class="dv">1</span>)).<span class="bu">float</span>()</span>
+<span id="lst-m2-c08-c01-7"><a href="#lst-m2-c08-c01-7" aria-hidden="true" tabindex="-1"></a>w <span class="op">=</span> torch.randn(<span class="dv">4</span>, <span class="dv">1</span>, requires_grad<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m2-c08-c01-8"><a href="#lst-m2-c08-c01-8" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> torch.zeros(<span class="dv">1</span>, requires_grad<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m2-c08-c01-9"><a href="#lst-m2-c08-c01-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c08-c01-10"><a href="#lst-m2-c08-c01-10" aria-hidden="true" tabindex="-1"></a>logits <span class="op">=</span> X <span class="op">@</span> w <span class="op">+</span> b</span>
+<span id="lst-m2-c08-c01-11"><a href="#lst-m2-c08-c01-11" aria-hidden="true" tabindex="-1"></a>loss <span class="op">=</span> torch.nn.functional.binary_cross_entropy_with_logits(logits, y)</span>
+<span id="lst-m2-c08-c01-12"><a href="#lst-m2-c08-c01-12" aria-hidden="true" tabindex="-1"></a>loss.backward()</span>
+<span id="lst-m2-c08-c01-13"><a href="#lst-m2-c08-c01-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m2-c08-c01-14"><a href="#lst-m2-c08-c01-14" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
+<span id="lst-m2-c08-c01-15"><a href="#lst-m2-c08-c01-15" aria-hidden="true" tabindex="-1"></a>    w <span class="op">-=</span> <span class="fl">0.1</span> <span class="op">*</span> w.grad</span>
+<span id="lst-m2-c08-c01-16"><a href="#lst-m2-c08-c01-16" aria-hidden="true" tabindex="-1"></a>    b <span class="op">-=</span> <span class="fl">0.1</span> <span class="op">*</span> b.grad</span>
+<span id="lst-m2-c08-c01-17"><a href="#lst-m2-c08-c01-17" aria-hidden="true" tabindex="-1"></a>    w.grad.zero_()<span class="op">;</span> b.grad.zero_()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>After <code>backward</code>, <code>w.grad</code> has dimensions [4, 1] and <code>b.grad</code> has dimensions [1]; the no-grad block applies one explicit stochastic-gradient step.</p>
+<p>Random data makes the numeric loss vary between runs. The example demonstrates the computation and gradient flow, not classifier quality.</p>
 <p>Cross-entropy lowers the loss when probability moves toward the observed target and raises it when probability moves away. Likelihood gives the same relationship a probabilistic interpretation.</p>
-<p><strong>Why correct/incorrect counts do not supply this gradient.</strong> The 0-1 loss assigns zero to a correct class decision and one to an incorrect decision. Small changes in a logit usually leave that decision unchanged, so this loss is locally flat except at the threshold discontinuity. It gives no useful gradual signal for moving an already wrong score toward the target. Cross-entropy changes with the target’s probability and supplies such a signal. The held-out classification metric can still count decisions separately, as in <a href="ch-m2-c09.html">Chapter 9</a>.</p>
 </section>
 <section id="sec-m2-c08-s02" class="level2" data-number="8.2">
 <h2 data-number="8.2" class="anchored" data-anchor-id="sec-m2-c08-s02"><span class="header-section-number">8.2</span> Quantifying Likelihood and Information-Theoretic Surprisal</h2>
@@ -725,17 +729,6 @@ Figure&nbsp;8.3: Assigning little probability to the observed class produces a l
 <p>Cross-entropy is both an evaluation quantity and the scalar endpoint for backpropagation. Confident wrong predictions dominate the update.</p>
 <p>Cross-entropy and likelihood turn probabilities into the scalar objective that gradients can reduce.</p>
 <p>Evaluation separates optimization on training data from measurement on held-out data.</p>
-</section>
-<section id="sec-m2-c08-check" class="level2" data-number="8.7">
-<h2 data-number="8.7" class="anchored" data-anchor-id="sec-m2-c08-check"><span class="header-section-number">8.7</span> Chapter checkpoint</h2>
-<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
-<ol type="1">
-<li>Two batches have the same real tokens but different padding lengths. When should their masked mean loss agree?</li>
-<li>A model has lower cross-entropy but worse task accuracy at the chosen threshold. Is that impossible?</li>
-</ol>
-<p><strong>Feedback</strong></p>
-<p><strong>1.</strong> When logits and labels at all supervised positions match and padding is excluded from both numerator and denominator. Averaging over stored length would change the objective.</p>
-<p><strong>2.</strong> No.&nbsp;Cross-entropy measures probability assigned to targets. Accuracy measures thresholded decisions. Inspect probability changes and error counts rather than treating the measures as identical.</p>
 
 
 </section>

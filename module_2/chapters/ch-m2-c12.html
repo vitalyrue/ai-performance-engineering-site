@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -443,7 +443,6 @@ window.Quarto = {
   <li><a href="#sec-m2-c12-s02" id="toc-sec-m2-c12-s02" class="nav-link" data-scroll-target="#sec-m2-c12-s02"><span class="header-section-number">12.2</span> Bending Feature Space with Non-Linear Activations</a></li>
   <li><a href="#sec-m2-c12-s03" id="toc-sec-m2-c12-s03" class="nav-link" data-scroll-target="#sec-m2-c12-s03"><span class="header-section-number">12.3</span> Classifying Fixed-Width Text Representations</a></li>
   <li><a href="#sec-m2-c12-s04" id="toc-sec-m2-c12-s04" class="nav-link" data-scroll-target="#sec-m2-c12-s04"><span class="header-section-number">12.4</span> Visualizing Linear Separation Limits and Hidden Layer Warping</a></li>
-  <li><a href="#sec-m2-c12-check" id="toc-sec-m2-c12-check" class="nav-link" data-scroll-target="#sec-m2-c12-check"><span class="header-section-number">12.5</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -469,10 +468,9 @@ window.Quarto = {
 </header>
 
 
-<p>Explain nonlinear representation, initialization scale, and the limits of linear separation.</p>
 <p>One linear boundary cannot solve every classification pattern. Hidden layers first transform the input, then let a final linear classifier separate the transformed features.</p>
 <p>A linear classifier can only split inputs with one flat boundary. Hidden layers and activation functions transform the representation so later linear layers can separate patterns such as XOR.</p>
-<p>In code, <code>torch.nn.Linear</code>, <code>ReLU</code>, and <code>Sequential</code> compose affine maps and activations; the classifier still emits logits consumed by the <a href="ch-m2-c08.html">Chapter 8</a> loss functions.</p>
+<p>In code, <code>torch.nn.Linear</code>, <code>ReLU</code>, and <code>Sequential</code> compose affine maps and activations; the classifier still emits logits consumed by the Chapter 8 loss functions.</p>
 <div id="fig-m2-c12-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 12 opener for Neural classifiers, with numbered section panels, labeled inputs and operations, and the result of each stage.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c12-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -561,9 +559,6 @@ W_{2}(W_{1}x+b_{1})+b_{2}=(W_{2}W_{1})x+(W_{2}b_{1}+b_{2})
 <p>The output layer is linear in h, but h itself is a nonlinear transformation of the original input.</p>
 </div>
 <p>An activation changes each hidden score before the next layer uses it, allowing stacked layers to represent curved decision regions. Several hidden units together form a multilayer perceptron.</p>
-<p><strong>Initial weight scale.</strong> Before learning starts, a hidden layer already transforms its inputs. If every layer magnifies those values, later activations can become extreme. If every layer shrinks them, useful differences can disappear. Backward derivatives pass through the same weights, so their scale also matters.</p>
-<p>For a linear preactivation <span class="math inline">\(z=\sum_{j=1}^{n}w_jx_j\)</span>, suppose the weights are independent, have mean zero and variance <span class="math inline">\(s^2\)</span>, and are independent of inputs with unit second moment. Then the cross terms vanish in expectation and <span class="math inline">\(\operatorname{Var}(z)=ns^2\)</span>. With <span class="math inline">\(n=100\)</span>, choosing <span class="math inline">\(s^2=1\)</span> gives variance 100, while <span class="math inline">\(s^2=1/100\)</span> gives variance 1. Repeating a poorly scaled map across many layers compounds the difference.</p>
-<p>Xavier initialization balances input and output widths for approximately linear or symmetric activations. Kaiming initialization accounts for the signal removed by rectification. These are starting assumptions, not guarantees for every deep network. The <a href="https://docs.pytorch.org/docs/2.14/nn.init.html">PyTorch initialization reference</a> specifies each function’s activation and matrix-orientation assumptions. <a href="ch-m2-c17.html#sec-m2-c17-s03">Residual connections and normalization</a> address additional stability problems after layers are stacked.</p>
 </section>
 <section id="sec-m2-c12-s03" class="level2" data-number="12.3">
 <h2 data-number="12.3" class="anchored" data-anchor-id="sec-m2-c12-s03"><span class="header-section-number">12.3</span> Classifying Fixed-Width Text Representations</h2>
@@ -627,17 +622,6 @@ Figure&nbsp;12.2: Hidden nonlinear features let a final linear classifier separa
 <p>The hidden layer changes the representation before the final classifier. That is the mathematical reason neural networks are more than stacked logistic-regression heads.</p>
 <p>Neural networks become useful by changing representations before applying a classifier head.</p>
 <p>Embedding tables supply the trainable token vectors used by sequence models.</p>
-</section>
-<section id="sec-m2-c12-check" class="level2" data-number="12.5">
-<h2 data-number="12.5" class="anchored" data-anchor-id="sec-m2-c12-check"><span class="header-section-number">12.5</span> Chapter checkpoint</h2>
-<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
-<ol type="1">
-<li>Several affine layers are stacked without an activation. Has the classifier gained nonlinear decision regions?</li>
-<li>A layer with 100 independent unit-variance inputs starts with zero-mean weights of variance one. What scale issue appears before training?</li>
-</ol>
-<p><strong>Feedback</strong></p>
-<p><strong>1.</strong> No.&nbsp;Their composition remains affine. A nonlinear activation is needed to produce a nonlinear transformation of the feature space.</p>
-<p><strong>2.</strong> The stated assumptions give preactivation variance 100. Repeated layers can magnify or shrink signals, so initialization must account for width and activation rather than relying only on the optimizer.</p>
 
 
 </section>

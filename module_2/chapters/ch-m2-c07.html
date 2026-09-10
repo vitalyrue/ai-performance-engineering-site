@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -401,7 +401,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../chapters/ch-m2-c23.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor Storage and Devices: Memory Costs in PyTorch</span></span></a>
+ <span class="menu-text"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">GPU Memory &amp; Strides: Maximizing Tensor Throughput</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -443,7 +443,6 @@ window.Quarto = {
   <li><a href="#sec-m2-c07-s02" id="toc-sec-m2-c07-s02" class="nav-link" data-scroll-target="#sec-m2-c07-s02"><span class="header-section-number">7.2</span> Controlling Sampling Diversity with Temperature and Truncation</a></li>
   <li><a href="#sec-m2-c07-s03" id="toc-sec-m2-c07-s03" class="nav-link" data-scroll-target="#sec-m2-c07-s03"><span class="header-section-number">7.3</span> Searching High-Probability Sequences with Beam Search</a></li>
   <li><a href="#sec-m2-c07-s04" id="toc-sec-m2-c07-s04" class="nav-link" data-scroll-target="#sec-m2-c07-s04"><span class="header-section-number">7.4</span> Probability-decoding trace</a></li>
-  <li><a href="#sec-m2-c07-check" id="toc-sec-m2-c07-check" class="nav-link" data-scroll-target="#sec-m2-c07-check"><span class="header-section-number">7.5</span> Chapter checkpoint</a></li>
   </ul>
 </nav>
     </div>
@@ -469,8 +468,7 @@ window.Quarto = {
 </header>
 
 
-<p>Compare decoding policies while keeping the trained probability model fixed.</p>
-<p>A fixed next-token model returns probabilities for many possible continuations. The <a href="ch-m2-c06.html">probability transforms in Chapter 6</a> are sufficient to study how generation chooses from them. <a href="ch-m2-c08.html">Chapter 8</a> will explain how training rewards the observed targets. This chapter follows the inference branch of the <a href="../frontmatter/ch-m2-roadmap.html#sec-m2-roadmap-paths">reading map</a>.</p>
+<p>A next-token model returns probabilities for many possible continuations. Generation needs an additional rule that selects one token and repeats the process.</p>
 <p>A next-token distribution still leaves one decision to make: which token to emit. Greedy decoding, sampling, truncation, and beam search apply different selection rules to the same probability model.</p>
 <p>In code, <code>torch.topk</code> and <code>torch.multinomial</code> expose candidate filtering and sampling; <code>transformers.GenerationConfig</code> and <code>generate</code> apply the same choices to pretrained models.</p>
 <div id="fig-m2-c07-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Chapter 7 opener for Decoding from probability distributions, with numbered section panels, labeled inputs and operations, and the result of each stage.">
@@ -493,7 +491,7 @@ Figure&nbsp;7.1: Greedy choice and sampling filters convert token probabilities 
 <p>A classifier usually performs one forward pass and selects a class with a threshold or argmax rule. An autoregressive language model performs the same probability computation repeatedly, selecting one token and then using that token as part of the next context.</p>
 <p>The same model can produce deterministic or diverse outputs depending on decoding settings. These settings are inference-time choices, not changes to the trained parameters.</p>
 <p>Logits and probability filtering are shared by many model families. Any classifier or language model that outputs a probability vector must apply a decision rule before it produces an observable prediction.</p>
-<p>A decoding rule changes the selected output, whereas a serving optimization changes how the same logits are computed or reused. Exact KV caching, batching, and prefix reuse preserve the intended probability calculation. Their storage and scheduling mechanisms are developed in <a href="ch-m2-c21.html">Chapter 21</a>.</p>
+<p>A decoding rule changes the selected output, whereas a serving optimization changes how the same logits are computed or reused. KV caching, batching, and prefix reuse therefore leave the probability distribution mathematically unchanged.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Token distribution:</strong></span></p>
 <p><span id="eq-m2-c07-e01"><span class="math display">\[
 P(\mathrm{next}=i\mid\mathrm{context})=\operatorname{softmax}(\mathrm{logits})_i
@@ -605,8 +603,6 @@ score(y_{1:t})=\sum_{i=1}^{t}\log P(y_i\mid y_{&lt;i},x)
 <p>If a two-token candidate has probabilities 0.5 and 0.4, its log score is <span class="math inline">\(\log(0.5)+\log(0.4)=-1.609\)</span>.</p>
 </div>
 <p>Beam search keeps multiple partial continuations, trading additional computation for a broader search. Every decoding rule depends on probabilities that must be trained against observed targets.</p>
-<p>With beam width two, suppose the first-token probabilities are <span class="math inline">\(P(A)=0.6\)</span> and <span class="math inline">\(P(B)=0.4\)</span>. Keep both. If the largest next-token probabilities are <span class="math inline">\(P(x\mid A)=0.5\)</span> and <span class="math inline">\(P(y\mid B)=0.9\)</span>, then the completed candidates have probabilities <span class="math inline">\(0.30\)</span> and <span class="math inline">\(0.36\)</span>. Greedy selection would have committed to <span class="math inline">\(A\)</span>, whereas the retained <span class="math inline">\(B\)</span> path wins this two-step comparison. Other candidates must still be scored before pruning.</p>
-<p>Length normalization changes that ranking criterion. A finished two-token candidate with log score <span class="math inline">\(-1.0\)</span> beats a four-token candidate with score <span class="math inline">\(-1.6\)</span> by raw probability. Dividing each score by length gives <span class="math inline">\(-0.5\)</span> and <span class="math inline">\(-0.4\)</span>, so the longer candidate wins under this particular normalization. Record the chosen rule and end-token handling. A higher search score does not by itself establish a better answer for the user.</p>
 </section>
 <section id="sec-m2-c07-s04" class="level2" data-number="7.4">
 <h2 data-number="7.4" class="anchored" data-anchor-id="sec-m2-c07-s04"><span class="header-section-number">7.4</span> Probability-decoding trace</h2>
@@ -660,17 +656,6 @@ p_i(T)=\frac{\exp(z_i/T)}{\sum_j\exp(z_j/T)}
 </ul>
 <p>Decoding is the rule that turns a probability distribution into a class or next token.</p>
 <p>Loss functions turn probability predictions into trainable scalar objectives.</p>
-</section>
-<section id="sec-m2-c07-check" class="level2" data-number="7.5">
-<h2 data-number="7.5" class="anchored" data-anchor-id="sec-m2-c07-check"><span class="header-section-number">7.5</span> Chapter checkpoint</h2>
-<p>Use these cases to check whether the chapter’s calculations support the proposed conclusion.</p>
-<ol type="1">
-<li>Greedy decoding starts with a 0.6-probability token, but a beam finds a continuation beginning with a 0.4-probability token. Can the beam result be more probable overall?</li>
-<li>A cache experiment also changes temperature. Can an answer-quality difference be attributed to caching?</li>
-</ol>
-<p><strong>Feedback</strong></p>
-<p><strong>1.</strong> Yes. Later conditional probabilities multiply with the first one. The chapter example gives 0.30 for the greedy branch and 0.36 for the retained alternative.</p>
-<p><strong>2.</strong> No.&nbsp;Temperature changes token selection probabilities. Hold the decoding policy fixed when comparing a storage or scheduling change.</p>
 
 
 </section>
