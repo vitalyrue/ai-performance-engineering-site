@@ -337,37 +337,30 @@ window.Quarto = {
 </header>
 
 
-<p>How does a versioned model become a responsive, efficient, and reversible user-facing service? Chapter 2 treated one coordinated training job whose ranks progress together. Serving replaces synchronized steps with variable-length requests, latency objectives, persistent KV-cache state, and rolling changes across a fleet.</p>
-<p>The three panels connect the request path to batching and KV-cache state, then to the capacity and release controls that protect an interactive service.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Chapter map: predictable inference serving</strong></p>
-<p>This chapter develops high-throughput, low-latency model serving:</p>
-<ul>
-<li><strong>3.1–3.3 Serving Objectives &amp; Latency Stages:</strong> Define Time to First Token (TTFT), Inter-Token Latency (ITL), and throughput SLOs, and dissect compute-bound prefill vs.&nbsp;memory-bound decode latency.</li>
-<li><strong>3.4–3.5 Continuous Batching &amp; PagedAttention:</strong> Explain iteration-level request scheduling in modern engines, and eliminate KV-cache memory fragmentation using non-contiguous physical block allocation.</li>
-<li><strong>3.6–3.8 Cache Routing &amp; Deployment Gates:</strong> Route requests based on prefix caching and queue depth, autoscale GPU replicas while mitigating cold starts, and enforce blue-green serving-bundle release gates.</li>
-</ul>
-</div>
+<p>How does a versioned model become a responsive, efficient, and reversible user-facing service? Chapter 2 treated one coordinated training job whose ranks progress together. Serving replaces synchronized steps with variable-length requests, latency objectives, retained KV-cache state, and rolling changes across a fleet.</p>
+<p>The service must respond quickly without admitting more work than its memory and compute can carry. The map follows a request through routing and execution, then connects its working memory to capacity and release decisions. These controls use the same fixed model parameters, but change when and where the service processes each request.</p>
 <div id="fig-m3-c03-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled Chapter 3 map follows a request through routing, continuous batching, KV-cache allocation, capacity scaling, and release gates.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c03-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="../assets/fig-m3-c03-f01.png" class="img-fluid figure-img" alt="A labelled Chapter 3 map follows a request through routing, continuous batching, KV-cache allocation, capacity scaling, and release gates.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;3.1: How request scheduling and memory control produce predictable serving. The three panels connect the request path to batching and KV-cache state, then to the capacity and release controls that protect an interactive service.
+Figure&nbsp;3.1: Predictable serving connects request scheduling and attention memory to enough warm capacity and reversible release decisions.
 </figcaption>
 </figure>
 </div>
 <section id="sec-m3-c03-s01" class="level2" data-number="3.1">
 <h2 data-number="3.1" class="anchored" data-anchor-id="sec-m3-c03-s01"><span class="header-section-number">3.1</span> Setting latency and throughput targets</h2>
 <p>A checkpoint is only one ingredient of a user-facing release. The serving design cannot be optimized until success is stated in workload and business terms. Latency, throughput, memory, quality, and cost measurements give engine settings a clear objective.</p>
+<p>Language-model inference has two phases. <strong>Prefill</strong> processes the prompt tokens and prepares attention state. <strong>Decode</strong> then generates successive output tokens, each conditioned on the earlier tokens. The <strong>key-value (KV) cache</strong> retains the key and value tensors used by attention so the engine can reuse earlier token state during decode. It is working memory for a request, not a change to the model parameters. A token is an entry in the model’s tokenizer vocabulary and may represent a word, part of a word, punctuation, or another text fragment. <a href="#sec-m3-c03-s03">Section 3.3</a> follows actual request text into that representation.</p>
 <ul>
-<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Service Level Objective (SLO):</strong></span> A measurable target for service behavior over a stated window, such as a p95 time-to-first-token below a threshold.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Service Level Objective (SLO):</strong></span> A measurable target for service behavior over a stated window. A p95 time-to-first-token below a threshold is one example.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Time to First Token (TTFT):</strong></span> Elapsed time from request admission until the first generated token becomes available.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Inter-Token Latency (ITL):</strong></span> Time between successive generated tokens during decode, commonly summarized as a distribution.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Throughput:</strong></span> Completed useful work per unit time, such as output tokens per second per GPU or requests per second at a defined workload.</p></li>
 </ul>
 <p>The business objective combines accepted work per GPU with latency, quality, safety, and availability. A benchmark that doubles tokens/s but violates the user’s ITL target does not improve that service.</p>
+<p>Let <span class="math inline">\(N_{\mathrm{out}}\)</span> be the number of generated output tokens, with at least one token. TTFT already includes the first token, leaving <span class="math inline">\(N_{\mathrm{out}}-1\)</span> later intervals. Multiplying their mean ITL by that count and adding TTFT gives the approximate total request time <span class="math inline">\(T_{\mathrm{request}}\)</span>. Every time term must use the same unit, such as milliseconds. For one fully observed request, summing its actual intervals is exact. The approximation is useful for planning with an estimated mean interval, but combining unrelated percentile measurements does not produce a valid total-latency percentile.</p>
 <p><span id="eq-m3-c03-e01"><span class="math display">\[
 T_{\mathrm{request}} ≈ \mathrm{TTFT} + \left(N_{\mathrm{out}}-1\right) \cdot \mathrm{ITL}
 \tag{3.1}\]</span></span></p>
@@ -376,14 +369,15 @@ T_{\mathrm{request}} ≈ \mathrm{TTFT} + \left(N_{\mathrm{out}}-1\right) \cdot \
 <p>Measuring request latency components separates prompt processing from token generation:</p>
 <ul>
 <li><strong>Queue:</strong> The request waits 120 ms.</li>
-<li><strong>Prefill:</strong> A 2,000-token prompt takes 280 ms.</li>
-<li><strong>First token:</strong> Queueing, prefill, scheduling, and first-token work produce a measured TTFT of 400 ms.</li>
+<li><strong>Prefill and first-token work:</strong> Processing a 2,000-token prompt and making the first token available takes 280 ms after queueing.</li>
+<li><strong>First token:</strong> The measured TTFT is 120 + 280 = 400 ms within this request-admission boundary.</li>
 <li><strong>Later tokens:</strong> The remaining 79 intervals average 22 ms, adding 1,738 ms.</li>
 <li><strong>Total:</strong> 400 + 79 × 22 = 2,138 ms.</li>
 <li><strong>Interpretation:</strong> Later-token decode dominates total time even though the first-token experience remains separately visible.</li>
 <li><strong>Conclusion:</strong> A single latency number hides the stage that limits the request.</li>
 </ul>
 </div>
+<p>The batch-size figure relates these latency measurements to throughput. A wider batch is useful only within the service’s response-time limits.</p>
 <div id="fig-m3-c03-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Batch size trades throughput against latency for a specific workload.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c03-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -399,6 +393,15 @@ Figure&nbsp;3.2: Batch size trades throughput against latency for a specific wor
 <section id="sec-m3-c03-s02" class="level2" data-number="3.2">
 <h2 data-number="3.2" class="anchored" data-anchor-id="sec-m3-c03-s02"><span class="header-section-number">3.2</span> Routing a request through the serving system</h2>
 <p>The serving objective identifies what users and operators measure. Those measurements cross several components, and each component owns a different decision. One request passes through admission, routing, and execution, while fleet management and evidence collection run around that data path.</p>
+<p>The request path separates five concrete responsibilities:</p>
+<ul>
+<li><strong>API gateway:</strong> authenticates identities, validates request shape, enforces quotas and rate limits, applies policy filters, and records billing identity.</li>
+<li><strong>Inference router:</strong> selects an eligible engine replica using health, queue, model placement, and cache-state evidence.</li>
+<li><strong>Inference engine:</strong> tokenizes, schedules batches, allocates KV-cache blocks, executes kernels, and streams generated tokens.</li>
+<li><strong>Control plane:</strong> reconciles desired model deployments, provisions capacity, distributes weights, rolls versions, and coordinates recovery.</li>
+<li><strong>Data and observability layer:</strong> stores request traces, metrics, logs, audit events, evaluation samples, and release evidence.</li>
+</ul>
+<p>The architecture figure places the gateway, router, and engine on the request path, with fleet control and durable records around it.</p>
 <div id="fig-m3-c03-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A production LLM request crosses gateway, router, engine, control-plane, and observability responsibilities.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c03-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -409,15 +412,7 @@ Figure&nbsp;3.3: A production LLM request crosses gateway, router, engine, contr
 </figcaption>
 </figure>
 </div>
-<p>The request path separates five concrete responsibilities:</p>
-<ul>
-<li><strong>API gateway:</strong> authenticates identities, validates request shape, enforces quotas and rate limits, applies policy filters, and records billing identity.</li>
-<li><strong>Inference router:</strong> selects an eligible engine replica using health, queue, model placement, and cache-state evidence.</li>
-<li><strong>Inference engine:</strong> tokenizes, schedules batches, allocates KV-cache blocks, executes kernels, and streams generated tokens.</li>
-<li><strong>Control plane:</strong> reconciles desired model deployments, provisions capacity, distributes weights, rolls versions, and coordinates recovery.</li>
-<li><strong>Data and observability layer:</strong> stores request traces, metrics, logs, audit events, evaluation samples, and release evidence.</li>
-</ul>
-<p>The router lies on the live request path, the control plane normally does not. Healthy replicas can continue serving during a temporary control-plane outage. Conversely, a router without fresh health or queue state can keep sending traffic to an overloaded or corrupt engine even when provisioning is healthy.</p>
+<p>The router lies on the live request path, while the control plane normally does not. Healthy replicas can continue serving during a temporary control-plane outage. A router without fresh health or queue state can still send traffic to an overloaded or corrupt engine, even when provisioning is healthy.</p>
 <div id="tbl-m3-c03-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c03-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -480,6 +475,9 @@ Table&nbsp;3.1: Serving signals become useful when the component that acts on th
 <section id="sec-m3-c03-s03" class="level2" data-number="3.3">
 <h2 data-number="3.3" class="anchored" data-anchor-id="sec-m3-c03-s03"><span class="header-section-number">3.3</span> Separating prefill and decode latency</h2>
 <p>The request path identifies the engine as the component that turns admitted text into tokens. Inside the engine, queueing, prompt processing, and token generation stress different resources. The normal request path provides the baseline for stage-specific controls.</p>
+<p>Text arrives as strings of unequal length, but the GPU performs numerical operations on arrays. A tokenizer fixed by the serving bundle maps each string into an ordered list of integer token IDs. The model’s embedding lookup converts each ID to a vector of a fixed width. Position information records where each token occurs. This conversion lets the model apply shared matrix operations, but tokenization choices affect sequence length, memory, and compatibility with the trained weights.</p>
+<p>Consider two requests, A containing <code>Can I return this?</code> and B containing <code>Refund status?</code>. For a simplified tokenizer, A becomes <code>[11, 24, 31, 42, 7]</code> and B becomes <code>[58, 62, 7]</code>. These invented IDs illustrate the mapping, not a particular production vocabulary. A padded implementation could create a two-row, five-column ID array by extending B to <code>[58, 62, 7, 0, 0]</code>. Lengths <code>[5, 3]</code> and a padding mask distinguish real tokens from placeholders. A causal attention mask also prevents an earlier position from using future token content. Selecting the last real prompt position for each request produces its next-token prediction without treating padding as input text.</p>
+<p>The rectangular batch supports shared execution, but two of its ten slots contain no useful prompt token. Some serving engines pack only real tokens and use sequence offsets, lengths, and block tables instead of this rectangular padded layout. Both approaches must preserve request identity and token order. Packing reduces unused work but requires kernels and scheduling that interpret the extra control data. After the first generated token, each active sequence contributes its next decode position, while its prior tokens remain represented in the KV cache. <a href="#sec-m3-c03-s05">Section 3.5</a> explains how that growing state maps to physical memory.</p>
 <ul>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill:</strong></span> The parallel forward pass over prompt tokens that computes hidden states and initializes key/value tensors for attention.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Decode:</strong></span> The autoregressive loop that produces one next token per sequence iteration while reading accumulated KV-cache state.</p></li>
@@ -495,16 +493,16 @@ Figure&nbsp;3.4: Latency controls act separately on queueing, prompt prefill, to
 </figcaption>
 </figure>
 </div>
-<p>A useful latency diagnosis names the stage. Long queue delay suggests admission, capacity, or scheduling pressure, long prefill suggests very long prompts, poor prefix reuse, or insufficient prefill compute, high ITL suggests decode batching, memory bandwidth, cache pressure, or per-token synchronization.</p>
+<p>A useful latency diagnosis identifies the stage. Long queue delay suggests admission, capacity, or scheduling pressure. Long prefill suggests very long prompts, poor prefix reuse, or insufficient prefill compute. High ITL suggests decode batching, memory bandwidth, cache pressure, or per-token synchronization.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Workload comparison: short-context versus long-context serving dynamics</strong></p>
 <p>Varying prompt and generation token counts shifts the bottleneck between compute and memory bandwidth:</p>
 <ul>
 <li><strong>Long prompt:</strong> A 12,000-token prompt spends 1,450 ms in prefill and then emits 20 tokens at 18 ms between tokens.</li>
 <li><strong>Long answer:</strong> A 600-token prompt spends 110 ms in prefill and then emits 180 tokens at 24 ms between tokens.</li>
-<li><strong>Comparison:</strong> The first request is prefill-dominated, the second is decode-dominated even though its prompt is much smaller.</li>
+<li><strong>Comparison:</strong> The first request is prefill-dominated. The second is decode-dominated even though its prompt is much smaller.</li>
 <li><strong>Control choice:</strong> Prefix reuse or more prefill capacity helps the first shape, while decode batch width and KV pressure are more relevant to the second.</li>
-<li><strong>Conclusion:</strong> Prompt and output distributions select the useful optimization, request count alone does not.</li>
+<li><strong>Conclusion:</strong> Prompt and output distributions select the useful optimization. Request count alone does not.</li>
 </ul>
 </div>
 </section>
@@ -521,7 +519,7 @@ Figure&nbsp;3.4: Latency controls act separately on queueing, prompt prefill, to
 <p>Chunked prefill protects interactive decode traffic from a single very long prompt. The trade-off is more scheduling overhead and potentially less efficient prompt computation. Its production behavior depends on the actual mix of prompt sizes and latency classes.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Continuous batching: purpose and limits</strong></p>
-<p>Evaluating continuous batching tradeoffs balances throughput against memory fragmentation:</p>
+<p>Continuous batching balances useful execution against queue delay and per-token latency:</p>
 <ul>
 <li><strong>Works on:</strong> The serving-engine queue and active sequence set.</li>
 <li><strong>Helps when:</strong> Requests have different arrival times and output lengths.</li>
@@ -530,6 +528,7 @@ Figure&nbsp;3.4: Latency controls act separately on queueing, prompt prefill, to
 <li><strong>Why it matters:</strong> It prevents variable-length traffic from wasting GPU slots behind finished or unusually long requests.</li>
 </ul>
 </div>
+<p>The scheduling figure shows the active batch changing as sequences finish. The important boundary is an iteration: a waiting request can enter without waiting for every earlier request to complete.</p>
 <div id="fig-m3-c03-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Iteration-level scheduling admits and removes sequences as their prompt and decode work changes.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c03-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -542,18 +541,19 @@ Figure&nbsp;3.5: Iteration-level scheduling admits and removes sequences as thei
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Batch iteration trace: continuous batching sequence</strong></p>
-<p>Observing token generation across consecutive iterations reveals dynamic batching behavior:</p>
+<p>Observing token generation across consecutive iterations reveals batching behavior that changes over time:</p>
 <ul>
 <li>Iteration 1 admits requests A and B for prefill. Iteration 2 decodes A and B while request C waits because the token budget is full.</li>
 <li>B finishes after iteration 2. Iteration 3 removes B, admits C’s prefill chunk, and continues A’s decode. The active set changes without waiting for A to finish.</li>
-<li>The expected effect is fewer empty execution slots, the measured guardrails are queue delay and ITL for each latency class.</li>
+<li>The expected effect is fewer empty execution slots. The measured limits are queue delay and ITL for each latency class.</li>
 </ul>
 </div>
+<p>The following abbreviated Python configuration uses settings documented for vLLM 0.8.5. Evaluating the dictionary creates <code>engine_args</code> but starts no engine and processes no request. An application would supply a model identity and pass these values to the matching engine constructor. The values are illustrative, not measured capacity settings. Unsupported configurations or insufficient memory can prevent engine startup, and this block contains no exception handling or retry policy.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
-<p><strong>Code example:</strong> vLLM-style scheduler and cache-capacity settings.</p>
+<p><strong>Code example:</strong> vLLM 0.8.5 scheduler and cache-capacity settings, without engine startup.</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c03-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c03-c01-1"><a href="#lst-m3-c03-c01-1" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c03-c01-2"><a href="#lst-m3-c03-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># vLLM-style example: names and availability depend on engine version.</span></span>
+<span id="lst-m3-c03-c01-2"><a href="#lst-m3-c03-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Abbreviated configuration for vLLM 0.8.5.</span></span>
 <span id="lst-m3-c03-c01-3"><a href="#lst-m3-c03-c01-3" aria-hidden="true" tabindex="-1"></a>engine_args <span class="op">=</span> {</span>
 <span id="lst-m3-c03-c01-4"><a href="#lst-m3-c03-c01-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"max_num_seqs"</span>: <span class="dv">128</span>,</span>
 <span id="lst-m3-c03-c01-5"><a href="#lst-m3-c03-c01-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"max_num_batched_tokens"</span>: <span class="dv">8192</span>,</span>
@@ -561,24 +561,26 @@ Figure&nbsp;3.5: Iteration-level scheduling admits and removes sequences as thei
 <span id="lst-m3-c03-c01-7"><a href="#lst-m3-c03-c01-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">"gpu_memory_utilization"</span>: <span class="fl">0.90</span>,</span>
 <span id="lst-m3-c03-c01-8"><a href="#lst-m3-c03-c01-8" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Code walkthrough: continuous batching request iteration</strong></p>
-<p>The continuous batching scheduler dynamically coordinates active sequence iterations:</p>
+<p><strong>Code walkthrough: scheduler and memory limits</strong></p>
+<p>These settings constrain the work that the engine can admit:</p>
 <ul>
 <li><strong>Sequence ceiling:</strong> <code>max_num_seqs</code> bounds the number of active request sequences considered by the scheduler.</li>
 <li><strong>Token budget:</strong> <code>max_num_batched_tokens</code> caps prompt and decode tokens admitted to one iteration’s work.</li>
 <li><strong>Prefill policy:</strong> <code>enable_chunked_prefill</code> permits long prompts to be split so interactive decode work can interleave.</li>
 <li><strong>Memory reserve:</strong> <code>gpu_memory_utilization</code> controls how much device memory the engine may use for weights, KV blocks, and execution buffers.</li>
-<li><strong>Result:</strong> The four settings jointly determine admission, batch shape, queueing behavior, and KV-cache capacity, they cannot be tuned independently.</li>
-<li><strong>Limits:</strong> These names are vLLM-style APIs whose availability and exact semantics depend on engine version. Other engines expose the same mechanisms through different settings.</li>
+<li><strong>Result:</strong> The settings jointly affect admission, batch shape, queueing behavior, and KV-cache capacity. Raising the sequence ceiling cannot create cache space beyond the memory budget.</li>
+<li><strong>Limits:</strong> The <a href="https://docs.vllm.ai/en/v0.8.5/serving/engine_args.html">vLLM 0.8.5 engine arguments</a> define these options. Other versions and engines can impose different scheduling rules. A configuration dictionary does not show the scheduler’s implementation or establish its performance.</li>
 </ul>
 </div>
 </section>
 <section id="sec-m3-c03-s05" class="level2" data-number="3.5">
 <h2 data-number="3.5" class="anchored" data-anchor-id="sec-m3-c03-s05"><span class="header-section-number">3.5</span> Reducing KV-cache fragmentation with PagedAttention</h2>
-<p>Continuous batching keeps execution slots occupied. Every active sequence also grows persistent attention state, and unpredictable lengths make contiguous preallocation wasteful. The memory estimate determines block allocation, prefix reuse, and whether compression or offload is useful.</p>
+<p>Continuous batching keeps execution slots occupied. Every active sequence also grows retained attention state, and unpredictable lengths make contiguous preallocation wasteful. The memory estimate determines block allocation, prefix reuse, and whether compression or offload is useful.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Key-Value (KV) cache:</strong></span> The key and value tensors retained from earlier tokens so decode does not recompute attention state for the entire prefix.</li>
 </ul>
+<p>Attention lets the current token position use information from earlier positions. Its query vector is compared with their key vectors to obtain relevance weights. Those weights combine the corresponding value vectors into an attention output. An attention head performs one such comparison and combination. The next token needs earlier keys and values, so retaining them avoids calculating them again. Earlier queries need not be kept for that reuse, so the cache stores two arrays rather than three.</p>
+<p>For this estimate, <span class="math inline">\(B\)</span> is the number of active sequences, <span class="math inline">\(L\)</span> is the number of decoder layers, and <span class="math inline">\(T\)</span> is the retained token count per sequence. Each token stores a key vector and a value vector at every layer. <span class="math inline">\(d_{\mathrm{KV}}\)</span> is the number of elements in either vector across that layer’s KV heads, and <span class="math inline">\(b\)</span> is bytes per element. The leading 2 counts the separate key and value arrays. Counting sequences, layers, token positions, vector elements, and bytes per element gives <span class="math inline">\(M_{\mathrm{KV}}\)</span> in bytes. The formula assumes uniform lengths, the same KV width at each layer, and no sharing, eviction, or sharding across devices.</p>
 <p><span id="eq-m3-c03-e02"><span class="math display">\[
 M_{\mathrm{KV}} = 2 \cdot B \cdot L \cdot T \cdot d_{\mathrm{KV}} \cdot b
 \tag{3.2}\]</span></span></p>
@@ -589,11 +591,12 @@ M_{\mathrm{KV}} = 2 \cdot B \cdot L \cdot T \cdot d_{\mathrm{KV}} \cdot b
 <li><strong>Model:</strong> The decoder has 32 layers and a key/value width of 1,024 values per token.</li>
 <li><strong>Traffic:</strong> Sixteen active sequences each retain 8,000 cached tokens.</li>
 <li><strong>Precision:</strong> The FP16 or BF16 cache uses 2 bytes per stored element.</li>
-<li><strong>Bytes:</strong> Substituting the traffic, layer, dimension, and precision values yields 16,777,216,000 bytes.</li>
+<li><strong>Bytes:</strong> <span class="math inline">\(2 \times 16 \times 32 \times 8{,}000 \times 1{,}024 \times 2\)</span> gives 16,777,216,000 bytes.</li>
 <li><strong>Binary size:</strong> Approximately 15.6 GiB, before allocator metadata and model weights.</li>
 <li><strong>Conclusion:</strong> Context length and concurrency can consume more memory than the model weights left available for cache.</li>
 </ul>
 </div>
+<p>The memory-controls figure separates allocation and reuse from compression and eviction. These change different factors in the memory budget rather than removing its limits.</p>
 <div id="fig-m3-c03-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Inference memory controls allocate, reuse, compress, or evict KV-cache state.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c03-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -607,17 +610,17 @@ Figure&nbsp;3.6: Inference memory controls allocate, reuse, compress, or evict K
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Paged attention:</strong></span> An attention-memory scheme that stores KV state in fixed-size non-contiguous blocks and maps logical token positions to physical blocks.</li>
 </ul>
-<p>Paged allocation reduces internal fragmentation and makes partial growth, eviction, and sharing practical. Reference counts let several requests point to the same cached prefix blocks, a block is released only when no live sequence references it. Prefix caching is valuable for shared system prompts, few-shot examples, and repeated conversation prefixes.</p>
-<p>For variable-length traffic, the uniform B × T factor becomes the sum of retained tokens across active sequences, Σᵢ Tᵢ. Grouped-query or multi-query attention reduces d with subscript KV because several query heads share fewer key/value heads. The estimate still needs allocator metadata and partially filled final blocks to explain measured memory.</p>
+<p>Paged allocation avoids reserving a contiguous maximum-length region for each request. A partially filled final block still wastes some space, so fragmentation is reduced rather than eliminated. Reference counts let several requests point to the same immutable cached prefix blocks. A block is released only when no live sequence references it. Prefix caching is valuable for shared system prompts, examples included in prompts, and repeated conversation prefixes. Shared blocks must correspond to the same tokens, model, and compatible runtime state.</p>
+<p>For variable-length traffic, the uniform <span class="math inline">\(B T\)</span> factor becomes <span class="math inline">\(\sum_{i=1}^{B} T_i\)</span>, where <span class="math inline">\(T_i\)</span> is the retained token count for sequence <span class="math inline">\(i\)</span>. Grouped-query or multi-query attention reduces <span class="math inline">\(d_{\mathrm{KV}}\)</span> because several query heads share fewer key and value heads. Model sharding changes the per-device portion, while prefix sharing means identical physical blocks must be counted only once. Allocator metadata and partially filled final blocks explain additional measured memory. The <a href="../appendices/ch-m3-app-a.html">formula reference</a> provides a route back to these assumptions.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Memory trace: paged KV-cache block allocation</strong></p>
-<p>Tracking non-contiguous physical block assignments demonstrates memory virtualization:</p>
+<p>Logical token positions can remain consecutive even when their physical blocks are separate:</p>
 <ul>
 <li>Sequences A and B share two immutable prefix blocks. A then owns three additional blocks, while B owns one additional block and one half-filled final block.</li>
-<li>When A finishes, its three private blocks return to the free list, the shared prefix remains because B still references it. The half-filled block exposes bounded internal fragmentation without requiring one contiguous maximum-length reservation.</li>
+<li>When A finishes, its three private blocks return to the free list. The shared prefix remains because B still references it. The half-filled block exposes bounded internal fragmentation without requiring one contiguous maximum-length reservation.</li>
 </ul>
 </div>
-<p>Quantizing KV state reduces bytes per element and can improve capacity, but conversion or unsupported-kernel overhead may offset the gain. Offloading moves colder state from GPU memory to host memory or storage, it extends capacity at the cost of transfer latency. Admission control and early rejection protect the cache before pressure becomes an out-of-memory failure.</p>
+<p>Quantizing KV state reduces bytes per element and can improve capacity, but conversion cost and precision loss may offset the gain or reduce output quality. It requires compatible attention kernels. Offloading moves colder state from GPU memory to host memory or storage, extending capacity at the cost of transfer latency. Admission control and early rejection protect the cache before pressure becomes an out-of-memory failure.</p>
 </section>
 <section id="sec-m3-c03-s06" class="level2" data-number="3.6">
 <h2 data-number="3.6" class="anchored" data-anchor-id="sec-m3-c03-s06"><span class="header-section-number">3.6</span> Reusing prefixes with cache-aware routing</h2>
@@ -633,8 +636,8 @@ Figure&nbsp;3.7: KV-aware routing estimates prefix reuse before selecting an inf
 </figcaption>
 </figure>
 </div>
-<p>A cache hit avoids part or all of prefill, but an overloaded endpoint can erase the saved compute. The router therefore depends on timely engine state, bounded staleness, a fallback when state is missing, and observability that records why an endpoint was selected.</p>
-<p>Eligibility is evaluated before preference: an endpoint must be healthy, serve the requested bundle, accept the request’s policy and context limits, and expose state no older than the freshness bound. Among eligible endpoints, estimated completion time combines queue delay, uncached prefill time, and decode time. Missing cache metadata contributes zero assumed reuse rather than an invented cache hit.</p>
+<p>A cache hit avoids part or all of prefill, but an overloaded endpoint can erase the saved compute. The router depends on timely engine state, bounded staleness, a fallback when state is missing, and observability that records why an endpoint was selected.</p>
+<p>Eligibility is evaluated before preference. An endpoint must be healthy, serve the requested bundle, accept the request’s policy and context limits, and expose state no older than the freshness bound. Among eligible endpoints, estimated completion time combines queue delay, uncached prefill time, and decode time. Missing cache metadata contributes zero assumed reuse rather than an invented cache hit.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Routing trade-off: prefix cache affinity versus queue delay</strong></p>
 <p>Balancing prefix cache reuse against worker queue length governs routing decisions:</p>
@@ -643,7 +646,7 @@ Figure&nbsp;3.7: KV-aware routing estimates prefix reuse before selecting an inf
 <li><strong>Endpoint B:</strong> Has no prefix cache but an estimated 80 ms queue.</li>
 <li><strong>Measured prefill rate:</strong> The engine saves 0.18 ms per reused token, so A avoids about 324 ms of prefill.</li>
 <li><strong>Net comparison:</strong> A’s extra queue is 370 ms, larger than the 324 ms cache saving.</li>
-<li><strong>Decision:</strong> Endpoint B has lower estimated latency for this request, the result changes if queue or prefill cost changes.</li>
+<li><strong>Decision:</strong> Endpoint B has lower estimated latency for this request. The result changes if queue or prefill cost changes.</li>
 <li><strong>Conclusion:</strong> Cache-aware routing is an optimization over measured time, not a rule that always chooses the largest prefix match.</li>
 </ul>
 </div>
@@ -668,12 +671,13 @@ Figure&nbsp;3.8: The control plane reconciles desired deployments while request 
 <ul>
 <li><strong>Measured capacity:</strong> One warmed replica sustains 6 requests/s for the target prompt-output mix while meeting both TTFT and ITL objectives.</li>
 <li><strong>Smoothed demand:</strong> The five-minute demand signal rises to 25 requests/s, so 25 ÷ 6 requires five warmed replicas after rounding up.</li>
-<li><strong>Current capacity:</strong> Three replicas are ready, the controller requests two more and keeps a sixth as failure headroom.</li>
-<li><strong>Warm-up timeline:</strong> Node allocation takes 70 seconds, image and weights take 95 seconds, kernel warm-up takes 25 seconds, and health stabilization takes 20 seconds: about 210 seconds before traffic.</li>
+<li><strong>Current capacity:</strong> Three replicas are ready. The controller requests two more for demand and an additional sixth replica as failure headroom.</li>
+<li><strong>Warm-up timeline:</strong> Node allocation takes 70 seconds, and image and weight loading takes 95 seconds. Kernel warm-up takes 25 seconds and health stabilization takes 20 seconds, for about 210 seconds before traffic.</li>
 <li><strong>Hysteresis:</strong> Scale-down begins only after demand stays below three-replica capacity for ten minutes, avoiding a reversal during the 210-second scale-up delay.</li>
 <li><strong>Conclusion:</strong> Autoscaling capacity depends on warmed service rate and response delay, not an instantaneous utilization sample.</li>
 </ul>
 </div>
+<p>The scaling figure makes the delay between a capacity request and a ready replica visible. Waiting demand still needs admission limits or existing headroom during this delay.</p>
 <div id="fig-m3-c03-f09" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Measured scaling behavior includes the delay between a capacity signal and a warmed replica joining traffic.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c03-f09-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -684,12 +688,12 @@ Figure&nbsp;3.9: Measured scaling behavior includes the delay between a capacity
 </figcaption>
 </figure>
 </div>
-<p>Cold-start work includes allocating a node, pulling the engine image, loading weights, initializing kernels or graphs, warming caches, passing health checks, and joining the router. Node-local NVMe is the fastest ordinary weight source. Shared filesystems or enhanced object storage can feed many nodes, peer-to-peer distribution reduces a thundering herd against one storage endpoint.</p>
+<p>Cold-start work includes allocating a node, pulling the engine image, loading weights, initializing kernels or graphs, warming caches, passing health checks, and joining the router. An existing node-local NVMe copy avoids a remote transfer and can reduce startup time, although performance depends on the measured storage and loading path. Shared filesystems or object storage can feed many nodes. Peer-to-peer distribution reduces simultaneous demand on one storage endpoint.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Prefill/decode disaggregation:</strong></span> Placing prompt processing and token decoding in different worker pools and transferring KV state between them.</li>
 </ul>
 <p>Disaggregation lets compute-rich prefill workers and memory-bandwidth-oriented decode workers scale independently. Its success depends on a fast KV-transfer path, correct request handoff, compatible cache formats, and routing that keeps the two pools balanced. The transfer can erase the gain when interconnect latency or serialization is too high.</p>
-<p>A measured decision compares the prefill/decode imbalance with KV-transfer cost. If separate pools save 90 ms of queue and compute time but serialization and transfer add 120 ms at the target context length, the combined request is slower and the unified engine remains the better placement for that workload.</p>
+<p>A measured decision compares the prefill/decode imbalance with KV-transfer cost. Separate pools may save 90 ms of queue and compute time while serialization and transfer add 120 ms at the target context length. The combined request is then slower, so the unified engine remains the better placement for that workload.</p>
 </section>
 <section id="sec-m3-c03-s08" class="level2" data-number="3.8">
 <h2 data-number="3.8" class="anchored" data-anchor-id="sec-m3-c03-s08"><span class="header-section-number">3.8</span> Releasing serving bundles through deployment gates</h2>
@@ -758,6 +762,7 @@ Table&nbsp;3.2: A serving bundle advances only when its deployable behavior pass
 </div>
 </figure>
 </div>
+<p>The rollout figure shows stable and candidate bundles available together. Keeping both versions ready allows traffic to return to the stable bundle when a required check fails.</p>
 <div id="fig-m3-c03-f11" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A serving rollout keeps stable and candidate bundles alive until performance and quality gates pass.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c03-f11-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -768,30 +773,25 @@ Figure&nbsp;3.11: A serving rollout keeps stable and candidate bundles alive unt
 </figcaption>
 </figure>
 </div>
-<p>Blue/green or canary deployment keeps the stable bundle available while a candidate receives synthetic, shadow, or limited live traffic. The release gate compares performance and quality on equivalent workload slices. Promotion is reversible until the candidate has enough evidence, rollback restores the whole bundle rather than only the weights.</p>
+<p>Blue/green deployment keeps separate stable and candidate environments ready, while a canary sends only a limited share of live traffic to the candidate. Synthetic or shadow requests can supply earlier evidence. The release gate compares performance and quality on equivalent workload slices. The router resolves one bundle for each request and retains that choice while it streams. Rollback directs new requests to the stable bundle and drains or explicitly terminates candidate requests according to policy. It restores the whole bundle rather than mixing old weights with new runtime settings.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Release verification example: canary traffic progression and health gates</strong></p>
 <p>Graduated traffic shifting verifies candidate model behavior against production baselines:</p>
 <ul>
 <li><strong>Comparable slice:</strong> Stable and candidate bundles each receive replayed requests stratified by prompt length, output length, tenant class, and retrieval use.</li>
-<li><strong>Performance gate:</strong> Candidate p95 TTFT is 4% lower and p95 ITL is 2% higher, both remain inside the predefined non-regression bounds.</li>
+<li><strong>Performance gate:</strong> Candidate p95 TTFT is 4% lower and p95 ITL is 2% higher. Both remain inside the predefined non-regression bounds.</li>
 <li><strong>Quality gate:</strong> The candidate passes 499 of 500 critical cases, but the single failure is an authorization case with a zero-tolerance stop condition.</li>
-<li><strong>Decision:</strong> Traffic returns to the stable bundle and the entire candidate bundle remains available for reproduction, favorable aggregate latency does not override the critical failure.</li>
+<li><strong>Decision:</strong> New traffic returns to the stable bundle and the entire candidate bundle remains available for reproduction. Favorable aggregate latency does not override the critical failure.</li>
 <li><strong>Conclusion:</strong> A canary decision combines equivalent workload slices with explicit stop conditions and whole-bundle rollback.</li>
 </ul>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter 3 summary</strong></p>
-<p>Key serving platform principles and tradeoffs established in this chapter:</p>
-<ul>
-<li><strong>Core mechanisms:</strong> Iteration-level continuous batching in vLLM/SGLang, PagedAttention non-contiguous KV-cache memory allocation, prefix-aware request routing.</li>
-<li><strong>Governing tradeoffs:</strong> TTFT vs.&nbsp;ITL latency optimization, KV-cache memory allocation limits vs.&nbsp;request concurrency throughput, aggressive prefetching vs.&nbsp;memory fragmentation.</li>
-<li><strong>Failure modes &amp; defenses:</strong> Blue-green serving bundle deployments, automated latency and accuracy release gates.</li>
-</ul>
+<p>Prompt processing and later-token generation have different time and memory costs. Continuous batching keeps useful sequences in each iteration, while paged allocation lets their attention state grow without full-length reservations. Routing trades cache reuse against queue delay, and capacity planning accounts for warm-up time. Release decisions compare the complete serving bundle against latency, quality, and safety limits, retaining a known stable route for rollback.</p>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter checkpoint</strong></p>
-<p>Review the self-study questions in Appendix C, Section C.1 (Questions 6, 7, and 8) to test understanding of interactive latency stages, continuous batching trade-offs, and KV-cache memory allocation before moving to observability and evaluation.</p>
+<p><a href="../appendices/ch-m3-app-c.html#sec-m3-app-c-s01">Appendix C, Questions 6 to 8</a> relate latency symptoms, cache reuse, and growing attention state to the serving decisions developed here.</p>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Carry-forward result</strong></p>

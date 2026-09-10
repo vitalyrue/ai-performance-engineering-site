@@ -309,7 +309,7 @@ window.Quarto = {
   <li><a href="#sec-m3-c06-s03" id="toc-sec-m3-c06-s03" class="nav-link" data-scroll-target="#sec-m3-c06-s03"><span class="header-section-number">6.3</span> Defining immutable task inputs and outputs</a></li>
   <li><a href="#sec-m3-c06-s04" id="toc-sec-m3-c06-s04" class="nav-link" data-scroll-target="#sec-m3-c06-s04"><span class="header-section-number">6.4</span> Coordinating workflow runs with Airflow</a></li>
   <li><a href="#sec-m3-c06-s05" id="toc-sec-m3-c06-s05" class="nav-link" data-scroll-target="#sec-m3-c06-s05"><span class="header-section-number">6.5</span> Running complete ML workflows in Airflow</a></li>
-  <li><a href="#sec-m3-c06-s06" id="toc-sec-m3-c06-s06" class="nav-link" data-scroll-target="#sec-m3-c06-s06"><span class="header-section-number">6.6</span> Safe re-execution and idempotent tasks</a></li>
+  <li><a href="#sec-m3-c06-s06" id="toc-sec-m3-c06-s06" class="nav-link" data-scroll-target="#sec-m3-c06-s06"><span class="header-section-number">6.6</span> Controlled re-execution and idempotent tasks</a></li>
   <li><a href="#sec-m3-c06-s07" id="toc-sec-m3-c06-s07" class="nav-link" data-scroll-target="#sec-m3-c06-s07"><span class="header-section-number">6.7</span> Building reusable task templates</a></li>
   <li><a href="#sec-m3-c06-s08" id="toc-sec-m3-c06-s08" class="nav-link" data-scroll-target="#sec-m3-c06-s08"><span class="header-section-number">6.8</span> Recording artifact evidence in run manifests</a></li>
   <li><a href="#sec-m3-c06-s09" id="toc-sec-m3-c06-s09" class="nav-link" data-scroll-target="#sec-m3-c06-s09"><span class="header-section-number">6.9</span> Isolating teams on shared research clusters</a></li>
@@ -339,15 +339,10 @@ window.Quarto = {
 
 
 <p>How can the system reproduce a multi-step ML result after partial failure, schedule delay, code change, or operator handoff? Chapter 5 established durable artifacts and rebuildable derived state. Dependency graphs replace manual command sequences with tasks that have explicit inputs, outputs, resources, retries, and evidence.</p>
-<p>The three panels connect a pipeline DAG to its execution engine, then to the reusable and governed components that make the workflow durable.</p>
+<p>The chapter map follows one dependency graph from task definitions into scheduler state, isolated execution, guarded publication, evidence records, and shared-cluster controls.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter map: repeatable ML workflows</strong></p>
-<p>This chapter orchestrates multi-step machine learning pipelines:</p>
-<ul>
-<li><strong>6.1–6.3 Pipelines as DAGs &amp; Task Contracts:</strong> Replace brittle manual scripts with Directed Acyclic Graphs (DAGs), and define immutable task inputs, outputs, and parameters.</li>
-<li><strong>6.4–6.5 Airflow Architecture &amp; ML Workflows:</strong> Construct end-to-end Airflow DAGs across data validation, model training, and evaluation using Celery and Kubernetes executors.</li>
-<li><strong>6.6–6.9 Idempotent Tasks, Run Manifests &amp; Multi-Tenancy:</strong> Implement safe retries, atomic state transitions, and execution evidence manifests, while isolating multi-tenant research environments on shared clusters.</li>
-</ul>
+<p>Sections 6.1 to 6.3 turn scripts into directed acyclic graphs and task contracts. Sections 6.4 and 6.5 connect those contracts to Airflow’s scheduler, metadata, executor, and task runtimes. Sections 6.6 to 6.9 add controlled retries, guarded state publication, linked run records, reusable task blocks, and tenant controls.</p>
 </div>
 <div id="fig-m3-c06-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled Chapter 6 map links a task dependency graph to orchestration, immutable outputs, retries, run manifests, and shared-cluster controls.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -355,17 +350,17 @@ window.Quarto = {
 <img src="../assets/fig-m3-c06-f01.png" class="img-fluid figure-img" alt="A labelled Chapter 6 map links a task dependency graph to orchestration, immutable outputs, retries, run manifests, and shared-cluster controls.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c06-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;6.1: How task dependencies become repeatable workflow runs. The three panels connect a pipeline DAG to its execution engine, then to the reusable and governed components that make the workflow durable.
+Figure&nbsp;6.1: A repeatable workflow connects dependency order to persisted scheduler state, isolated execution, guarded publication, linked evidence, and shared-cluster controls.
 </figcaption>
 </figure>
 </div>
 <section id="sec-m3-c06-s01" class="level2" data-number="6.1">
 <h2 data-number="6.1" class="anchored" data-anchor-id="sec-m3-c06-s01"><span class="header-section-number">6.1</span> From manual scripts to automated pipelines</h2>
-<p>A single script can run ingestion, training, evaluation, and deployment in sequence. As the workflow grows, a single process cannot reliably express parallel branches, selective retries, historical backfills, resource placement, responsibility, or persistent run state. Dependency definitions stay separate from execution, and task-attempt state persists across failures.</p>
+<p>A script can run ingestion, training, evaluation, and deployment in sequence. As the workflow grows, one process cannot reliably express parallel branches, selective retries, historical backfills, resource placement, responsibility, or persistent run state. The dependency definition does not execute the work, and task-attempt state persists across failures.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Pipeline:</strong></span> A reproducible set of tasks and dependencies that transforms versioned inputs into versioned outputs while recording execution state.</li>
 </ul>
-<p>Orchestration is not the model code. It decides when a task is eligible, where it runs, how its state is recorded, and what happens after failure. The task implementation performs domain work such as preprocessing or training. The artifact store carries large outputs. The metadata store carries orchestration state and small references.</p>
+<p>Orchestration is not the model code. It decides when a task is eligible, where it runs, how its state is recorded, and what happens after failure. The task implementation performs domain work such as preprocessing or training. The artifact store contains large outputs. The metadata store contains orchestration state and small references.</p>
 <div id="tbl-m3-c06-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c06-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -426,7 +421,7 @@ Table&nbsp;6.1: Orchestration adds durable control-plane behavior around existin
 <h2 data-number="6.2" class="anchored" data-anchor-id="sec-m3-c06-s02"><span class="header-section-number">6.2</span> Scheduling task dependencies with directed acyclic graphs</h2>
 <p>The workflow’s responsibilities are separated. The orchestrator still needs an unambiguous rule for which tasks may run and which work can happen in parallel. Tasks are nodes, and prerequisite relationships are directed edges without cycles.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Directed Acyclic Graph (DAG):</strong></span> A graph whose directed edges encode dependency order and whose lack of cycles guarantees that a topological execution order exists.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Directed Acyclic Graph (DAG):</strong></span> A graph whose directed edges encode dependency order. Its lack of cycles means that at least one topological execution order exists.</li>
 </ul>
 <div id="fig-m3-c06-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A DAG makes dependencies and parallel branches explicit.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -438,22 +433,26 @@ Figure&nbsp;6.2: A DAG makes dependencies and parallel branches explicit.
 </figcaption>
 </figure>
 </div>
-<p>An edge A → B means B cannot start successfully until A’s required output is available, A does not directly invoke B. Independent branches can execute concurrently. A cycle leaves every node in the loop waiting, so feedback over time is represented by separate DAG runs or external events.</p>
+<p>An edge A → B means B cannot start successfully until A’s required output is available. A does not directly invoke B. Independent branches can execute concurrently. A cycle leaves every node in the loop waiting, so feedback over time is represented by separate DAG runs or external events.</p>
+<p>The completion-time bound follows directly from the dependencies. Let <span class="math inline">\(P\)</span> be the set of all directed paths from the workflow’s start to its finish. For one path <span class="math inline">\(p\)</span>, the condition <span class="math inline">\(i \in p\)</span> means that task <span class="math inline">\(i\)</span> lies on that path, and <span class="math inline">\(t_i\)</span> is that task’s elapsed duration in minutes. Tasks on one dependency path must finish in order, so the workflow cannot finish sooner than their summed durations. Taking the largest sum gives the critical-path lower bound.</p>
+<p>This bound assumes that task durations are known estimates and enough workers are available for independent branches. It also assumes that queueing, worker startup, retries, data transfer, and resource contention do not add delay. Under those conditions, work-conserving scheduling can reach the bound. In a real cluster, those omitted delays can make the observed workflow longer, but never shorter for the same dependencies and task durations.</p>
 <p><span id="eq-m3-c06-e01"><span class="math display">\[
 T_{\mathrm{DAG}} \ge \max_{p \in P} \sum_{i \in p} t_i
 \tag{6.1}\]</span></span></p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Critical path calculation: scheduling duration in a branched DAG</strong></p>
-<p>Summing task latencies along the longest dependency chain determines minimum workflow completion time:</p>
+<p>Summing task durations along the longest dependency chain determines the minimum workflow completion time under the stated assumptions:</p>
 <ul>
 <li><strong>Shared start:</strong> Validation takes 4 minutes.</li>
 <li><strong>Training branch:</strong> Training takes 38 minutes and model evaluation takes 8 minutes.</li>
 <li><strong>Retrieval branch:</strong> Embedding takes 20 minutes and index validation takes 6 minutes.</li>
 <li><strong>Shared release:</strong> The promotion gate takes 3 minutes after both branches finish.</li>
-<li><strong>Path sums:</strong> Adding the task durations gives 53 minutes for the training path and 33 minutes for the retrieval path.</li>
-<li><strong>Conclusion:</strong> The 53-minute training path controls the lower bound, accelerating the 33-minute branch alone cannot reduce end-to-end time below 53 minutes.</li>
+<li><strong>Training path:</strong> Validation → training → model evaluation → promotion takes <span class="math inline">\(4 + 38 + 8 + 3 = 53\)</span> minutes.</li>
+<li><strong>Retrieval path:</strong> Validation → embedding → index validation → promotion takes <span class="math inline">\(4 + 20 + 6 + 3 = 33\)</span> minutes.</li>
+<li><strong>Conclusion:</strong> The 53-minute training path controls the lower bound. Accelerating the 33-minute branch alone cannot reduce end-to-end time below 53 minutes.</li>
 </ul>
 </div>
+<p>The compact relationship is also listed in <a href="../appendices/ch-m3-app-a.html">Appendix A</a>, with this section as its full explanation.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Workflow analysis: critical path scheduling implications</strong></p>
 <p>Identifying workflow bottleneck dependencies directs pipeline optimization efforts:</p>
@@ -540,7 +539,7 @@ Table&nbsp;6.2: A task description makes retry, audit, responsibility, and downs
 </section>
 <section id="sec-m3-c06-s04" class="level2" data-number="6.4">
 <h2 data-number="6.4" class="anchored" data-anchor-id="sec-m3-c06-s04"><span class="header-section-number">6.4</span> Coordinating workflow runs with Airflow</h2>
-<p>Task descriptions make the DAG meaningful. A concrete orchestrator still needs components that parse definitions, create runs, choose ready tasks, launch executors, and expose state. Airflow’s components map to those responsibilities around the DAG file.</p>
+<p>Task descriptions make the DAG specific enough to operate. A concrete orchestrator still needs components that parse definitions, create runs, choose ready tasks, launch executors, and expose state. Airflow’s components map to those responsibilities around the DAG file.</p>
 <div id="fig-m3-c06-f03" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Airflow separates user/API, scheduling, execution, metadata, and Python-definition responsibilities.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c06-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -613,59 +612,69 @@ Figure&nbsp;6.4: The Airflow graph view exposes task state and dependency struct
 </figcaption>
 </figure>
 </div>
-<p>The UI is a view of persisted state, not the execution engine. A green task instance means the operator’s success criteria ran without error, it does not automatically prove the produced model is good. Domain validation belongs inside task descriptions and release gates.</p>
+<p>The UI is a view of persisted state, not the execution engine. A green task instance means the operator’s success criteria ran without error. It does not automatically prove that the produced model is good. Domain validation belongs inside task descriptions and release gates.</p>
 </section>
 <section id="sec-m3-c06-s05" class="level2" data-number="6.5">
 <h2 data-number="6.5" class="anchored" data-anchor-id="sec-m3-c06-s05"><span class="header-section-number">6.5</span> Running complete ML workflows in Airflow</h2>
 <p>The control-plane roles and task description are explicit. The Python definition describes dependencies without performing expensive work during import. Lightweight DAG parsing leaves domain code to isolated task runtimes.</p>
+<p>The following abbreviated Python example targets the Apache Airflow 3 DAG interface and its CNCF Kubernetes provider. The Airflow deployment must pin the exact orchestrator and provider versions. <code>PIPELINE_IMAGE</code> pins the domain application and its libraries. The other uppercase names are immutable manifest or configuration identities supplied by the deployment. Importing the file creates a DAG definition. A run then creates task-instance and attempt records in Airflow’s metadata database, while each pod writes domain artifacts to the external artifact store.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
-<p><strong>Code example:</strong> Airflow DAG that passes immutable artifact identities into isolated Kubernetes task runtimes.</p>
+<p><strong>Code example:</strong> Abbreviated Airflow DAG that passes immutable artifact identities into isolated Kubernetes tasks and applies bounded retries with exponential backoff.</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c06-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c06-c01-1"><a href="#lst-m3-c06-c01-1" aria-hidden="true" tabindex="-1"></a></span>
 <span id="lst-m3-c06-c01-2"><a href="#lst-m3-c06-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> airflow <span class="im">import</span> DAG</span>
 <span id="lst-m3-c06-c01-3"><a href="#lst-m3-c06-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> airflow.providers.cncf.kubernetes.operators.pod <span class="im">import</span> KubernetesPodOperator</span>
-<span id="lst-m3-c06-c01-4"><a href="#lst-m3-c06-c01-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> datetime <span class="im">import</span> datetime</span>
+<span id="lst-m3-c06-c01-4"><a href="#lst-m3-c06-c01-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> datetime <span class="im">import</span> datetime, timedelta</span>
 <span id="lst-m3-c06-c01-5"><a href="#lst-m3-c06-c01-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c06-c01-6"><a href="#lst-m3-c06-c01-6" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> DAG(</span>
-<span id="lst-m3-c06-c01-7"><a href="#lst-m3-c06-c01-7" aria-hidden="true" tabindex="-1"></a>    dag_id<span class="op">=</span><span class="st">"versioned_rag_release"</span>,</span>
-<span id="lst-m3-c06-c01-8"><a href="#lst-m3-c06-c01-8" aria-hidden="true" tabindex="-1"></a>    start_date<span class="op">=</span>datetime(<span class="dv">2026</span>, <span class="dv">1</span>, <span class="dv">1</span>),</span>
-<span id="lst-m3-c06-c01-9"><a href="#lst-m3-c06-c01-9" aria-hidden="true" tabindex="-1"></a>    schedule<span class="op">=</span><span class="va">None</span>,</span>
-<span id="lst-m3-c06-c01-10"><a href="#lst-m3-c06-c01-10" aria-hidden="true" tabindex="-1"></a>    catchup<span class="op">=</span><span class="va">False</span>,</span>
-<span id="lst-m3-c06-c01-11"><a href="#lst-m3-c06-c01-11" aria-hidden="true" tabindex="-1"></a>    max_active_runs<span class="op">=</span><span class="dv">1</span>,</span>
-<span id="lst-m3-c06-c01-12"><a href="#lst-m3-c06-c01-12" aria-hidden="true" tabindex="-1"></a>    tags<span class="op">=</span>[<span class="st">"mlops"</span>, <span class="st">"rag"</span>],</span>
-<span id="lst-m3-c06-c01-13"><a href="#lst-m3-c06-c01-13" aria-hidden="true" tabindex="-1"></a>) <span class="im">as</span> dag:</span>
-<span id="lst-m3-c06-c01-14"><a href="#lst-m3-c06-c01-14" aria-hidden="true" tabindex="-1"></a>    validate <span class="op">=</span> KubernetesPodOperator(</span>
-<span id="lst-m3-c06-c01-15"><a href="#lst-m3-c06-c01-15" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"validate_sources"</span>,</span>
-<span id="lst-m3-c06-c01-16"><a href="#lst-m3-c06-c01-16" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
-<span id="lst-m3-c06-c01-17"><a href="#lst-m3-c06-c01-17" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.validate"</span>],</span>
-<span id="lst-m3-c06-c01-18"><a href="#lst-m3-c06-c01-18" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[<span class="st">"--manifest"</span>, DATASET_MANIFEST],</span>
-<span id="lst-m3-c06-c01-19"><a href="#lst-m3-c06-c01-19" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m3-c06-c01-20"><a href="#lst-m3-c06-c01-20" aria-hidden="true" tabindex="-1"></a>    embed <span class="op">=</span> KubernetesPodOperator(</span>
-<span id="lst-m3-c06-c01-21"><a href="#lst-m3-c06-c01-21" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"build_embeddings"</span>,</span>
-<span id="lst-m3-c06-c01-22"><a href="#lst-m3-c06-c01-22" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
-<span id="lst-m3-c06-c01-23"><a href="#lst-m3-c06-c01-23" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.embed"</span>],</span>
-<span id="lst-m3-c06-c01-24"><a href="#lst-m3-c06-c01-24" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[<span class="st">"--manifest"</span>, DATASET_MANIFEST,</span>
-<span id="lst-m3-c06-c01-25"><a href="#lst-m3-c06-c01-25" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"--embedding-version"</span>, EMBEDDING_VERSION],</span>
-<span id="lst-m3-c06-c01-26"><a href="#lst-m3-c06-c01-26" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m3-c06-c01-27"><a href="#lst-m3-c06-c01-27" aria-hidden="true" tabindex="-1"></a>    evaluate <span class="op">=</span> KubernetesPodOperator(</span>
-<span id="lst-m3-c06-c01-28"><a href="#lst-m3-c06-c01-28" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"evaluate_retrieval"</span>,</span>
-<span id="lst-m3-c06-c01-29"><a href="#lst-m3-c06-c01-29" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
-<span id="lst-m3-c06-c01-30"><a href="#lst-m3-c06-c01-30" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.evaluate"</span>],</span>
-<span id="lst-m3-c06-c01-31"><a href="#lst-m3-c06-c01-31" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[<span class="st">"--suite"</span>, EVAL_SUITE, <span class="st">"--candidate"</span>, COLLECTION_ID],</span>
-<span id="lst-m3-c06-c01-32"><a href="#lst-m3-c06-c01-32" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="lst-m3-c06-c01-33"><a href="#lst-m3-c06-c01-33" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c06-c01-34"><a href="#lst-m3-c06-c01-34" aria-hidden="true" tabindex="-1"></a>    validate <span class="op">&gt;&gt;</span> embed <span class="op">&gt;&gt;</span> evaluate</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m3-c06-c01-6"><a href="#lst-m3-c06-c01-6" aria-hidden="true" tabindex="-1"></a>TASK_RETRY_POLICY <span class="op">=</span> {</span>
+<span id="lst-m3-c06-c01-7"><a href="#lst-m3-c06-c01-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">"retries"</span>: <span class="dv">2</span>,</span>
+<span id="lst-m3-c06-c01-8"><a href="#lst-m3-c06-c01-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">"retry_delay"</span>: timedelta(minutes<span class="op">=</span><span class="dv">5</span>),</span>
+<span id="lst-m3-c06-c01-9"><a href="#lst-m3-c06-c01-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">"retry_exponential_backoff"</span>: <span class="va">True</span>,</span>
+<span id="lst-m3-c06-c01-10"><a href="#lst-m3-c06-c01-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">"max_retry_delay"</span>: timedelta(minutes<span class="op">=</span><span class="dv">30</span>),</span>
+<span id="lst-m3-c06-c01-11"><a href="#lst-m3-c06-c01-11" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="lst-m3-c06-c01-12"><a href="#lst-m3-c06-c01-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c06-c01-13"><a href="#lst-m3-c06-c01-13" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> DAG(</span>
+<span id="lst-m3-c06-c01-14"><a href="#lst-m3-c06-c01-14" aria-hidden="true" tabindex="-1"></a>    dag_id<span class="op">=</span><span class="st">"versioned_rag_release"</span>,</span>
+<span id="lst-m3-c06-c01-15"><a href="#lst-m3-c06-c01-15" aria-hidden="true" tabindex="-1"></a>    start_date<span class="op">=</span>datetime(<span class="dv">2026</span>, <span class="dv">1</span>, <span class="dv">1</span>),</span>
+<span id="lst-m3-c06-c01-16"><a href="#lst-m3-c06-c01-16" aria-hidden="true" tabindex="-1"></a>    schedule<span class="op">=</span><span class="va">None</span>,</span>
+<span id="lst-m3-c06-c01-17"><a href="#lst-m3-c06-c01-17" aria-hidden="true" tabindex="-1"></a>    catchup<span class="op">=</span><span class="va">False</span>,</span>
+<span id="lst-m3-c06-c01-18"><a href="#lst-m3-c06-c01-18" aria-hidden="true" tabindex="-1"></a>    max_active_runs<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="lst-m3-c06-c01-19"><a href="#lst-m3-c06-c01-19" aria-hidden="true" tabindex="-1"></a>    default_args<span class="op">=</span>TASK_RETRY_POLICY,</span>
+<span id="lst-m3-c06-c01-20"><a href="#lst-m3-c06-c01-20" aria-hidden="true" tabindex="-1"></a>    tags<span class="op">=</span>[<span class="st">"mlops"</span>, <span class="st">"rag"</span>],</span>
+<span id="lst-m3-c06-c01-21"><a href="#lst-m3-c06-c01-21" aria-hidden="true" tabindex="-1"></a>) <span class="im">as</span> dag:</span>
+<span id="lst-m3-c06-c01-22"><a href="#lst-m3-c06-c01-22" aria-hidden="true" tabindex="-1"></a>    validate <span class="op">=</span> KubernetesPodOperator(</span>
+<span id="lst-m3-c06-c01-23"><a href="#lst-m3-c06-c01-23" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"validate_sources"</span>,</span>
+<span id="lst-m3-c06-c01-24"><a href="#lst-m3-c06-c01-24" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
+<span id="lst-m3-c06-c01-25"><a href="#lst-m3-c06-c01-25" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.validate"</span>],</span>
+<span id="lst-m3-c06-c01-26"><a href="#lst-m3-c06-c01-26" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[<span class="st">"--manifest"</span>, DATASET_MANIFEST],</span>
+<span id="lst-m3-c06-c01-27"><a href="#lst-m3-c06-c01-27" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m3-c06-c01-28"><a href="#lst-m3-c06-c01-28" aria-hidden="true" tabindex="-1"></a>    embed <span class="op">=</span> KubernetesPodOperator(</span>
+<span id="lst-m3-c06-c01-29"><a href="#lst-m3-c06-c01-29" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"build_embeddings"</span>,</span>
+<span id="lst-m3-c06-c01-30"><a href="#lst-m3-c06-c01-30" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
+<span id="lst-m3-c06-c01-31"><a href="#lst-m3-c06-c01-31" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.embed"</span>],</span>
+<span id="lst-m3-c06-c01-32"><a href="#lst-m3-c06-c01-32" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[<span class="st">"--manifest"</span>, DATASET_MANIFEST,</span>
+<span id="lst-m3-c06-c01-33"><a href="#lst-m3-c06-c01-33" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"--embedding-version"</span>, EMBEDDING_VERSION],</span>
+<span id="lst-m3-c06-c01-34"><a href="#lst-m3-c06-c01-34" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m3-c06-c01-35"><a href="#lst-m3-c06-c01-35" aria-hidden="true" tabindex="-1"></a>    evaluate <span class="op">=</span> KubernetesPodOperator(</span>
+<span id="lst-m3-c06-c01-36"><a href="#lst-m3-c06-c01-36" aria-hidden="true" tabindex="-1"></a>        task_id<span class="op">=</span><span class="st">"evaluate_retrieval"</span>,</span>
+<span id="lst-m3-c06-c01-37"><a href="#lst-m3-c06-c01-37" aria-hidden="true" tabindex="-1"></a>        image<span class="op">=</span>PIPELINE_IMAGE,</span>
+<span id="lst-m3-c06-c01-38"><a href="#lst-m3-c06-c01-38" aria-hidden="true" tabindex="-1"></a>        cmds<span class="op">=</span>[<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"pipeline.evaluate"</span>],</span>
+<span id="lst-m3-c06-c01-39"><a href="#lst-m3-c06-c01-39" aria-hidden="true" tabindex="-1"></a>        arguments<span class="op">=</span>[<span class="st">"--suite"</span>, EVAL_SUITE, <span class="st">"--candidate"</span>, COLLECTION_ID],</span>
+<span id="lst-m3-c06-c01-40"><a href="#lst-m3-c06-c01-40" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m3-c06-c01-41"><a href="#lst-m3-c06-c01-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c06-c01-42"><a href="#lst-m3-c06-c01-42" aria-hidden="true" tabindex="-1"></a>    validate <span class="op">&gt;&gt;</span> embed <span class="op">&gt;&gt;</span> evaluate</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Code walkthrough: Airflow task with retry policy</strong></p>
+<p><strong>Code walkthrough: Airflow DAG with bounded retry policy</strong></p>
 <p>Declarative pipeline definitions specify idempotent task execution and failure recovery:</p>
 <ul>
-<li><strong>DAG definition:</strong> The <code>DAG</code> object stores scheduling and concurrency policy, <code>schedule=None</code> makes release creation externally triggered.</li>
-<li><strong>Concurrency guard:</strong> <code>max_active_runs=1</code> prevents two release workflows from racing to change the same mutable production alias.</li>
+<li><strong>DAG definition:</strong> The <code>DAG</code> object stores scheduling and concurrency policy. <code>schedule=None</code> makes run creation externally triggered.</li>
+<li><strong>Concurrency guard:</strong> <code>max_active_runs=1</code> keeps only one run of this DAG active. It reduces overlap but does not make external side effects safe by itself.</li>
+<li><strong>Retry policy:</strong> <code>retries=2</code> permits two retries after the initial attempt. The configured base retry delay is 5 minutes. Exponential backoff increases later delays up to a 30-minute cap, and scheduler jitter can shift the observed timing.</li>
 <li><strong>Task runtime:</strong> Each <code>KubernetesPodOperator</code> launches domain work in the immutable pipeline image after DAG import.</li>
 <li><strong>Artifact lineage:</strong> Task arguments carry dataset, embedding, evaluation-suite, and candidate-collection identities.</li>
-<li><strong>Dependency state:</strong> The shift operators create validation → embedding → evaluation edges, Airflow records each task instance and attempt.</li>
+<li><strong>Dependency state:</strong> The shift operators create validation → embedding → evaluation edges. Airflow records each task instance and attempt.</li>
 <li><strong>Result:</strong> The scheduler owns eligibility and task state, while isolated containers own validation, embedding, and evaluation work.</li>
-<li><strong>Limits:</strong> A production DAG still needs explicit output manifests, retries by failure class, secrets and service accounts, resource requests, timeouts, alerts, and a separate gated promotion task.</li>
+<li><strong>Limits:</strong> This example retries every task failure reported to Airflow. It does not classify permanent schema or policy failures, define output manifests, configure secrets and service accounts, request resources, send alerts, or promote an alias. A production DAG needs those controls and a separate gated promotion task. The task commands must tolerate repeated execution as described in Section 6.6.</li>
 </ul>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
@@ -678,12 +687,12 @@ Figure&nbsp;6.4: The Airflow graph view exposes task state and dependency struct
 </div>
 </section>
 <section id="sec-m3-c06-s06" class="level2" data-number="6.6">
-<h2 data-number="6.6" class="anchored" data-anchor-id="sec-m3-c06-s06"><span class="header-section-number">6.6</span> Safe re-execution and idempotent tasks</h2>
+<h2 data-number="6.6" class="anchored" data-anchor-id="sec-m3-c06-s06"><span class="header-section-number">6.6</span> Controlled re-execution and idempotent tasks</h2>
 <p>The example DAG can launch isolated tasks. Retries and historical runs will repeat code, so ambiguous partitions and irreversible side effects can duplicate or overwrite production state. Each run is bound to a logical data interval or immutable release identity, while computation and promotion remain separate.</p>
 <div id="tbl-m3-c06-t04" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c06-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;6.4: Re-execution is safe only when time, identity, and side effects are explicit.
+Table&nbsp;6.4: Controlled re-execution requires explicit time, identity, and side-effect handling.
 </figcaption>
 <div aria-describedby="tbl-m3-c06-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <table class="caption-top table">
@@ -735,22 +744,24 @@ Table&nbsp;6.4: Re-execution is safe only when time, identity, and side effects 
 </div>
 </figure>
 </div>
-<p>Retries distinguish transient infrastructure failures from deterministic code or data failures. Exponential backoff helps a temporary dependency recover, it does not fix a schema mismatch. After the retry budget, the task state, relevant logs, input identities, and responsible component remain visible without reconstructing the run from a terminal.</p>
+<p>Retries distinguish transient infrastructure failures from deterministic code or data failures. Exponential backoff helps a temporary dependency recover. It does not fix a schema mismatch. After the retry budget, the task state, relevant logs, input identities, and responsible component remain visible without reconstructing the run from a terminal.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Idempotency walkthrough: safe partition task retry without duplicate writes</strong></p>
-<p>Atomic two-phase commits ensure retried workflow tasks overwrite incomplete intermediate partitions safely:</p>
+<p><strong>Idempotency walkthrough: partition task retry without duplicate writes</strong></p>
+<p>Attempt-scoped writes plus a conditional publication step keep incomplete or late attempts from replacing accepted state:</p>
 <ul>
-<li><strong>Attempt 1:</strong> Partition 07 writes to an attempt-scoped path, loses its worker, and remains uncommitted.</li>
+<li><strong>Starting state:</strong> The committed pointer for partition 07 names generation <code>g19</code>. The coordinator records <code>g19</code> as the expected current value for this task run.</li>
+<li><strong>Attempt 1:</strong> Partition 07 writes generation <code>g20-a1</code> to an attempt-scoped path, loses its worker, and never receives permission to publish.</li>
 <li><strong>Eligibility:</strong> The scheduler classifies the failure as transient and retries the same logical interval and input manifest.</li>
-<li><strong>Attempt 2:</strong> The task writes a new generation, validates row counts and hashes, and emits one completion record keyed by task, interval, and input identity.</li>
-<li><strong>Commit:</strong> A coordinator advances the manifest pointer exactly once, a late completion from Attempt 1 cannot overwrite the committed generation.</li>
-<li><strong>Conclusion:</strong> Attempt-scoped outputs and one publication step keep retries from duplicating or partially replacing state.</li>
+<li><strong>Attempt 2:</strong> The task writes <code>g20-a2</code>, validates row counts and hashes, and emits a completion record keyed by task, interval, input identity, and attempt.</li>
+<li><strong>Guarded publication:</strong> The coordinator conditionally changes the pointer from expected value <code>g19</code> to <code>g20-a2</code>. The update fails if another coordinator has already changed the pointer.</li>
+<li><strong>Late completion:</strong> Attempt 1 still lacks a valid publication token. A conditional write that expects <code>g19</code> also fails after <code>g20-a2</code> is visible, so cleanup can remove <code>g20-a1</code> without affecting readers.</li>
+<li><strong>Conclusion:</strong> This staged write uses conditional publication to protect state behind one pointer. It does not coordinate a distributed transaction among several independent services, as a two-phase commit protocol would. External notifications, billing calls, or other side effects still need their own idempotency keys or transactions.</li>
 </ul>
 </div>
 </section>
 <section id="sec-m3-c06-s07" class="level2" data-number="6.7">
 <h2 data-number="6.7" class="anchored" data-anchor-id="sec-m3-c06-s07"><span class="header-section-number">6.7</span> Building reusable task templates</h2>
-<p>Retry behavior and artifact publication are now safe. Teams still lose consistency when every DAG reimplements data validation, distributed training, inference, evaluation, and registration differently. Parameterized task blocks package common responsibilities through stable inputs, outputs, checks, and platform defaults.</p>
+<p>Retry behavior and conditional artifact publication now have explicit controls. Teams still lose consistency when every DAG reimplements data validation, distributed training, inference, evaluation, and registration differently. Parameterized task blocks package common responsibilities through stable inputs, outputs, checks, and platform defaults.</p>
 <div id="fig-m3-c06-f05" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Reusable data, training, inference, agent, and evaluation blocks compose larger pipelines.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c06-f05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -825,11 +836,11 @@ Table&nbsp;6.5: Reusable blocks give domain code and platform control a consiste
 </div>
 </figure>
 </div>
-<p>A reusable block standardizes identity, evidence, secrets, resource requests, telemetry, and output publication while allowing task-specific domain parameters. This division lets a model team change architecture without reimplementing cluster scheduling or artifact lineage.</p>
+<p>A reusable block standardizes identity, evidence, secrets, resource requests, telemetry, and output publication while allowing task-specific domain parameters. This division lets model developers change the architecture without reimplementing cluster scheduling or artifact lineage.</p>
 </section>
 <section id="sec-m3-c06-s08" class="level2" data-number="6.8">
 <h2 data-number="6.8" class="anchored" data-anchor-id="sec-m3-c06-s08"><span class="header-section-number">6.8</span> Recording artifact evidence in run manifests</h2>
-<p>The pipeline can produce versioned artifacts through reusable blocks. Three systems now record overlapping facts, and copying all data into every system obscures the authoritative record. Each evidence class has one primary system, and stable identifiers connect the records.</p>
+<p>The pipeline can produce versioned artifacts through reusable blocks. The orchestrator, experiment tracker, and telemetry backend record overlapping facts. Copying all data into every system obscures the authoritative record. Each evidence class has one primary system, and stable identifiers connect the records.</p>
 <div id="tbl-m3-c06-t06" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c06-t06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -885,7 +896,7 @@ Table&nbsp;6.6: Stable identifiers join systems while each one retains a distinc
 <p><strong>Architecture boundary: authority mapping across systems</strong></p>
 <p>Partitioning state authority across platform systems prevents metadata divergence:</p>
 <ul>
-<li>The orchestrator is authoritative for task attempts and dependency state, the experiment tracker is authoritative for comparable parameters and metrics, the artifact registry is authoritative for immutable files and promotion aliases, telemetry is authoritative for runtime observations, the evaluation store is authoritative for cases and raw judgments.</li>
+<li>The orchestrator is authoritative for task attempts and dependency state. The experiment tracker is authoritative for comparable parameters and metrics. The artifact registry is authoritative for immutable files and promotion aliases. Telemetry is authoritative for runtime observations, and the evaluation store is authoritative for cases and raw judgments.</li>
 <li>Cross-links join these records without copying one system’s mutable state into another. A run manifest records the identifiers and the producer or consumer relationship.</li>
 </ul>
 </div>
@@ -904,17 +915,19 @@ Figure&nbsp;6.6: A multi-user research platform joins code, Kubernetes, storage,
 </figure>
 </div>
 <p>A shared research platform combines Git-hosted code, containerized workloads, Kubernetes scheduling, shared and object storage, telemetry, pipeline control, and experiment tracking. Interactive work and scheduled jobs can use the same immutable images and artifact identities, allowing an exploratory result to become a repeatable run.</p>
-<div id="fig-m3-c06-f07" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A training dashboard correlates actor, learner, and trajectory metrics for a live research job.">
+<p>Reinforcement learning separates experience collection from parameter updates. An <strong>actor</strong> consumes an environment observation and a fixed policy version, chooses actions, and produces a <strong>trajectory</strong> containing observations, actions, and rewards for one rollout. A <strong>learner</strong> consumes batches of those trajectories, calculates the training objective, updates model parameters, and publishes a new policy checkpoint. The workflow records the policy version on each trajectory so learner results can be traced back to the actors that generated their input.</p>
+<p>The source dashboard below focuses on trajectory handlers, the actor-side workers that collect and group experience. Its visible panels show active handlers, spawned and completed handler counts, accepted and rejected groups, event-loop blocking time, and shared training-step counters.</p>
+<div id="fig-m3-c06-f07" class="quarto-float quarto-figure quarto-figure-center anchored" alt="An RL job dashboard shows active trajectory handlers, handler state changes, completed and rejected groups, event-loop blocking time, and shared training-step counters.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c06-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m3-c06-f07.jpg" class="img-fluid figure-img" alt="A training dashboard correlates actor, learner, and trajectory metrics for a live research job.">
+<img src="../assets/fig-m3-c06-f07.jpg" class="img-fluid figure-img" alt="An RL job dashboard shows active trajectory handlers, handler state changes, completed and rejected groups, event-loop blocking time, and shared training-step counters.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c06-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;6.7: A training dashboard correlates actor, learner, and trajectory metrics for a live research job.
+Figure&nbsp;6.7: Trajectory-handler activity and completed-group outcomes show whether experience collection is producing usable learner input. Shared training-step counters connect the panels to one run.
 </figcaption>
 </figure>
 </div>
-<p>A live dashboard correlates system evidence with algorithm-specific roles such as actors, learners, and trajectories. Operators need queue time, pod state, GPU/fabric/storage evidence, checkpoint health, and task logs. Researchers need reward, loss, sample efficiency, rollout length, evaluation quality, and experiment comparisons. Shared run and artifact identities connect both views.</p>
+<p>The dashboard shows whether experience collection is keeping up and whether generated groups are usable. A complete reinforcement-learning view also needs measurements from the learner: batches consumed, update time, loss, GPU use, and checkpoint progress. It also records the lag between the newest policy and the version used by actors. Reward and sample-efficiency measurements describe the result across both sides. A queue can grow when actors outpace the learner, when the learner cannot process a batch, or when validation rejects trajectories. The same run, policy, trajectory, and checkpoint identities connect those explanations.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Tenant boundary</strong></p>
 <ul>
@@ -924,21 +937,20 @@ Figure&nbsp;6.7: A training dashboard correlates actor, learner, and trajectory 
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter 6 summary</strong></p>
-<p>Key orchestration and workflow principles established in this chapter:</p>
 <ul>
-<li><strong>Core mechanisms:</strong> Declarative Apache Airflow DAGs, Celery and Kubernetes executors, idempotent task execution, execution evidence run manifests.</li>
-<li><strong>Governing tradeoffs:</strong> Fine-grained task isolation overhead vs.&nbsp;debuggability, DAG re-run speed vs.&nbsp;strict state immutability, shared cluster resource utilization vs.&nbsp;tenant isolation.</li>
-<li><strong>Failure modes &amp; defenses:</strong> Atomic state transitions, immutable artifact hashing, tenant resource quotas and queue concurrency limits.</li>
+<li><strong>Core mechanisms:</strong> Declarative Airflow DAGs, isolated task execution, bounded retries, idempotent task design, conditional publication, and linked run records.</li>
+<li><strong>Governing tradeoffs:</strong> Fine-grained task isolation adds overhead but improves failure localization. Shared clusters raise utilization but require tenant controls across compute, identity, network, storage, and telemetry.</li>
+<li><strong>Failure controls:</strong> Immutable artifact identities, attempt-scoped writes, guarded pointer updates, quotas, queue limits, and explicit access policy keep a retry or one tenant from silently changing another result.</li>
 </ul>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter checkpoint</strong></p>
-<p>Review the self-study questions in Appendix C, Section C.1 (Questions 20, 21, and 22) to test understanding of workflow orchestration, idempotent task retries, and multi-tenant resource quotas before examining the complete operational case.</p>
+<p><a href="../appendices/ch-m3-app-c.html#sec-m3-app-c-s01">Appendix C, Questions 20, 21, 22, and 25</a> revisit metadata responsibility, idempotent retry, promotion separation, and tenant isolation. <a href="../appendices/ch-m3-app-b.html">Appendix B</a> provides compact definitions for the workflow and reinforcement-learning terms used here.</p>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Carry-forward result</strong></p>
 <p>The system now expresses work as a DAG of idempotent task descriptions, stores artifacts outside control-plane metadata, joins orchestration with experiments and telemetry, and supports selective retry and recovery.</p>
-<p>The final chapter applies every layer to one grounded-answer evaluator service and follows a real quality regression from detection to verified release.</p>
+<p>The final chapter applies every layer to one grounded-answer service and follows a constructed quality regression from detection to verified recovery.</p>
 </div>
 
 

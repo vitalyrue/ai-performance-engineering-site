@@ -336,23 +336,14 @@ window.Quarto = {
 
 
 <p>Which information and responsibilities make training or serving repeatable? The introduction established that production adds shared resources, failure, and evidence requirements. The artifacts, responsibility split, and infrastructure choices together turn an ad-hoc run into a repeatable system.</p>
-<p>The three panels connect reproducible artifacts to the people, platform, and capacity decisions that carry a model into a running service.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Chapter map: reproducible machine learning runs</strong></p>
-<p>This chapter establishes the operational foundation for reproducible machine learning:</p>
-<ul>
-<li><strong>1.1–1.3 Operating Model &amp; Artifact Lineage:</strong> Define the 4 contributing engineering disciplines, 7 core artifact types, and platform infrastructure boundaries.</li>
-<li><strong>1.4 Container Packaging:</strong> Package Python runtimes, CUDA libraries, and model weights into reproducible, immutable OCI container images.</li>
-<li><strong>1.5–1.6 Platform Economics &amp; Service Contracts:</strong> Evaluate Total Cost of Ownership (TCO) and replica capacity curves, and formalize operational handoffs and service contracts across teams.</li>
-</ul>
-</div>
+<p>Reproducing a result starts with identifying the inputs and the software that used them. The deployment platform must then provide a compatible environment and enough capacity. The map connects these decisions to the handoff between the people who develop a model and those who operate its service.</p>
 <div id="fig-m3-c01-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A labelled Chapter 1 map links versioned artifacts and ownership to packaging, capacity planning, and a reproducible running service.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c01-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <img src="../assets/fig-m3-c01-f01.png" class="img-fluid figure-img" alt="A labelled Chapter 1 map links versioned artifacts and ownership to packaging, capacity planning, and a reproducible running service.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c01-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;1.1: How reproducible runs connect artifacts, ownership, and capacity. The three panels connect reproducible artifacts to the people, platform, and capacity decisions that carry a model into a running service.
+Figure&nbsp;1.1: Versioned inputs, compatible packaging, and measured capacity connect a reproducible run to an operating service.
 </figcaption>
 </figure>
 </div>
@@ -360,9 +351,9 @@ Figure&nbsp;1.1: How reproducible runs connect artifacts, ownership, and capacit
 <h2 data-number="1.1" class="anchored" data-anchor-id="sec-m3-c01-s01"><span class="header-section-number">1.1</span> Coordinating ML development and operations</h2>
 <p>One experimental run proves that code can run once. The unresolved problem is making the same intent repeatable for other people, machines, and dates. The lifecycle and the engineering disciplines around it provide the starting point.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Machine Learning Operations (MLOps):</strong></span> The combined engineering practice for automating, operating, measuring, and scaling training, inference, and data pipelines (see Appendix B (MLOps Glossary) for core terminology).</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Machine Learning Operations (MLOps):</strong></span> The combined engineering practice for automating, operating, measuring, and scaling training, inference, and data pipelines. The <a href="../appendices/ch-m3-app-b.html">glossary</a> collects the terms used across these activities.</li>
 </ul>
-<p>MLOps does not replace machine learning research. It creates a controlled path around research: inputs are identifiable, compute is requested explicitly, outputs are stored with lineage, deployments are reversible, and production evidence can be turned into the next evaluation or training case.</p>
+<p>MLOps does not replace machine learning research. It creates a controlled path around research. Inputs are identifiable, compute is requested explicitly, outputs are stored with lineage, deployments are reversible, and production evidence can become the next evaluation or training case.</p>
 <p>Four disciplines contribute different guarantees to that path:</p>
 <ul>
 <li><strong>Machine learning:</strong> defines the model, objective, data meaning, and quality measurements.</li>
@@ -372,10 +363,10 @@ Figure&nbsp;1.1: How reproducible runs connect artifacts, ownership, and capacit
 </ul>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>System principle</strong></p>
-<p>Operational reproducibility requires deterministic tracking across all software and data dependencies:</p>
+<p>Operational reproducibility requires identifiable software and data dependencies:</p>
 <ul>
 <li>The production unit is more than a weight file. It is a versioned bundle of code, data definitions, model artifacts, runtime configuration, infrastructure assumptions, and evaluation evidence.</li>
-<li>If one ingredient changes without a new identity, the team cannot reproduce the behavior or roll it back deterministically.</li>
+<li>If one ingredient changes without a new identity, the team cannot reliably restore the earlier configuration. Matching inputs makes comparison possible, but does not by itself guarantee identical numerical outputs on every hardware and software combination.</li>
 </ul>
 </div>
 </section>
@@ -385,7 +376,16 @@ Figure&nbsp;1.1: How reproducible runs connect artifacts, ownership, and capacit
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Artifact:</strong></span> A stored, addressable output whose identity links directly to the code, configuration, and inputs that produced it.</li>
 </ul>
-<p>A minimal artifact chain for an ML system contains seven owned objects. The executable logic begins with an immutable <em>source revision</em> (a Git commit SHA or locked source archive). It runs within a sealed <em>environment</em> (a container image digest locking Python dependencies, CUDA drivers, and framework versions). Training consumes a versioned <em>dataset snapshot</em> with schema validations and split definitions, governed by a declared <em>run configuration</em> recording hyperparameters, random seeds, and compute requests. The resulting model weights and optimizer buffers are saved as a step-indexed <em>checkpoint</em>. Evaluation jobs then produce an <em>evaluation record</em> linking dataset slices, metric scores, and raw model outputs. Finally, approved releases are packaged into an immutable <em>serving bundle</em> comprising model weights, tokenizers, runtime engine flags, and release gates (first introduced here and developed as a deployable unit in Chapter 3).</p>
+<p>A minimal artifact chain links seven stored results or input descriptions:</p>
+<ol type="1">
+<li>The <strong>source revision</strong> identifies executable logic through a Git commit hash or a locked source archive.</li>
+<li>The <strong>environment</strong> identifies application libraries and runtime files. A container image digest fixes the image contents, including packaged Python dependencies, CUDA userspace libraries, and framework versions. The host GPU driver remains separate and must satisfy the recorded compatibility requirements.</li>
+<li>The <strong>dataset snapshot</strong> identifies the records, schema checks, and training or evaluation split definitions.</li>
+<li>The <strong>run configuration</strong> records hyperparameters, random seeds, and compute requests. The software consumes this configuration and the dataset within the selected environment.</li>
+<li>The <strong>checkpoint</strong> saves model parameters and the state needed to resume training, such as optimizer buffers and the completed step.</li>
+<li>The <strong>evaluation record</strong> connects a checkpoint to its cases, predictions, reference values, and measured scores. Evaluation produces evidence without updating those model parameters.</li>
+<li>The <strong>serving bundle</strong> packages the approved weights, tokenizer, runtime settings, and release metadata. Its identity connects the deployed behavior to the evaluation evidence. <a href="ch-m3-c03.html#sec-m3-c03-s08">Section 3.8</a> develops this release unit.</li>
+</ol>
 <p>Lineage is the directed relationship between these objects. A metric points to exact evaluation outputs, the outputs point to model and dataset versions, and a deployment points to the serving bundle that passed its gates. A filename such as <code>model-final-v2.bin</code> carries none of those guarantees.</p>
 <div id="tbl-m3-c01-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
@@ -461,7 +461,12 @@ Table&nbsp;1.1: Each lifecycle transition has identifiable inputs, outputs, and 
 <h2 data-number="1.3" class="anchored" data-anchor-id="sec-m3-c01-s03"><span class="header-section-number">1.3</span> Assigning responsibilities across research and platform software</h2>
 <p>Versioned artifacts make work reproducible. The remaining question is how much infrastructure the team manages directly. Managed services, Kubernetes, virtual machines, and bare metal expose progressively more control and responsibility.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Infrastructure responsibility:</strong></span> The division of infrastructure work between the application team and a platform or cloud provider.</li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Infrastructure responsibility:</strong></span> The division of infrastructure work between the application team and a platform or cloud provider.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Managed service:</strong></span> A provider-operated platform that exposes a workload interface while the provider runs much of the supporting infrastructure.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Kubernetes:</strong></span> A cluster system that places and restarts containerized workloads on a pool of machines.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Virtual machine:</strong></span> An isolated software-defined computer with its own operating system, running on shared physical hardware.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Bare metal:</strong></span> A physical server assigned directly to the workload without a virtual-machine layer.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Serverless execution:</strong></span> A provider-run execution model in which the team submits code or a container without managing the underlying machines.</p></li>
 </ul>
 <p>Infrastructure choices form a continuum. Serverless execution removes machine management but constrains runtime, networking, accelerators, and customization. Virtual machines and bare metal expose those controls together with patching, scheduling, recovery, and capacity risk.</p>
 <div id="tbl-m3-c01-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -527,7 +532,7 @@ Table&nbsp;1.2: Deployment choices trade provider management for direct control.
 <ul>
 <li><strong>Works on:</strong> The complete workload.</li>
 <li><strong>Helps when:</strong> Delivery speed, custom hardware, isolation, and available support skills point to different options.</li>
-<li><strong>How it works:</strong> Required controls narrow the options, the remaining choice determines which infrastructure work stays with the team.</li>
+<li><strong>How it works:</strong> Required controls narrow the options. The remaining choice determines which infrastructure work stays with the team.</li>
 <li><strong>Other limits:</strong> Managed products may lack required multi-step workflows, rich telemetry, networking, or update behavior.</li>
 <li><strong>Why it matters:</strong> The choice affects both workload capability and the amount of infrastructure work the team carries.</li>
 </ul>
@@ -541,32 +546,34 @@ Table&nbsp;1.2: Deployment choices trade provider management for direct control.
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Container:</strong></span> A running process created from an image and isolated with operating-system mechanisms while sharing the host kernel.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Registry:</strong></span> A service that stores versioned image layers and supplies them to deployment systems.</p></li>
 </ul>
-<p>A Dockerfile turns declared build inputs into image layers. Stable dependency steps usually precede frequently changing source code, which allows cached layers to be reused. Multi-stage builds keep compilers and source-only dependencies out of the runtime image, reducing transfer time and security exposure.</p>
+<p>A Dockerfile turns declared build inputs into image layers. Stable dependency steps usually precede frequently changing source code, which allows cached layers to be reused. Multi-stage builds keep build-only tools out of the runtime image, reducing transfer time and security exposure.</p>
+<p>The following abbreviated Dockerfile uses Python 3.12 and <code>uv</code> 0.6.16, a Python dependency manager. Its inputs are a compatible <code>pyproject.toml</code>, <code>uv.lock</code>, and an application in <code>src/</code>. It builds a CPU Python service image whose startup command runs <code>src.service</code>. It does not package a GPU runtime or model weights. A GPU service needs compatible CUDA userspace libraries in its image and an independently installed host driver exposed through the container runtime. The Dockerfile uses version 1 frontend syntax. The Python base tags remain mutable in this compact example, so a reproducible release must replace them with verified image digests and record the target processor architecture.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A two-stage build produces an immutable runtime image.</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c01-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m3-c01-c01-1"><a href="#lst-m3-c01-c01-1" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c01-c01-2"><a href="#lst-m3-c01-c01-2" aria-hidden="true" tabindex="-1"></a>FROM python:<span class="fl">3.12</span><span class="op">-</span>slim AS build</span>
-<span id="lst-m3-c01-c01-3"><a href="#lst-m3-c01-c01-3" aria-hidden="true" tabindex="-1"></a>WORKDIR <span class="op">/</span>app</span>
-<span id="lst-m3-c01-c01-4"><a href="#lst-m3-c01-c01-4" aria-hidden="true" tabindex="-1"></a>COPY pyproject.toml uv.lock .<span class="op">/</span></span>
-<span id="lst-m3-c01-c01-5"><a href="#lst-m3-c01-c01-5" aria-hidden="true" tabindex="-1"></a>RUN pip install uv <span class="op">&amp;&amp;</span> uv sync <span class="op">--</span>frozen <span class="op">--</span>no<span class="op">-</span>dev</span>
-<span id="lst-m3-c01-c01-6"><a href="#lst-m3-c01-c01-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m3-c01-c01-7"><a href="#lst-m3-c01-c01-7" aria-hidden="true" tabindex="-1"></a>FROM python:<span class="fl">3.12</span><span class="op">-</span>slim AS runtime</span>
-<span id="lst-m3-c01-c01-8"><a href="#lst-m3-c01-c01-8" aria-hidden="true" tabindex="-1"></a>WORKDIR <span class="op">/</span>app</span>
-<span id="lst-m3-c01-c01-9"><a href="#lst-m3-c01-c01-9" aria-hidden="true" tabindex="-1"></a>COPY <span class="op">--</span><span class="im">from</span><span class="op">=</span>build <span class="op">/</span>app<span class="op">/</span>.venv <span class="op">/</span>app<span class="op">/</span>.venv</span>
-<span id="lst-m3-c01-c01-10"><a href="#lst-m3-c01-c01-10" aria-hidden="true" tabindex="-1"></a>COPY src<span class="op">/</span> .<span class="op">/</span>src<span class="op">/</span></span>
-<span id="lst-m3-c01-c01-11"><a href="#lst-m3-c01-c01-11" aria-hidden="true" tabindex="-1"></a>ENV PATH<span class="op">=</span><span class="st">"/app/.venv/bin:$PATH"</span></span>
-<span id="lst-m3-c01-c01-12"><a href="#lst-m3-c01-c01-12" aria-hidden="true" tabindex="-1"></a>CMD [<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"src.service"</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m3-c01-c01"><pre class="sourceCode dockerfile code-with-copy"><code class="sourceCode dockerfile"><span id="lst-m3-c01-c01-1"><a href="#lst-m3-c01-c01-1" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c01-c01-2"><a href="#lst-m3-c01-c01-2" aria-hidden="true" tabindex="-1"></a><span class="co"># </span><span class="cv">syntax=docker/dockerfile:1</span></span>
+<span id="lst-m3-c01-c01-3"><a href="#lst-m3-c01-c01-3" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> python:3.12-slim <span class="kw">AS</span> build</span>
+<span id="lst-m3-c01-c01-4"><a href="#lst-m3-c01-c01-4" aria-hidden="true" tabindex="-1"></a><span class="kw">WORKDIR</span> /app</span>
+<span id="lst-m3-c01-c01-5"><a href="#lst-m3-c01-c01-5" aria-hidden="true" tabindex="-1"></a><span class="kw">COPY</span> pyproject.toml uv.lock ./</span>
+<span id="lst-m3-c01-c01-6"><a href="#lst-m3-c01-c01-6" aria-hidden="true" tabindex="-1"></a><span class="kw">RUN</span> <span class="ex">pip</span> install uv==0.6.16 <span class="kw">&amp;&amp;</span> <span class="ex">uv</span> sync <span class="at">--frozen</span> <span class="at">--no-dev</span> <span class="at">--no-install-project</span></span>
+<span id="lst-m3-c01-c01-7"><a href="#lst-m3-c01-c01-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m3-c01-c01-8"><a href="#lst-m3-c01-c01-8" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> python:3.12-slim <span class="kw">AS</span> runtime</span>
+<span id="lst-m3-c01-c01-9"><a href="#lst-m3-c01-c01-9" aria-hidden="true" tabindex="-1"></a><span class="kw">WORKDIR</span> /app</span>
+<span id="lst-m3-c01-c01-10"><a href="#lst-m3-c01-c01-10" aria-hidden="true" tabindex="-1"></a><span class="kw">COPY</span> <span class="op">--from=build</span> /app/.venv /app/.venv</span>
+<span id="lst-m3-c01-c01-11"><a href="#lst-m3-c01-c01-11" aria-hidden="true" tabindex="-1"></a><span class="kw">COPY</span> src/ ./src/</span>
+<span id="lst-m3-c01-c01-12"><a href="#lst-m3-c01-c01-12" aria-hidden="true" tabindex="-1"></a><span class="kw">ENV</span> PATH=<span class="st">"/app/.venv/bin:$PATH"</span></span>
+<span id="lst-m3-c01-c01-13"><a href="#lst-m3-c01-c01-13" aria-hidden="true" tabindex="-1"></a><span class="kw">CMD</span> [<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"src.service"</span>]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Code walkthrough: multi-stage container packaging</strong></p>
 <p>The multi-stage build separates dependency resolution from the final runtime image:</p>
 <ul>
-<li><strong>Build stage:</strong> <code>uv sync --frozen --no-dev</code> resolves exactly the locked production dependencies into <code>/app/.venv</code>.</li>
+<li><strong>Build stage:</strong> <code>uv sync --frozen --no-dev --no-install-project</code> installs the locked production dependencies into <code>/app/.venv</code> without trying to build application code that has not yet been copied.</li>
 <li><strong>Runtime stage:</strong> <code>COPY --from=build</code> transfers the resolved environment without transferring the package manager’s build context or compiler tools.</li>
 <li><strong>Application layer:</strong> <code>COPY src/</code> appears late, which lets the slower dependency layer remain cached across ordinary source edits.</li>
-<li><strong>Startup command:</strong> <code>CMD</code> names the module that the deployment starts, the image digest identifies this complete filesystem and command.</li>
-<li><strong>Result:</strong> The runtime image contains only the environment and service files required to execute the versioned application.</li>
-<li><strong>Limits:</strong> The snippet omits a non-root user, health check, vulnerability policy, multi-architecture build, and runtime secret mount, those are deployment requirements, not implied defaults.</li>
+<li><strong>Startup command:</strong> <code>CMD</code> names the module that the deployment starts. The image digest identifies the complete image filesystem and command.</li>
+<li><strong>Result:</strong> A successful build creates a runtime image with the Python base, installed dependencies, and service files. It does not start the service until a container is launched.</li>
+<li><strong>Limits:</strong> Missing files or failed dependency installation stop the build. Runtime health checks, a non-root user, vulnerability policy, secret mounts, and automatic recovery are omitted. The application must be importable from <code>/app</code> and any required native runtime libraries must be present in the final stage.</li>
 </ul>
 </div>
 <p>Secrets copied into an image or passed through persistent build arguments remain in layer history. Runtime secret mounts and narrowly scoped workload permissions avoid that exposure. Containers share the host kernel, so untrusted or agent-generated code generally requires a stronger sandbox or a microVM.</p>
@@ -582,7 +589,8 @@ Table&nbsp;1.2: Deployment choices trade provider management for direct control.
 <section id="sec-m3-c01-s05" class="level2" data-number="1.5">
 <h2 data-number="1.5" class="anchored" data-anchor-id="sec-m3-c01-s05"><span class="header-section-number">1.5</span> Sizing self-hosted capacity and cost</h2>
 <p>Containers make a runtime portable across deployment options. A large language model adds expensive accelerators, large weight transfers, and ongoing infrastructure work. The service objective determines the capacity assumptions used to compare hosted APIs with self-hosting.</p>
-<p>An open model gives control over weights, architecture, fine-tuning, data placement, and runtime. Self-hosting also makes the team responsible for availability, throughput, scaling, security, weight distribution, and evaluation. The decision is therefore not simply price per token: it is a comparison between a provider bill and the full cost of hardware, platform engineering, idle capacity, incidents, and optimization.</p>
+<p>An open model gives control over weights, architecture, fine-tuning, data placement, and runtime. Self-hosting also makes the team responsible for availability, throughput, scaling, security, weight distribution, and evaluation. The decision is not simply price per token. It compares a provider bill with the full cost of hardware, platform engineering, idle capacity, incidents, and optimization.</p>
+<p>Total cost of ownership combines costs over one common period and in one currency. In the expression below, each <span class="math inline">\(C\)</span> term is a cost: fixed commitments, compute, storage, network, operations, or expected risk. <span class="math inline">\(V_{\mathrm{residual}}\)</span> is recoverable value at the period’s end, so it is subtracted. The categories must not overlap. Compute already paid for by a reservation is not counted again as usage. Expected risk is an estimate of possible losses, not a guaranteed future bill.</p>
 <p><span id="eq-m3-c01-e01"><span class="math display">\[
 C_{\mathrm{total}} = C_{\mathrm{fixed}} + C_{\mathrm{compute}} + C_{\mathrm{storage}} + C_{\mathrm{network}} + C_{\mathrm{operations}} + C_{\mathrm{risk}} - V_{\mathrm{residual}}
 \tag{1.1}\]</span></span></p>
@@ -595,9 +603,10 @@ C_{\mathrm{total}} = C_{\mathrm{fixed}} + C_{\mathrm{compute}} + C_{\mathrm{stor
 <li><strong>Operations:</strong> On-call, maintenance, and platform engineering allocate $90,000.</li>
 <li><strong>Risk and residual:</strong> Expected interruption or shortage exposure is $30,000, while recoverable equipment value is $10,000.</li>
 <li><strong>Total:</strong> The one-year comparison cost is $120,000 + $205,000 + $90,000 + $30,000 − $10,000 = $435,000.</li>
-<li><strong>Conclusion:</strong> A fair comparison with an API or managed-service alternative uses the same demand, reliability, and quality assumptions (see Appendix A (Formula Reference) for the generalized TCO relationship).</li>
+<li><strong>Conclusion:</strong> A fair comparison with an API or managed-service alternative uses the same demand, reliability, and quality assumptions. The <a href="../appendices/ch-m3-app-a.html">formula reference</a> provides the relationship for later lookup.</li>
 </ul>
 </div>
+<p>Replica sizing starts with a measured service rate. <span class="math inline">\(Q_{\mathrm{peak}}\)</span> is peak demand in requests per second, and <span class="math inline">\(Q_{\mathrm{replica}}\)</span> is one replica’s sustainable rate at the latency target. The planning fraction <span class="math inline">\(u\)</span>, with <span class="math inline">\(0 &lt; u \leq 1\)</span>, reserves headroom by reducing that measured rate to <span class="math inline">\(Q_{\mathrm{replica}}u\)</span>. Dividing demand by the planned rate gives the number of replicas carrying traffic. The ceiling brackets <span class="math inline">\(\lceil\ \rceil\)</span> round up because a fraction of a replica cannot be deployed. <span class="math inline">\(R_{\mathrm{redundancy}}\)</span> adds the spare replicas required by the selected failure scenario, giving the total <span class="math inline">\(R_{\mathrm{needed}}\)</span>.</p>
 <p><span id="eq-m3-c01-e02"><span class="math display">\[
 R_{\mathrm{needed}} = \left\lceil  \frac{Q_{\mathrm{peak}}}{Q_{\mathrm{replica}} \cdot u} \right\rceil + R_{\mathrm{redundancy}}
 \tag{1.2}\]</span></span></p>
@@ -609,11 +618,11 @@ R_{\mathrm{needed}} = \left\lceil  \frac{Q_{\mathrm{peak}}}{Q_{\mathrm{replica}}
 <li><strong>Headroom:</strong> At 75% normal utilization, an 8 requests/s benchmark yields 6 planned requests/s per replica.</li>
 <li><strong>Demand replicas:</strong> A 60 requests/s peak divided by 6 planned requests/s requires 10 replicas.</li>
 <li><strong>Failure allowance:</strong> Two additional replicas cover maintenance or one failed host group.</li>
-<li><strong>Starting deployment:</strong> Adding 2 spare replicas to the 10 demand replicas produces a 12-replica starting deployment, a load test with the real prompt and output-length mix validates the estimate.</li>
+<li><strong>Starting deployment:</strong> Adding 2 spare replicas to the 10 demand replicas produces a 12-replica starting deployment. A load test with the real prompt and output-length mix checks the estimate.</li>
 <li><strong>Conclusion:</strong> Capacity is a measured property of a serving bundle, not a value inferred from model parameter count alone.</li>
 </ul>
 </div>
-<p>Model quality, prompt length, output length, quantization, engine version, GPU type, batching, and latency objectives all change per-replica capacity. The estimate therefore belongs to one exact serving bundle and is measured again whenever one of those ingredients changes.</p>
+<p>Model quality, prompt length, output length, quantization, engine version, GPU type, batching, and latency objectives all change per-replica capacity. The estimate assumes compatible replicas and traffic that the router can distribute across them. Two spare replicas cover a host failure only if that failure removes no more than two replicas and the remaining placement can carry the demand. The estimate belongs to one exact serving bundle and failure model. A changed ingredient requires a new capacity measurement.</p>
 </section>
 <section id="sec-m3-c01-s06" class="level2" data-number="1.6">
 <h2 data-number="1.6" class="anchored" data-anchor-id="sec-m3-c01-s06"><span class="header-section-number">1.6</span> Defining team handoffs and service expectations</h2>
@@ -621,7 +630,7 @@ R_{\mathrm{needed}} = \left\lceil  \frac{Q_{\mathrm{peak}}}{Q_{\mathrm{replica}}
 <div id="tbl-m3-c01-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-c01-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;1.3: Named systems belong to distinct layers with different responsibilities.
+Table&nbsp;1.3: Each software layer reads its own settings and performs a different part of the workload.
 </figcaption>
 <div aria-describedby="tbl-m3-c01-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <table class="caption-top table">
@@ -683,10 +692,10 @@ Table&nbsp;1.3: Named systems belong to distinct layers with different responsib
 </div>
 </figure>
 </div>
-<p>A software knob is a configuration option that changes execution without changing the model architecture. <code>gpu_memory_utilization</code> is owned by a serving engine, <code>NCCL_DEBUG</code> is owned by the NCCL communication library, a Kubernetes GPU resource request is owned by the orchestrator. Naming the owner prevents a setting from being recommended where it has no effect.</p>
+<p>A configuration option changes execution without changing the model architecture. A serving engine reads <code>gpu_memory_utilization</code>. The NVIDIA Collective Communications Library (NCCL) reads <code>NCCL_DEBUG</code>, while Kubernetes reads a GPU resource request. Identifying the software that reads a setting prevents applying it where it has no effect.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Handoff record: release criteria checklist</strong></p>
-<p>A training team hands over a serving bundle to the platform operations team under defined criteria:</p>
+<p>A release handoff makes the decision and recovery path inspectable:</p>
 <ul>
 <li>A training team hands over a serving bundle only when the window, accountable owner, escalation path, release identity, rollback target, and evidence links are recorded.</li>
 <li>The receiving team can then answer what changed, which checks passed, who can stop the rollout, and which known-good version is restored if a gate fails.</li>
@@ -694,16 +703,11 @@ Table&nbsp;1.3: Named systems belong to distinct layers with different responsib
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter 1 summary</strong></p>
-<p>Key platform principles and tradeoffs established in this chapter:</p>
-<ul>
-<li><strong>Core mechanisms:</strong> Immutable OCI container packaging with CUDA runtimes, explicit artifact lineage across 7 core types, TCO and replica capacity modeling.</li>
-<li><strong>Governing tradeoffs:</strong> Container build isolation vs.&nbsp;local debugging agility, self-hosted GPU infrastructure fixed costs vs.&nbsp;managed API variable latency.</li>
-<li><strong>Failure modes &amp; defenses:</strong> Rejection of unversioned ad-hoc dependencies, formal service contracts and operational handoff checklists.</li>
-</ul>
+<p>A repeatable run connects its software and data inputs to its checkpoint, evaluation record, and serving bundle. Container packaging fixes application files while host compatibility remains a deployment condition. Capacity and ownership-cost estimates use measured demand and explicit recovery assumptions. Managed services reduce infrastructure work but also limit direct control.</p>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter checkpoint</strong></p>
-<p>Review the self-study questions in Appendix C, Section C.1 (Questions 1 and 2) to test understanding of runtime reproducibility, artifact lineage, and capacity estimation before proceeding to cluster training.</p>
+<p><a href="../appendices/ch-m3-app-c.html#sec-m3-app-c-s01">Appendix C, Questions 1 and 2</a> connect reproducible serving inputs to the evidence needed beyond HTTP success. Question 1 also draws on the quality measurements developed in Chapter 4.</p>
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Carry-forward result</strong></p>
