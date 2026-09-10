@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -425,7 +425,7 @@ window.Quarto = {
 </header>
 
 
-<p>Chapter 8 kept control flow in application code whenever the task structure was known. Some tasks require repeated choices whose next step depends on search results, tool output, or environment state not available at the start. A controlled agent loop maps every ReAct decision, tool call, and observation to application responsibilities, schemas, authorization, budgets, state, and stopping rules.</p>
+<p>Chapter 8 kept control flow in application code whenever the task structure was known. Some tasks require repeated choices whose next step depends on search results, tool output, or environment state not available at the start. A controlled agent loop assigns clear application responsibilities for every ReAct decision, tool call, and observation. Schemas, authorization, budgets, state, and stopping rules keep those steps within defined limits.</p>
 <div id="fig-m1-c09-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Typed tools, validated observations, budgets, stop rules, and repeated-trial final-state evaluation control how an agent affects external state.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m1-c09-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -469,7 +469,7 @@ Figure&nbsp;9.3: A controlled agent separates model decisions from validated exe
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Trajectory:</strong></span> The ordered record of model decisions, tool calls, observations, and state changes in one trial.</p></li>
 </ul>
 <p>A controlled agent can be modeled as a state machine. The current state contains the goal, selected evidence, prior observations, remaining budgets, and policy-relevant context. The model proposes one action, the application validates and executes it, and a new observation updates the state. A termination function checks whether the goal, fallback, or budget condition has been reached.</p>
-<p>Observation provenance is essential because the model cannot be allowed to invent tool results. Each observation retains the tool identity, normalized arguments, authorization context, result status, and relevant version. Agent evaluation can then distinguish reasoning mistakes from tool failures, stale data caches, authorization denials, or invalid state transitions.</p>
+<p>The source of each observation must be recorded because the model cannot be allowed to invent tool results. Each observation retains the tool identity, normalized arguments, authorization context, result status, and relevant version. Agent evaluation can then distinguish reasoning mistakes from tool failures, stale data caches, authorization denials, or invalid state transitions.</p>
 </section>
 <section id="sec-m1-c09-s02" class="level2" data-number="9.2">
 <h2 data-number="9.2" class="anchored" data-anchor-id="sec-m1-c09-s02"><span class="header-section-number">9.2</span> Agent tool interfaces</h2>
@@ -507,8 +507,8 @@ Table&nbsp;9.1: A tool specification supports model selection and application en
 </tr>
 <tr class="odd">
 <td>Result schema</td>
-<td>What observation returns?</td>
-<td>Stable fields, provenance, and explicit errors</td>
+<td>What does the tool return?</td>
+<td>Stable fields, source details, and explicit errors</td>
 </tr>
 <tr class="even">
 <td>Side effects</td>
@@ -587,7 +587,7 @@ Figure&nbsp;9.4: ReAct chooses the next action after each new observation, so it
 <p>The model must not fabricate the observation. The application is the only component allowed to place a validated tool result into the trace.</p>
 <p>A worked implementation requires identifying the current leader of a changing leaderboard. A bare model may answer from stale training data. The ReAct version receives a <code>wikipedia_search</code> tool and emits a search action, observing the returned text and answering only from that evidence.</p>
 <p><strong>Code example 9.2 - the notebook loop gives the application control after every model decision.</strong></p>
-<p>This simplified notebook loop is not production code. It assumes the harness supplies SYSTEM_PROMPT, call_llm, parse_action, parse_final_answer, wikipedia_search, and alidate_final_answer. The function returns a validated answer string after a real observation, or an explicit fallback status. It never executes purchases, updates databases, or modifies access privileges.</p>
+<p>This simplified notebook loop is not production code. It assumes the harness supplies SYSTEM_PROMPT, call_llm, parse_action, parse_final_answer, wikipedia_search, and <code>validate_final_answer</code>. The function returns a validated answer string after a real observation, or an explicit fallback status. It never executes purchases, updates databases, or modifies access privileges.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Code example 9.2 - the notebook loop gives the application control after every model decision.</p>
 </div>
@@ -635,14 +635,14 @@ Figure&nbsp;9.5: ReAct is debuggable and general, but long sequential traces are
 </figcaption>
 </figure>
 </div>
-<p>System weaknesses map directly to operational controls, such as iteration caps, context compaction, tool redesign, parallel dispatch, and task-level evaluation.</p>
+<p>Each failure pattern calls for a different control, such as iteration caps, context compaction, tool redesign, parallel dispatch, or task-level evaluation.</p>
 <p>Budgets turn open-ended agent autonomy into explicit product behavior. Iteration budgets cap decision-action cycles to prevent runaway execution. Token budgets constrain cumulative input and output volume across the trajectory. Tool budgets enforce call counts and rate limits on external services, while wall-time and monetary budgets bound latency and cost. Finally, side-effect budgets restrict write actions and require human authorization when high-impact thresholds are reached. The remaining budget forms explicit application state updated after each observation.</p>
-<p>A stop condition determines when the loop terminates. Valid termination includes task success, validated model finalization, repeated state detection, or budget exhaustion. When a task cannot be completed, the system should return a structured fallback explaining completed observations and unresolved blockers.</p>
+<p>A stop condition determines when the loop terminates. Valid termination conditions include task success, a validated final answer, repeated state detection, and budget exhaustion. When a task cannot be completed, the system should return a structured fallback explaining completed observations and unresolved blockers.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Loop detection</strong></p>
 <p>Hash or normalize recent action-observation states and stop when the agent repeats without new evidence. Repetition is a system signal. Asking the same model to try again with the same state rarely creates new information.</p>
 </div>
-<p>Termination has named outcomes. Success requires a validated final state. A confident message alone does not establish completion. Other terminal states include insufficient evidence, unsupported scope, authorization failure, recoverable tool failure, exhausted budget, and human escalation. Typed outcomes make fallback behavior measurable and prevent a loop from disguising itself as progress.</p>
+<p>Each terminating run ends with a specific outcome. Success requires a validated final state. A confident message alone does not establish completion. Other terminal states include insufficient evidence, unsupported scope, authorization failure, recoverable tool failure, exhausted budget, and human escalation. Typed outcomes make fallback behavior measurable and prevent a loop from disguising itself as progress.</p>
 </section>
 <section id="sec-m1-c09-s05" class="level2" data-number="9.5">
 <h2 data-number="9.5" class="anchored" data-anchor-id="sec-m1-c09-s05"><span class="header-section-number">9.5</span> Planning at the control layer</h2>
@@ -652,7 +652,7 @@ Figure&nbsp;9.5: ReAct is debuggable and general, but long sequential traces are
 <section id="sec-m1-c09-s06" class="level2" data-number="9.6">
 <h2 data-number="9.6" class="anchored" data-anchor-id="sec-m1-c09-s06"><span class="header-section-number">9.6</span> Session state and persistent memory</h2>
 <p>An agent trajectory stores messages, actions, observations, and graph state for one run. A follow-up or process restart may need that state again, but session recovery does not justify copying the thread into a permanent profile. A checkpoint restores one thread, whereas Chapter 11 covers how selected information may cross sessions through a separate memory lifecycle.</p>
-<p>LangGraph is a library for applications that run stateful workflows as graphs. A LangGraph application can pair a checkpoint—a stored graph state for one thread or session—with a session identifier so the same conversation resumes after a restart. <code>InMemorySaver</code> is an in-process demonstration store, while a durable saver backed by SQLite or Postgres preserves that state across process restarts under application control.</p>
+<p>LangGraph is a library for applications that run stateful workflows as graphs. A LangGraph application can pair a checkpoint, which stores graph state for one thread or session, with a session identifier so the same conversation resumes after a restart. <code>InMemorySaver</code> is an in-process demonstration store, while a durable saver backed by SQLite or Postgres preserves that state across process restarts under application control.</p>
 <p><strong>Code example 9.3 - a thread identifier restores only the matching session state.</strong></p>
 <p>This abbreviated LangGraph pattern assumes the application initializes <code>graph</code>, injects session credentials, and imports <code>HumanMessage</code>. <code>graph.invoke</code> restores and updates the checkpoint for that thread, returning the graph result without promoting any message to cross-session memory.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
@@ -684,7 +684,7 @@ Figure&nbsp;9.6: Agent evaluation distinguishes task, trial, transcript, and out
 \hat{p}=\frac{\sum_{i=1}^{N}s_i}{N}
 \tag{9.1}\]</span></span></p>
 <p>Here, <span class="math inline">\(N\)</span> is trial count, <span class="math inline">\(s_i\)</span> is the binary final-state result for trial <span class="math inline">\(i\)</span>, and <span class="math inline">\(\hat{p}\)</span> is observed success frequency. Summation counts successful trials and division normalizes by attempts. The estimate needs an uncertainty interval and enough trials for the product decision.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example calculation: Repeated agent reliability</strong></p>
 <p>Run the same state-reset task 20 times. The agent reaches the required final state in 17 trials.</p>
 <ol type="1">
@@ -700,7 +700,7 @@ Figure&nbsp;9.6: Agent evaluation distinguishes task, trial, transcript, and out
 R_m=p^m
 \tag{9.2}\]</span></span></p>
 <p>Here, <span class="math inline">\(m\)</span> is the number of required successful trials and <span class="math inline">\(p\)</span> is single-trial success probability. Exponentiation multiplies the same probability once for each required success. Real agent failures often share a prompt, tool, or environment. Use this equation as an optimistic diagnostic model and validate release reliability with repeated trials.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example calculation: Ten consecutive successful trials</strong></p>
 <p>Assume an idealized independent per-trial success probability of 0.95 and require ten successful runs.</p>
 <ol type="1">
@@ -715,7 +715,7 @@ R_m=p^m
 C_{trial}=\sum_{s=1}^{S}(r_{in}N_{in,s}+r_{out}N_{out,s}+c_{tool,s})
 \tag{9.3}\]</span></span></p>
 <p>Here, the first term counts executed steps. Token counts are measured separately at each step using current rates. The final term adds measured infrastructure charges for external tool calls. The total includes failed and retried steps. Cost per successful task divides this total trial cost by the number of successful outcomes.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example calculation: Three-step agent trial cost</strong></p>
 <p>Three executed steps cost $0.004, $0.006, and $0.010 after their model and tool charges are combined.</p>
 <ol type="1">
@@ -747,7 +747,7 @@ C_{trial}=\sum_{s=1}^{S}(r_{in}N_{in,s}+r_{out}N_{out,s}+c_{tool,s})
 <span id="lst-m1-c09-c04-15"><a href="#lst-m1-c09-c04-15" aria-hidden="true" tabindex="-1"></a>            <span class="st">"latency_ms"</span>: result.latency_ms,</span>
 <span id="lst-m1-c09-c04-16"><a href="#lst-m1-c09-c04-16" aria-hidden="true" tabindex="-1"></a>        })</span>
 <span id="lst-m1-c09-c04-17"><a href="#lst-m1-c09-c04-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> records</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>A fresh sandbox prevents one trial’s files, database rows, or cached observations from contaminating the next. The grader reads the authoritative end state and uses the final message only as diagnostic trace evidence. Transcripts remain diagnostic evidence for route, parser, tool, retry, and stop-condition failures.</p>
+<p>A fresh sandbox prevents one trial’s files, database rows, or cached observations from contaminating the next. The grader reads the authoritative end state and uses the final message only for diagnosis. Transcripts remain diagnostic evidence for route, parser, tool, retry, and stop-condition failures.</p>
 <div id="fig-m1-c09-f07" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Agent evaluation measures final task success, trajectory quality, cost, latency, and reliability across runs. Source: Week 4, PDF p. 79.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m1-c09-f07-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -772,7 +772,7 @@ Figure&nbsp;9.7: Agent evaluation measures final task success, trajectory qualit
 <p>The preceding sections established the agent loop, tool specifications, budgets, and state recovery. The running case uses the Bitext customer-support dataset from Section 9.2. A support analyst agent combines these components within the boundaries of that dataset. Explicit routing, tools, and recoverable state provide an auditable system architecture.</p>
 <p>The dataset contains labeled customer-support requests. Each row carries a request text and a standard intent label such as <code>get_refund</code>, so routing and exact-count questions can be graded without any ambiguity about which rows match.</p>
 <p>The router classifies structured, unstructured, or out-of-scope requests before tool selection. Structured questions use deterministic dataset tools for categories, filtering, counts, examples, and distributions. Unstructured questions use selected rows as evidence for summarization. Out-of-scope questions receive a clear decline with the supported scope and next available route.</p>
-<p>The multi-step request <code>How many refund requests are in the dataset?</code> first calls <code>filter_by_intent(intent='get_refund', limit=20)</code>. The tool filters the authorized dataset, persisting filtered identifiers on the server and returning <code>{"row_ref": ..., "preview": [...]}</code>. The preview contains at most 20 rows and is not the counting input. The next call, <code>count_rows(rows=row_ref)</code>, checks the caller and dataset version and returns <code>{"count": 27, "dataset_version": ..., "intent": "get_refund"}</code> for the complete set. The model never computes that count or receives all matching rows. A maximum iteration limit returns a graceful fallback. The command-line interface exposes tool calls and observations for debugging. Session IDs restore episodic state, while Chapter 11 governs any separate profile that stores selected user facts.</p>
+<p>The multi-step request <code>How many refund requests are in the dataset?</code> first calls <code>filter_by_intent(intent='get_refund', limit=20)</code>. The tool filters the authorized dataset, persisting filtered identifiers on the server and returning <code>{"row_ref": ..., "preview": [...]}</code>. The preview contains at most 20 rows and is not the counting input. The next call, <code>count_rows(rows=row_ref)</code>, checks the caller and dataset version and returns <code>{"count": 27, "dataset_version": ..., "intent": "get_refund"}</code> for the complete set. The model never computes that count or receives all matching rows. A maximum iteration limit returns a graceful fallback. The command-line interface exposes tool calls and observations for debugging. Session IDs restore session state, while Chapter 11 governs any separate profile that stores selected user facts.</p>
 <div id="tbl-m1-c09-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m1-c09-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -816,7 +816,7 @@ Table&nbsp;9.2: The support-data agent separates state, output, and verification
 <tr class="even">
 <td>Checkpointer</td>
 <td>Session ID and graph state</td>
-<td>Restored episodic history</td>
+<td>Restored session history</td>
 <td>Restart test with follow-up references</td>
 </tr>
 <tr class="odd">
