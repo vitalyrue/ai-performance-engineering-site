@@ -436,12 +436,12 @@ Figure&nbsp;10.1: Planner choice, protocol-governed capability exchange, and bou
 </figcaption>
 </figure>
 </div>
-<p>The map compares stepwise action, explicit plans, dependency graphs, and sandboxed code, then binds MCP consent, scopes, and credentials, and stops retrieval recovery inside an explicit budget.</p>
+<p>The map compares stepwise action, explicit plans, dependency graphs, and sandboxed code. It then separates MCP connections from consent, scopes, and credentials, and shows retrieval recovery stopping within an explicit budget.</p>
 <section id="sec-m1-c10-s01" class="level2" data-number="10.1">
 <h2 data-number="10.1" class="anchored" data-anchor-id="sec-m1-c10-s01"><span class="header-section-number">10.1</span> Planning strategy and task structure</h2>
-<p>A planner is the policy that converts a goal and current state into the next executable work. Planner alternatives are not successive maturity levels. Instead, they express different assumptions about uncertainty, dependencies, parallelism, and the value of executable code.</p>
+<p>A planner is the policy that converts a goal and current state into executable next steps. Planner alternatives are not successive maturity levels. Instead, they express different assumptions about uncertainty, dependencies, parallelism, and the value of executable code.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Planner:</strong></span> The component responsible for action selection, dependency ordering, and stopping termination criteria.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Planner:</strong></span> The component responsible for action selection, dependency ordering, and stopping criteria.</li>
 </ul>
 <div id="fig-m1-c10-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The planner comparison distinguishes upfront planning, parallel execution, debuggability, and sandbox requirements. Source: Week 5, PDF p. 20.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -549,7 +549,7 @@ Figure&nbsp;10.3: ReAct interleaves one thought, action, and observation at a ti
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>ReAct</strong></p>
 <p>This method applies to goals for which the next action is uncertain until the latest tool result is observed. It is useful when the search space is exploratory, the tool set is focused, and frequent adaptation matters.</p>
-<p>The model selects a typed action and the application executes it, returning the resulting observation to state prior to subsequent decisions. This forms the minimal general loop and establishes the baseline before adding planner machinery.</p>
+<p>The model selects a typed action, and the application executes it. The application adds the resulting observation to state before the model makes the next decision. This is the minimal general loop and the baseline for adding explicit planning.</p>
 <p>A limit to keep in mind: serial tool calls, repeated reasoning tokens, tool-selection errors, and infinite-loop risk without a step budget</p>
 </div>
 <div id="fig-m1-c10-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Plan-and-Act maintains an explicit plan and revises the remaining steps after each observation. Source: Week 5, PDF p. 9.">
@@ -563,7 +563,7 @@ Figure&nbsp;10.4: Plan-and-Act maintains an explicit plan and revises the remain
 </figure>
 </div>
 <p>The replan node is the defining addition. A static plan-and-execute system cannot absorb newly discovered constraints without a separate correction path.</p>
-<p><strong>A replanner returns either remaining work or a final response.</strong></p>
+<p>The following replanner applies this distinction between remaining work and a final response.</p>
 <p>This abbreviated Python example assumes that <code>state</code> has the fields read below and that <code>objective_satisfied</code>, <code>compose_answer</code>, and <code>revise_using</code> are supplied by the application. It returns a <code>Plan</code> or <code>Response</code>. A malformed state should be rejected before this replanner runs.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A replanner returns either remaining work or a final response.</p>
@@ -595,7 +595,7 @@ Figure&nbsp;10.4: Plan-and-Act maintains an explicit plan and revises the remain
 </section>
 <section id="sec-m1-c10-s03" class="level2" data-number="10.3">
 <h2 data-number="10.3" class="anchored" data-anchor-id="sec-m1-c10-s03"><span class="header-section-number">10.3</span> Dependency-aware parallel scheduling</h2>
-<p>Plan-and-Act stores remaining work as a sequence. A sequence serializes tasks that may be independent, so wall-clock time can remain unnecessarily high. A dependency graph makes independence claims explicit, scheduling ready tasks concurrently and joining results after prerequisite completion.</p>
+<p>Plan-and-Act stores remaining work as a sequence. The sequence forces even independent tasks to run one after another, which can increase wall-clock time. A dependency graph makes independence explicit, schedules ready tasks concurrently, and joins results after their prerequisites finish.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Task DAG:</strong></span> A directed acyclic graph whose nodes are executable tasks and whose edges state that one task depends on another task’s output.</li>
 </ul>
@@ -642,7 +642,7 @@ T_{DAG}\ge\max_{\pi\in\mathrm{paths}(G)}\sum_{v\in\pi}t_v
 <p><strong>Result:</strong> The ready set contains B and C, allowing them to run concurrently.</p>
 <p><strong>Interpretation:</strong> The scheduler exposes parallelism already present in the dependency graph. It cannot safely invent independence that the plan did not establish.</p>
 </div>
-<p><strong>A scheduler dispatches only tasks whose dependencies are satisfied.</strong></p>
+<p>The following loop turns dependency readiness into a dispatch rule.</p>
 <p>This abbreviated Python loop assumes task objects with <code>id</code> and <code>dependencies</code>, an initially empty <code>results</code> mapping, and an application-supplied <code>run_in_parallel</code>. It returns the joiner’s answer and raises <code>InvalidPlan</code> when no unfinished task is runnable.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A scheduler dispatches only tasks whose dependencies are satisfied.</p>
@@ -709,7 +709,7 @@ Table&nbsp;10.2: Code execution needs controls beyond a normal tool schema.
 <tr class="odd">
 <td>Filesystem</td>
 <td>What may the program read or write?</td>
-<td>Read-only input mount; writable temporary output directory only</td>
+<td>Read-only input mount and a writable temporary output directory only</td>
 </tr>
 <tr class="even">
 <td>Network</td>
@@ -724,7 +724,7 @@ Table&nbsp;10.2: Code execution needs controls beyond a normal tool schema.
 <tr class="even">
 <td>Secrets</td>
 <td>Which credentials are visible?</td>
-<td>No ambient credentials; short-lived scoped tokens only</td>
+<td>No ambient credentials, only short-lived scoped tokens</td>
 </tr>
 <tr class="odd">
 <td>Artifacts</td>
@@ -736,7 +736,12 @@ Table&nbsp;10.2: Code execution needs controls beyond a normal tool schema.
 </div>
 </figure>
 </div>
-<p>The sections above separated planning from the controlled execution of each ready action. Capabilities may still live in different processes or services and need a common discovery and invocation boundary. Model Context Protocol (MCP) standardizes capability exchange, while the host, server, and downstream service retain explicit responsibility for consent, identity, authorization, validation, and provenance.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Example: A sandbox accepts one program and blocks another</strong></p>
+<p>Assume the runtime mounts a read-only <code>/input/orders.csv</code>, permits writes only under <code>/output</code>, and disables network access. An allowed program reads three intent values, counts the two <code>get_refund</code> rows, and writes <code>{"refund_count": 2}</code> to <code>/output/result.json</code>. The runtime returns exit status 0 and the output-file reference. The host then checks the file shape before using the count.</p>
+<p>A second program tries to make an HTTP request. The sandbox rejects that call because network access is disabled, returns a policy error, and produces no network side effect. The trace records the program, mounted paths, limits, exit status, and accepted or rejected output. These are expected outcomes under the stated policy, not a claim that the programs were run for this book.</p>
+</div>
+<p>The sections above separated planning from the controlled execution of each ready action. Capabilities may still live in different processes or services and need a common discovery and invocation boundary. Model Context Protocol (MCP) standardizes capability exchange, while the host, server, and downstream service remain responsible for consent, identity, authorization, validation, and source tracking.</p>
 </section>
 <section id="sec-m1-c10-s05" class="level2" data-number="10.5">
 <h2 data-number="10.5" class="anchored" data-anchor-id="sec-m1-c10-s05"><span class="header-section-number">10.5</span> Tool connections through Model Context Protocol (MCP)</h2>
@@ -754,8 +759,8 @@ Figure&nbsp;10.7: Model Context Protocol (MCP) replaces pairwise host-service ad
 </figcaption>
 </figure>
 </div>
-<p>For <code>N</code> hosts and <code>M</code> services, the integration topology can move from <code>N x M</code> bespoke adapters toward <code>N + M</code> protocol implementations. Operations, authentication, and semantics still need clear operational responsibility.</p>
-<p>The host is the application that manages model interaction and the user trust boundary, creating a client session for each server. A server exposes capabilities backed by a database, API, filesystem, or other system. In a simple discovery exchange, the host requests available tools, and the server returns typed definitions. The host applies local policy and prompts for user approval before invocation. Local <code>stdio</code> transport minimizes network exposure, whereas remote transport requires explicit authentication, authorization, and lifecycle handling.</p>
+<p>For <code>N</code> hosts and <code>M</code> services, the integration topology can move from <code>N x M</code> custom adapters toward <code>N + M</code> protocol implementations. Operations, authentication, and semantics still need clear responsibility.</p>
+<p>The host is the application that manages model interaction and the user trust boundary. It creates a client session for each server. A server exposes capabilities backed by a database, API, filesystem, or other system. In a simple discovery exchange, the host requests available tools, and the server returns typed definitions. The host applies local policy and prompts for user approval before invocation. Local <code>stdio</code> transport minimizes network exposure, whereas remote transport requires explicit authentication, authorization, and connection lifecycle handling.</p>
 <div id="tbl-m1-c10-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m1-c10-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -780,7 +785,7 @@ Table&nbsp;10.3: MCP primitives divide control among model, application, host, s
 <tbody>
 <tr class="odd">
 <td>Tool</td>
-<td>Model chooses; host authorizes</td>
+<td>Model chooses, and the host authorizes</td>
 <td>Perform a typed action that may have side effects</td>
 <td>Confused-deputy action or excessive permissions</td>
 </tr>
@@ -798,7 +803,7 @@ Table&nbsp;10.3: MCP primitives divide control among model, application, host, s
 </tr>
 <tr class="even">
 <td>Sampling</td>
-<td>Server requests; host mediates</td>
+<td>Server requests, and the host mediates</td>
 <td>Ask the host model to perform a completion</td>
 <td>Unexpected model use, cost, or data flow</td>
 </tr>
@@ -806,11 +811,11 @@ Table&nbsp;10.3: MCP primitives divide control among model, application, host, s
 <td>Roots</td>
 <td>Host advertises</td>
 <td>Tell a server the relevant filesystem or URI roots</td>
-<td>Over-broad scope expands blast radius; access control remains separate</td>
+<td>An overly broad scope increases possible harm, and access control remains separate</td>
 </tr>
 <tr class="even">
 <td>Elicitation</td>
-<td>Server requests; user answers</td>
+<td>Server requests, and the user answers</td>
 <td>Obtain missing information during execution</td>
 <td>Social engineering or ambiguous consent</td>
 </tr>
@@ -829,8 +834,8 @@ Figure&nbsp;10.8: An adapter can expose MCP-discovered capabilities as ordinary 
 </figcaption>
 </figure>
 </div>
-<p>The agent loop need not change when the transport changes. That separation is useful only if tool identity, permissions, errors, and provenance remain visible in traces.</p>
-<p><strong>A host keeps capability discovery separate from agent execution.</strong></p>
+<p>The agent loop need not change when the transport changes. That separation is useful only if tool identity, permissions, errors, and source information remain visible in traces.</p>
+<p>The next example filters discovered tools before creating the agent.</p>
 <p>This abbreviated async Python example assumes an authenticated client, a policy object, and an application-supplied <code>create_agent</code>. It returns an agent restricted to allowed discovered tools. Discovery or policy failures stop construction rather than yielding an unrestricted agent.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A host keeps capability discovery separate from agent execution.</p>
@@ -844,10 +849,10 @@ Figure&nbsp;10.8: An adapter can expose MCP-discovered capabilities as ordinary 
 <span id="lst-m1-c10-c03-7"><a href="#lst-m1-c10-c03-7" aria-hidden="true" tabindex="-1"></a>    ]</span>
 <span id="lst-m1-c10-c03-8"><a href="#lst-m1-c10-c03-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> create_agent(model<span class="op">=</span>model, tools<span class="op">=</span>allowed)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>A server implementation can expose typed capability boundaries with FastMCP. The decorator derives a JSON input schema from the function signature, validating arguments before execution. Application rules continue to constrain data access and side effects.</p>
-<p><strong>Code example 10.1 - FastMCP exposes narrow support capabilities while preserving approval boundaries.</strong></p>
+<p>The server applies the same narrow-capability design with FastMCP.</p>
 <p>This abbreviated server example assumes the three stores and search helper enforce their own access rules. It returns allowlisted records, bounded search results, or a draft. Access failures must be returned as typed tool errors, and only the application may submit a draft after approval.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
-<p><strong>Code example:</strong> Code example 10.1 - FastMCP exposes narrow support capabilities while preserving approval boundaries.</p>
+<p><strong>Code example:</strong> 10.1: FastMCP exposes support tools while keeping approval checks in the application.</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m1-c10-c04"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m1-c10-c04-1"><a href="#lst-m1-c10-c04-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> fastmcp <span class="im">import</span> FastMCP</span>
 <span id="lst-m1-c10-c04-2"><a href="#lst-m1-c10-c04-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -868,15 +873,15 @@ Figure&nbsp;10.8: An adapter can expose MCP-discovered capabilities as ordinary 
 <span id="lst-m1-c10-c04-17"><a href="#lst-m1-c10-c04-17" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> draft_escalation(ticket_id: <span class="bu">str</span>, reason: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">dict</span>:</span>
 <span id="lst-m1-c10-c04-18"><a href="#lst-m1-c10-c04-18" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Create a draft; submission still requires human approval.</span></span>
 <span id="lst-m1-c10-c04-19"><a href="#lst-m1-c10-c04-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> escalation_store.create_draft(ticket_id, reason)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The decorator exposes schemas and documentation, while the underlying functions retain the system-of-record policy. <code>lookup_ticket</code> returns allowlisted fields, <code>search_policy</code> bounds result count, and <code>draft_escalation</code> deliberately cannot submit. FastMCP and MCP versions belong in the server manifest because component and transport behavior evolves.</p>
+<p>The decorator exposes schemas and documentation, while the underlying functions retain the source system’s access policy. <code>lookup_ticket</code> returns allowlisted fields, <code>search_policy</code> bounds result count, and <code>draft_escalation</code> deliberately cannot submit. FastMCP and MCP versions belong in the server manifest because component and transport behavior evolves.</p>
 </section>
 <section id="sec-m1-c10-s06" class="level2" data-number="10.6">
 <h2 data-number="10.6" class="anchored" data-anchor-id="sec-m1-c10-s06"><span class="header-section-number">10.6</span> Trust at the protocol boundary</h2>
-<p>A standard protocol makes a connection intelligible, but it does not make the connected server or its outputs safe. Tool descriptions and returned documents are untrusted data. A malicious document can contain instructions intended to redirect the model, and an over-scoped credential can let an otherwise valid call perform actions the user did not permit.</p>
+<p>A standard protocol makes a connection consistent, but it does not make the connected server or its outputs safe. Tool descriptions and returned documents are untrusted data. A malicious document can contain instructions intended to redirect the model, and an overly broad credential can let an otherwise valid call perform actions the user did not permit.</p>
 <p>Securing the protocol boundary requires defenses against injection, privilege escalation, and unverified execution. Host applications defend against prompt injection by tagging retrieved tool outputs as untrusted text and isolating them from system policy prompts. To prevent confused-deputy attacks, the host restricts tool execution to explicit user consent, verified caller identity, and minimal permission scopes.</p>
-<p>Consequential actions—including file deletions, financial transfers, and durable state mutations—demand explicit human approval before execution. Credentials and roots should follow the principle of least privilege: the host grants access only to necessary file paths and short-lived tokens rather than sharing ambient system secrets. Teams should also pin server package versions to control supply-chain risk, while recording a complete audit trail that logs tool discovery, arguments, approvals, and outcomes.</p>
+<p>Consequential actions, including file deletions, financial transfers, and durable state changes, demand explicit human approval before execution. Credentials and roots should follow the principle of least privilege. The host grants access only to necessary file paths and short-lived tokens rather than sharing system-wide secrets. Teams should also pin server package versions to control supply-chain risk and record tool discovery, arguments, approvals, and outcomes in an audit trail.</p>
 <p>The current MCP specification defines <code>stdio</code> and Streamable HTTP as standard transports. A local <code>stdio</code> client launches the server process and exchanges newline-delimited JSON-RPC messages, while Streamable HTTP uses one HTTP endpoint and requires origin validation, appropriate authentication, and careful session handling. Transport choice changes exposure and credential handling, not the semantics of the tool.</p>
-<p>For HTTP authorization, the current specification builds on OAuth 2.1. Clients request a token for the intended MCP resource, and servers validate that the token audience names that server. An MCP proxy must not pass the inbound client token unchanged to a downstream API, obtaining a separate upstream token instead. Audience validation, short-lived credentials, PKCE for authorization-code flows, and per-client consent prevent the server from becoming a confused deputy.</p>
+<p>For HTTP authorization, the current specification builds on OAuth 2.1. Clients request a token for the intended MCP resource, and servers validate that the token audience names that server. An MCP proxy must not pass the inbound client token unchanged to a downstream API. It obtains a separate upstream token instead. Audience validation, short-lived credentials, PKCE for authorization-code flows, and per-client consent prevent the server from becoming a confused deputy.</p>
 <div id="fig-m1-c10-f09" class="quarto-float quarto-figure quarto-figure-center anchored" alt="MCP standardizes calls, while consent, token scope, server policy, and downstream credentials remain distinct controls.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m1-c10-f09-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -934,12 +939,12 @@ Table&nbsp;10.4: Protocol adoption should solve an observed boundary problem.
 </div>
 </figure>
 </div>
-<p>Chapter 7 localized RAG failures by checking retrieved evidence, claim support, and answer relevance, while the planning and protocol sections above supplied controlled tool use and boundaries. A fixed retrieval pass can still stop too early when its first query or method misses necessary evidence. Agentic retrieval introduces a recovery loop that checks evidence sufficiency and modifies query parameters, terminating on success or budget exhaustion.</p>
+<p>Chapter 7 localized RAG failures by checking retrieved evidence, claim support, and answer relevance. The planning and protocol sections above added controlled tool use and clear boundaries. A fixed retrieval pass can still stop too early when its first query or method misses necessary evidence. Agentic retrieval introduces a recovery loop that checks whether the evidence is sufficient and changes the query or retrieval method. The loop stops on success or when its budget is exhausted.</p>
 </section>
 <section id="sec-m1-c10-s07" class="level2" data-number="10.7">
 <h2 data-number="10.7" class="anchored" data-anchor-id="sec-m1-c10-s07"><span class="header-section-number">10.7</span> Retrieval failure recovery within a budget</h2>
 <p>Planning and MCP have defined how an agent chooses and invokes bounded capabilities. One-shot retrieval still stops after the first query even when its evidence is visibly insufficient. Agentic retrieval adds a capped inspect-rewrite-retrieve loop and chooses the retrieval representation that matches the information need.</p>
-<p>One-shot RAG assumes the user’s first query is a good retrieval query and that one retrieval contains enough evidence. Vague language, multi-hop questions, corpus mismatch, and ambiguous entity names break that assumption. Agentic RAG places a controlled decision loop between the question and the retriever so the system can route, inspect, rewrite, decompose, and stop.</p>
+<p>One-shot RAG assumes the user’s first query is a good retrieval query and that one retrieval pass returns enough evidence. Vague language, multi-hop questions, corpus mismatch, and ambiguous entity names break that assumption. Agentic RAG places a controlled decision loop between the question and the retriever so the system can route, inspect, rewrite, decompose, and stop.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Agentic RAG:</strong></span> A retrieval-augmented system in which an agent chooses and iterates retrieval actions from observations, within a bounded recovery loop.</li>
 </ul>
@@ -957,7 +962,7 @@ Figure&nbsp;10.10: Naive one-shot retrieval fails on chained questions and vague
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Iterative retrieval</strong></p>
 <p>This method applies to queries whose first retrieval may be noisy, incomplete, or expressed with the wrong vocabulary. It is useful when the system can cheaply inspect relevance and try a bounded number of refined searches.</p>
-<p>The pipeline retrieves candidates and inspects evidence quality, reformulating queries when evidence is insufficient and generating only after stop criteria are met. End-to-end recall can rise because the system learns from each miss rather than treating the first candidate set as final.</p>
+<p>The pipeline retrieves candidates and inspects their evidence quality. When the evidence is insufficient, it reformulates the query. It generates an answer only after meeting the stop criteria. End-to-end recall can rise because the system uses each miss to improve the next attempt rather than treating the first candidate set as final.</p>
 <p>A limit to keep in mind: increased query latency, evaluation grader inaccuracies, query drift during reformulation, and unbounded loop execution</p>
 </div>
 <p>The retriever itself is a product choice. Exact search is often strongest for symbols, identifiers, error strings, and rapidly changing code. BM25 fits keyword-rich corpora. Embeddings help with conceptual paraphrases and cross-language similarity. SQL or an API should answer structured filters and aggregates directly. Agentic control does not erase those differences. Instead, it selects among them.</p>
@@ -1051,7 +1056,7 @@ Table&nbsp;10.6: Agentic RAG patterns place control at different points in retri
 <tbody>
 <tr class="odd">
 <td>Iterative refinement</td>
-<td>Are current results sufficient; if not, how should the query change?</td>
+<td>Are current results sufficient? If not, how should the query change?</td>
 <td>First-hit misses, vague phrasing, changing terminology</td>
 <td>Attempts, recovery rate, drift rate, latency, and supported-answer rate</td>
 </tr>
@@ -1072,7 +1077,7 @@ Table&nbsp;10.6: Agentic RAG patterns place control at different points in retri
 </div>
 </figure>
 </div>
-<p><strong>A bounded iterative-retrieval state machine.</strong></p>
+<p>The final example makes the retrieval budget part of the state machine.</p>
 <p>This abbreviated Python example assumes the retriever, grader, and rewrite helper are application-supplied. Each state machine node returns updated state. A grade must be recorded before rewriting begins. When budgets exhaust, the machine returns an evidence gap rather than generating unsupported text.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> A bounded iterative-retrieval state machine.</p>
@@ -1106,7 +1111,7 @@ Table&nbsp;10.6: Agentic RAG patterns place control at different points in retri
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter checkpoint</strong></p>
-<p>Choose a planner from dependency structure and uncertainty, not novelty. Use MCP when standardized sharing solves a real integration boundary, keeping authorization and outcome checks outside the protocol. Agentic RAG adds bounded recovery to retrieval, but requires strict attempt budgets to avoid open-ended search loops.</p>
+<p>Choose a planner from the task’s dependency structure and uncertainty, not from novelty. Use MCP when standardized sharing solves a real integration boundary. Keep authorization and outcome checks outside the protocol. Agentic RAG adds bounded recovery to retrieval, but it requires strict attempt budgets to prevent open-ended search loops.</p>
 </div>
 
 
