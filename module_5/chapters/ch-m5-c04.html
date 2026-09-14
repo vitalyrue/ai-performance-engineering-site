@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -322,15 +322,15 @@ window.Quarto = {
 
 
 <p>PPO uses a learned value model to compare a sampled result with what was expected. When several answers to the same prompt can be scored, those sibling results can provide the comparison without training another large model. Group Relative Policy Optimization (GRPO) samples <span class="math inline">\(G\)</span> completions for one prompt, scores them with the same rule, and measures each score relative to its siblings. That relative score becomes the completion advantage.</p>
-<p>GRPO is useful when several completions can be scored cheaply and their outcomes differ. It removes PPO’s separate value network, but it also gives every token in one completion the same sequence-level advantage. An equal-score group provides no comparison at all. This chapter first calculates the group signal, then shows how DeepSeek-style reasoning training and DAPO address the resulting memory, length, and sampling trade-offs.</p>
-<p>For the running repair case, one prompt produces a group of candidate diagnoses and patches. Private training-verifier tests score each complete attempt; the group mean says whether a patch was better than its siblings; and the selected trajectory remains available for token-level teacher-forced scoring during the update. Separate held-out tests are used only for final evaluation.</p>
+<p>GRPO is useful when several completions can be scored cheaply and their outcomes differ. It removes PPO’s separate value network, but it also gives every token in one completion the same sequence-level advantage. An equal-score group provides no comparison at all. Calculating that group signal exposes the memory, length, and sampling trade-offs that DeepSeek-style reasoning training and DAPO must address.</p>
+<p>For the running repair case, one prompt produces a group of candidate diagnoses and patches. Private training-verifier tests score each complete attempt. The group mean says whether a patch was better than its siblings, and the selected trajectory remains available for token-level teacher-forced scoring during the update. Separate held-out tests are used only for final evaluation.</p>
 <p>Replacing the value model does not automatically remove the frozen reference. The group comparison answers which sibling scored better, while the reference measures how far token probabilities moved from the starting behavior. An implementation may use both because they answer different questions.</p>
 <section id="sec-m5-c04-s01" class="level2" data-number="4.1">
 <h2 data-number="4.1" class="anchored" data-anchor-id="sec-m5-c04-s01"><span class="header-section-number">4.1</span> Comparing answer rewards with GRPO</h2>
-<p>Several scored answers to one prompt can supply their own comparison value. GRPO must convert those scores into one advantage for each completion. Define the sibling score group first, then derive one completion advantage and interpret a four-answer calculation.</p>
-<p>For a group of rewards <span class="math inline">\(r_1\)</span> through <span class="math inline">\(r_G\)</span> for one prompt, GRPO centers each completion against its group mean and often normalizes by group standard deviation. Every token in completion <span class="math inline">\(i\)</span> receives the same estimated sequence-level advantage <span class="math inline">\(\hat{A}_i\)</span>. A correct answer that is better than sibling samples is reinforced; a weak answer is suppressed.</p>
-<p>For one GRPO training example, draw <span class="math inline">\(G\)</span> fresh completions from the current or saved rollout policy for the same prompt. A reward model or verifier scores each whole completion to produce the <span class="math inline">\(G\)</span> scalar values <span class="math inline">\(r_1\)</span> through <span class="math inline">\(r_G\)</span>. The mean and standard deviation are ordinary reductions across those returned numbers; no separate critic estimates them. The resulting normalized advantage is copied to the tokens of its own completion for the policy update.</p>
-<p>Within-prompt comparison becomes one training advantage per completion. The other sampled answers provide the baseline that decides whether one answer was relatively useful.</p>
+<p>Several scored answers to one prompt can supply their own comparison value. GRPO must convert those scores into one advantage for each completion. Because absolute score levels can differ between prompts, the update forms its comparison from siblings scored under the same rule. Their mean and spread provide that local reference, which the four-answer calculation below makes explicit.</p>
+<p>For a group of rewards <span class="math inline">\(r_1\)</span> through <span class="math inline">\(r_G\)</span> for one prompt, GRPO centers each completion against its group mean and often normalizes by group standard deviation. Every token in completion <span class="math inline">\(i\)</span> receives the same estimated sequence-level advantage <span class="math inline">\(\hat{A}_i\)</span>. A correct answer that is better than sibling samples is reinforced. A weak answer is suppressed.</p>
+<p>For one GRPO training example, draw <span class="math inline">\(G\)</span> fresh completions from the current or saved rollout policy for the same prompt. A reward model or verifier scores each whole completion to produce the <span class="math inline">\(G\)</span> scalar values <span class="math inline">\(r_1\)</span> through <span class="math inline">\(r_G\)</span>. The mean and standard deviation are ordinary reductions across those returned numbers. No separate critic estimates them. The resulting normalized advantage is copied to the tokens of its own completion for the policy update.</p>
+<p>Within-prompt comparison becomes one training advantage per completion. The other sampled answers provide the baseline used to measure whether one answer was relatively useful.</p>
 <p><span id="eq-m5-c04-e01"><span class="math display">\[
 \hat{A}_i = \frac{r_i - \mathrm{mean}(r_{1:G})}{\mathrm{max}(\mathrm{std}(r_{1:G}), \epsilon_{\mathrm{std}})}
 \tag{4.1}\]</span></span></p>
@@ -344,7 +344,7 @@ window.Quarto = {
 </ul>
 <p><strong>Mechanism:</strong> Subtract the group mean, then divide by the larger of the group standard deviation and <span class="math inline">\(\epsilon_{\mathrm{std}}\)</span>. A uniform group has zero numerator, so every advantage is zero. <strong>Interpretation:</strong> Replace a learned critic with a within-prompt comparison that reinforces completions above their group mean and suppresses those below it. <strong>Scale:</strong> Subtracting the mean centers the rewards; dividing by their standard deviation removes the original reward scale, so <span class="math inline">\(\hat{A}_i\)</span> expresses estimated relative position within the group.</p>
 <p>The estimated completion advantage supplies the update direction, but the trainer still needs to quantify how the policy changed each sampled token. It stores the rollout log-probability of every generated token, re-scores the same token IDs under the current policy, and converts the difference into the current-to-old ratio already used by PPO. The ratio is then multiplied by the completion advantage copied to that token.</p>
-<p>Define the clipped contribution for one token first. Separating this term keeps the complete objective readable and makes clear that clipping changes the sampled surrogate contribution rather than the model probability.</p>
+<p>The clipped contribution for one token combines the current-to-old ratio with the completion advantage. Clipping changes the sampled surrogate contribution rather than the model probability.</p>
 <p>Chapter 3 numbered response positions from <span class="math inline">\(t=0\)</span> through <span class="math inline">\(T-1\)</span>. The sums below number the same generated-token positions from <span class="math inline">\(t=1\)</span> through <span class="math inline">\(|o_i|\)</span>, so the terminal token is <span class="math inline">\(T-1\)</span> in the earlier notation and <span class="math inline">\(|o_i|\)</span> here. This is only an indexing change; token alignment, ratios, and advantages keep the same meaning.</p>
 <p><span id="eq-m5-c04-e02"><span class="math display">\[
 C_{i,t} = \mathrm{min}\left(\rho_{i,t}\hat{A}_i, \mathrm{clip}(\rho_{i,t}, 1-\epsilon, 1+\epsilon)\hat{A}_i\right)
@@ -356,7 +356,7 @@ C_{i,t} = \mathrm{min}\left(\rho_{i,t}\hat{A}_i, \mathrm{clip}(\rho_{i,t}, 1-\ep
 <li><strong><span class="math inline">\(\hat{A}_i\)</span>:</strong> Fixed estimated sibling advantage copied to every generated token in completion <span class="math inline">\(i\)</span>.</li>
 <li><strong><span class="math inline">\(\epsilon\)</span>:</strong> Configured ratio deviation around one.</li>
 </ul>
-<p><strong>Mechanism:</strong> Compare the ordinary ratio-weighted advantage with the clipped-ratio version and keep the more conservative sampled contribution. <strong>Interpretation:</strong> Remove extra surrogate-objective benefit after the observed ratio crosses the relevant bound; no probability is forcibly capped.</p>
+<p><strong>Mechanism:</strong> Compare the ordinary ratio-weighted advantage with the clipped-ratio version and keep the more conservative sampled contribution. <strong>Interpretation:</strong> Remove extra surrogate-objective benefit after the observed ratio crosses the relevant bound. No probability is forcibly capped.</p>
 <p>The group objective averages those token contributions inside each completion, averages completions inside a prompt group, and optionally subtracts a reference-policy divergence.</p>
 <p><span id="eq-m5-c04-e03"><span class="math display">\[
 J_{\mathrm{GRPO}} = \mathbb{E}\left[\frac{1}{G}\sum_{i=1}^{G}\frac{1}{|o_i|}\sum_{t=1}^{|o_i|}\left(C_{i,t}-\beta_{\mathrm{KL}}D_{\mathrm{KL}}\left(\pi_\theta(\cdot\mid s_{i,t})\mid\mid\pi_{\mathrm{ref}}(\cdot\mid s_{i,t})\right)\right)\right]
@@ -384,7 +384,7 @@ u = \log \pi_{\mathrm{ref}}(a\mid s) - \log \pi_\theta(a\mid s); \hat{D}_{\mathr
 <li><strong><span class="math inline">\(a\)</span>:</strong> Selected token sampled from the current policy at state <span class="math inline">\(s\)</span>.</li>
 <li><strong><span class="math inline">\(\pi_\theta\)</span> and <span class="math inline">\(\pi_{\mathrm{ref}}\)</span>:</strong> Current and frozen reference policies evaluated on the same <span class="math inline">\(s\)</span> and <span class="math inline">\(a\)</span>.</li>
 </ul>
-<p><strong>Mechanism:</strong> Subtract current log-probability from reference log-probability, exponentiate that difference, then subtract the difference and one. <strong>Interpretation:</strong> Estimate the forward current-to-reference token KL without treating one raw log-ratio as a distance. Its expectation is exact when actions are sampled from <span class="math inline">\(\pi_\theta\)</span> at a fixed state; rollout tokens from <span class="math inline">\(\pi_{\mathrm{old}}\)</span> introduce an additional approximation that stays smaller when batches remain recent.</p>
+<p><strong>Mechanism:</strong> Subtract current log-probability from reference log-probability, exponentiate that difference, then subtract the difference and one. <strong>Interpretation:</strong> Estimate the forward current-to-reference token KL without treating one raw log-ratio as a distance. Its expectation is exact when actions are sampled from <span class="math inline">\(\pi_\theta\)</span> at a fixed state. Rollout tokens from <span class="math inline">\(\pi_{\mathrm{old}}\)</span> introduce an additional approximation that stays smaller when batches remain recent.</p>
 <p>If all completions have identical reward, every centered advantage is zero. A group that is entirely correct or entirely wrong therefore cannot support a within-prompt comparison.</p>
 <p>GRPO can therefore remove PPO’s separate value model when sibling scores form a useful comparison. It does not create the scorer, and its completion-level advantage cannot say which individual token helped. When every sibling receives the same score, the method needs a different batch, denser process feedback, or another source of credit.</p>
 <p>One GRPO update follows five ordered steps.</p>
@@ -427,7 +427,7 @@ Figure&nbsp;4.1: Sibling scores create the GRPO baseline (Session 3 v1, p.&nbsp;
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Baseline:</strong></span> PPO uses a learned value model <span class="math inline">\(V_\phi\)</span> plus GAE; GRPO uses the mean outcome of sibling completions.</p></li>
 <li><p><strong>Additional large model:</strong> PPO retains a value/critic model; GRPO does not need that extra model when group comparison is informative.</p></li>
 <li><p><strong>Detail of credit:</strong> PPO’s credit can vary by token or state; GRPO applies one group-relative value across a completion.</p></li>
-<li><p><strong>Typical attraction:</strong> PPO supports general online RLHF; GRPO is especially attractive for memory-efficient reasoning and verifiable tasks.</p></li>
+<li><p><strong>Typical fit:</strong> PPO supports general online RLHF. GRPO fits memory-constrained reasoning tasks when several answers can be scored by a reliable verifier.</p></li>
 <li><p><strong>Choosing the baseline:</strong> Use PPO’s critic when a token-level baseline is valuable and its added memory and training cost are acceptable. Use GRPO when several completions of the same prompt can be scored cheaply and their relative quality is informative. The choice is about the credit-assignment signal, not a claim that one algorithm always dominates the other.</p></li>
 </ul>
 </section>
@@ -439,7 +439,7 @@ Figure&nbsp;4.1: Sibling scores create the GRPO baseline (Session 3 v1, p.&nbsp;
 <li><p><strong>Program-of-thought example:</strong> A solution that expresses part of the reasoning as executable code so calculation can be checked by running it.</p></li>
 <li><p><strong>DeepSeekMath case study:</strong> A staged example of preparing a mathematics-capable policy before applying group-relative optimization.</p></li>
 </ul>
-<p>The preparation and update have three distinct jobs.</p>
+<p>The training sequence has three stages, and each stage supplies an input needed by the next.</p>
 <ol type="1">
 <li><p><strong>Mathematics corpus:</strong> Retain mathematics-heavy web content at scale so the base model covers the domain.</p></li>
 <li><p><strong>Supervised solutions:</strong> Teach readable decomposition and code-supported calculation so useful solution paths can be sampled.</p></li>
@@ -448,7 +448,7 @@ Figure&nbsp;4.1: Sibling scores create the GRPO baseline (Session 3 v1, p.&nbsp;
 <ul>
 <li><strong>Outcome and process supervision:</strong> Outcome supervision scores the final answer. Process supervision scores a checked intermediate proof step, program result, or tool state. Process rewards give earlier feedback only when those intermediate checks are reliable.</li>
 </ul>
-<p>DeepSeek-R1-Zero tests the next question: can rule-scored reasoning emerge directly from a base model without supervised reasoning traces? It applies GRPO with accuracy and format rewards, and reserves separate reasoning tokens before the final user-facing answer.</p>
+<p>DeepSeek-R1-Zero tests the next question: can rule-scored reasoning emerge directly from a base model without supervised reasoning traces? It applies GRPO with accuracy and format rewards. The training template places the reasoning process inside <code>&lt;think&gt;...&lt;/think&gt;</code> tags and the final answer inside <code>&lt;answer&gt;...&lt;/answer&gt;</code> tags. These are delimiters in the generated response, not a separate hidden token channel.</p>
 <div id="fig-m5-c04-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A sampled reasoning response is tested by a format rule and a correctness rule; the explicit checks combine into a reward.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m5-c04-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -474,9 +474,9 @@ Figure&nbsp;4.2: Separate checks score format and correctness (Session 3 v1, p.&
 </section>
 <section id="sec-m5-c04-s04" class="level2" data-number="4.4">
 <h2 data-number="4.4" class="anchored" data-anchor-id="sec-m5-c04-s04"><span class="header-section-number">4.4</span> Training long answers with DAPO</h2>
-<p>The DeepSeek reasoning pipeline can produce long answers, while standard GRPO gives no information when every sibling receives the same score. Long answers can be underweighted, while equal-score groups spend rollout work without producing a comparison. Define Decoupled Clip and Dynamic Sampling Policy Optimization (DAPO) first, then examine how it handles both problems and when a KL penalty is still needed.</p>
+<p>The DeepSeek reasoning pipeline can produce long answers, while standard GRPO gives no information when every sibling receives the same score. Long answers can be underweighted, while equal-score groups spend rollout work without producing a comparison. These two pressures motivate DAPO, which changes both the grouped objective and the prompt groups retained for an update.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decoupled Clip and Dynamic Sampling Policy Optimization (DAPO):</strong></span> A GRPO variant for long reasoning traces and grouped rewards with four linked changes: average over generated tokens rather than equally weighted completion averages; use separate lower and upper ratio bounds; omit an explicit KL term when the verifier remains reliable away from the reference; and refill the update batch with prompt groups whose sibling scores contain variation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decoupled Clip and Dynamic Sampling Policy Optimization (DAPO):</strong></span> A GRPO-based recipe for long reasoning traces and grouped verifiable rewards. Its four main training controls are token-level policy-gradient loss, separate lower and upper ratio bounds, dynamic sampling, and overlong reward shaping. Its objective also omits the explicit reference-policy KL term used in the GRPO formulation above. That no-KL choice requires a rule-based reward that remains useful as the policy moves away from the reference, plus independent evaluation for failures the rule does not measure.</li>
 </ul>
 <p>Token-level averaging avoids letting short samples dominate merely because a sample-level loss averages internally first. Decoupled clipping gives positive and negative sampled terms different objective bounds. Removing an explicit KL penalty is appropriate only when a verifier remains meaningful far from the SFT distribution; that freedom makes reward, length control, and independent evaluation more important.</p>
 <p>DAPO reuses four values from a grouped update.</p>
@@ -486,10 +486,10 @@ Figure&nbsp;4.2: Separate checks score format and correctness (Session 3 v1, p.&
 <li><p><strong>Current log probabilities:</strong> Re-score the identical token IDs under the trainable policy.</p></li>
 <li><p><strong>Sibling scores:</strong> Provide the group-relative advantages.</p></li>
 </ul>
-<p>DAPO uses asymmetric clipping and batch selection (Session 3 v1, PDF p.&nbsp;30). KL regularization is valuable when a learned reward is reliable only near the SFT distribution, but can oppose longer self-verifying traces when executable rewards remain valid farther away.</p>
+<p>DAPO uses asymmetric clipping and batch selection (Session 3 v1, PDF p.&nbsp;30). KL regularization is valuable when a learned reward is reliable only near the SFT distribution, but can oppose longer reasoning traces that an executable verifier can still check farther from that distribution.</p>
 <p>DAPO is designed for long grouped reasoning rollouts in which sample-level averaging can underweight long correct traces and equal-score groups waste generation. It averages across generated tokens, uses separate lower and upper surrogate bounds, refills the batch with score-varying groups, and may omit explicit KL only when the verifier remains reliable away from the reference. These controls use the rollout batch more effectively; they do not clip model probabilities, make no-KL training safe for every task, or replace independent verifier evaluation.</p>
 <ul>
-<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>DAPO software requirements:</strong></span> The online trainer must implement token-level averaging, separate surrogate clip bounds, oversampling and filtering of equal-score groups, and any configured overlong-response shaping. The tokenizer produces token IDs, the verifier returns scores, and an independent evaluator checks behavior when no explicit KL term is used. DAPO is not merely a generic <code>GRPOTrainer</code> setting.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>DAPO software requirements:</strong></span> The online trainer must implement token-level averaging, separate surrogate clip bounds, oversampling and filtering of equal-score groups, and overlong-response reward shaping. The tokenizer produces token IDs, the verifier returns scores, and an independent evaluator checks behavior when no explicit KL term is used. DAPO is not merely a generic <code>GRPOTrainer</code> setting.</p></li>
 <li><p><strong>Overlong reward shaping:</strong> A gradual penalty applied as a response approaches the maximum generation length, rather than an abrupt penalty only after truncation. It controls pathological length growth and discontinuous truncation effects; it does not make long reasoning intrinsically undesirable.</p></li>
 </ul>
 <p>When overlong shaping is used, it changes the completion scores before they are normalized into group advantages. It is therefore upstream of the objective below, not an additional term written inside <span class="math inline">\(J_{\mathrm{DAPO}}\)</span>.</p>
@@ -548,7 +548,7 @@ Figure&nbsp;4.3: Sampling, weighting, and clipping shape the update (Session 3 v
 </section>
 <section id="sec-m5-c04-s04-03" class="level3" data-number="4.4.3">
 <h3 data-number="4.4.3" class="anchored" data-anchor-id="sec-m5-c04-s04-03"><span class="header-section-number">4.4.3</span> Keeping groups with different rewards</h3>
-<p>The grouped advantage learns only when sibling scores create a useful comparison. Some sampled prompt groups repeatedly fail to supply that comparison. Define the selection rule first, then measure how applying it changes the prompts used for training.</p>
+<p>The grouped advantage learns only when sibling scores create a useful comparison. Some sampled prompt groups repeatedly fail to supply that comparison. A useful selection rule must therefore identify zero-variation groups before the trainer refills the batch, and its cost is measured by attempted versus retained groups.</p>
 <ul>
 <li><p><strong>Why uniform groups give no gradient:</strong> An all-unsuccessful group and an all-successful group both have no variation around their own mean. A policy-gradient update based only on normalized within-group advantage cannot distinguish completions in either case. Dynamic sampling keeps prompts whose sampled groups contain an informative mix of outcomes.</p></li>
 <li><p><strong>How dynamic sampling fills a batch:</strong> The trainer oversamples prompt groups, removes groups with zero reward variation, and continues sampling until the retained update batch reaches its target number of informative groups. This preserves effective batch size but increases and randomizes rollout cost.</p></li>
@@ -558,55 +558,56 @@ Figure&nbsp;4.3: Sampling, weighting, and clipping shape the update (Session 3 v
 </section>
 <section id="sec-m5-c04-s05" class="level2" data-number="4.5">
 <h2 data-number="4.5" class="anchored" data-anchor-id="sec-m5-c04-s05"><span class="header-section-number">4.5</span> Running group-based training</h2>
-<p>GRPO has already defined how sibling scores become one advantage per completion. Implementation must now connect answer generation, scoring, and parameter updating through the same batch. Assign those three jobs to their software components, then trace the batch through the compact implementation.</p>
+<p>GRPO has already defined how sibling scores become one advantage per completion. Implementation must now connect answer generation, scoring, and parameter updating through the same batch. The four components below divide those three operations, after which the compact implementation traces their shared batch.</p>
 <p>Four components perform the grouped update.</p>
 <ul>
-<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>TRL <code>GRPOTrainer</code>:</strong></span> Manage grouped rollout and update bookkeeping.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>TRL <code>GRPOTrainer</code>:</strong></span> Manages grouped rollout and update bookkeeping.</p></li>
 <li><p><strong><code>transformers</code>:</strong> Tokenize prompts and generate sibling completions.</p></li>
 <li><p><strong>PyTorch:</strong> Hold tensors, calculate gradients, and apply optimizer steps.</p></li>
 <li><p><strong>Task verifier:</strong> Return one score for each completion.</p></li>
 </ul>
-<p>Code 4.1 is <strong>pseudocode with PyTorch operations</strong>, not a standalone program. It requires a prompt iterator; trainable and reference policies; grouped rollout and token-scoring functions; a verifier; an optimizer; and a <code>grpo_objective</code> helper. For a prompt batch of size <span class="math inline">\(B\)</span> and group size <span class="math inline">\(G\)</span>, <code>rewards</code> and <code>adv</code> have shape <span class="math inline">\((B,G)\)</span>, while the selected-token log-probability arrays also carry a generated-token axis. The helper returns sampled objective terms; <code>objective.mean()</code> reduces them to one scalar, and negating that scalar produces the loss minimized by the optimizer. The expected state change is an update to <code>policy</code>; the reference policy and stored rollout statistics remain fixed.</p>
+<p>Code 4.1 is <strong>pseudocode with PyTorch operations</strong>, not a standalone program. It requires a prompt iterator, trainable and reference policies, grouped rollout and token-scoring functions, a verifier, an optimizer, and a <code>grpo_objective</code> helper. For a prompt batch of size <span class="math inline">\(B\)</span> and group size <span class="math inline">\(G\)</span>, <code>rewards</code> and <code>adv</code> have shape <span class="math inline">\((B,G)\)</span>, while the selected-token log-probability arrays also carry a generated-token axis. The helper returns sampled objective terms. <code>objective.mean()</code> reduces them to one scalar, and negating that scalar produces the loss minimized by the optimizer. The expected state change is an update to <code>policy</code>. The old and reference log probabilities, verifier scores, and group advantages are fixed targets calculated without gradients. Only the current-policy scores inside <code>grpo_objective</code> retain a gradient path to <code>policy</code>.</p>
 <p><strong>Code 4.1. A glass-box GRPO update turns sibling scores into one optimizer step.</strong></p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m5-c04-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m5-c04-c01-1"><a href="#lst-m5-c04-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Grouped rollout, stored probabilities, and policy update</span></span>
-<span id="lst-m5-c04-c01-2"><a href="#lst-m5-c04-c01-2" aria-hidden="true" tabindex="-1"></a>prompts            <span class="op">=</span> <span class="bu">next</span>(prompt_loader)                    <span class="co"># one prompt batch</span></span>
-<span id="lst-m5-c04-c01-3"><a href="#lst-m5-c04-c01-3" aria-hidden="true" tabindex="-1"></a>groups, old_logps  <span class="op">=</span> grouped_rollout(</span>
-<span id="lst-m5-c04-c01-4"><a href="#lst-m5-c04-c01-4" aria-hidden="true" tabindex="-1"></a>    policy,</span>
-<span id="lst-m5-c04-c01-5"><a href="#lst-m5-c04-c01-5" aria-hidden="true" tabindex="-1"></a>    prompts,</span>
-<span id="lst-m5-c04-c01-6"><a href="#lst-m5-c04-c01-6" aria-hidden="true" tabindex="-1"></a>    completions_per_prompt <span class="op">=</span> group_size,</span>
-<span id="lst-m5-c04-c01-7"><a href="#lst-m5-c04-c01-7" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="lst-m5-c04-c01-8"><a href="#lst-m5-c04-c01-8" aria-hidden="true" tabindex="-1"></a>ref_logps          <span class="op">=</span> score_selected_tokens(reference, groups).detach()</span>
-<span id="lst-m5-c04-c01-9"><a href="#lst-m5-c04-c01-9" aria-hidden="true" tabindex="-1"></a>rewards            <span class="op">=</span> verifier.score(groups)                 <span class="co"># verifier scores: (B, G)</span></span>
-<span id="lst-m5-c04-c01-10"><a href="#lst-m5-c04-c01-10" aria-hidden="true" tabindex="-1"></a>mean_r             <span class="op">=</span> rewards.mean(dim<span class="op">=</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>)</span>
-<span id="lst-m5-c04-c01-11"><a href="#lst-m5-c04-c01-11" aria-hidden="true" tabindex="-1"></a>std_r              <span class="op">=</span> rewards.std(</span>
-<span id="lst-m5-c04-c01-12"><a href="#lst-m5-c04-c01-12" aria-hidden="true" tabindex="-1"></a>    dim        <span class="op">=</span> <span class="dv">1</span>,</span>
-<span id="lst-m5-c04-c01-13"><a href="#lst-m5-c04-c01-13" aria-hidden="true" tabindex="-1"></a>    correction <span class="op">=</span> <span class="dv">0</span>,</span>
-<span id="lst-m5-c04-c01-14"><a href="#lst-m5-c04-c01-14" aria-hidden="true" tabindex="-1"></a>    keepdim    <span class="op">=</span> <span class="va">True</span>,</span>
-<span id="lst-m5-c04-c01-15"><a href="#lst-m5-c04-c01-15" aria-hidden="true" tabindex="-1"></a>).clamp_min(<span class="fl">1e-6</span>)</span>
-<span id="lst-m5-c04-c01-16"><a href="#lst-m5-c04-c01-16" aria-hidden="true" tabindex="-1"></a>adv                <span class="op">=</span> (rewards <span class="op">-</span> mean_r) <span class="op">/</span> std_r             <span class="co"># completion advantage: (B, G)</span></span>
-<span id="lst-m5-c04-c01-17"><a href="#lst-m5-c04-c01-17" aria-hidden="true" tabindex="-1"></a>objective          <span class="op">=</span> grpo_objective(</span>
-<span id="lst-m5-c04-c01-18"><a href="#lst-m5-c04-c01-18" aria-hidden="true" tabindex="-1"></a>    policy,</span>
-<span id="lst-m5-c04-c01-19"><a href="#lst-m5-c04-c01-19" aria-hidden="true" tabindex="-1"></a>    groups,</span>
-<span id="lst-m5-c04-c01-20"><a href="#lst-m5-c04-c01-20" aria-hidden="true" tabindex="-1"></a>    old_logps,</span>
-<span id="lst-m5-c04-c01-21"><a href="#lst-m5-c04-c01-21" aria-hidden="true" tabindex="-1"></a>    ref_logps,</span>
-<span id="lst-m5-c04-c01-22"><a href="#lst-m5-c04-c01-22" aria-hidden="true" tabindex="-1"></a>    adv,</span>
-<span id="lst-m5-c04-c01-23"><a href="#lst-m5-c04-c01-23" aria-hidden="true" tabindex="-1"></a>    clip_eps <span class="op">=</span> <span class="fl">0.20</span>,</span>
-<span id="lst-m5-c04-c01-24"><a href="#lst-m5-c04-c01-24" aria-hidden="true" tabindex="-1"></a>    kl_coef  <span class="op">=</span> <span class="fl">0.04</span>,</span>
-<span id="lst-m5-c04-c01-25"><a href="#lst-m5-c04-c01-25" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="lst-m5-c04-c01-26"><a href="#lst-m5-c04-c01-26" aria-hidden="true" tabindex="-1"></a>loss               <span class="op">=</span> <span class="op">-</span>objective.mean()         <span class="co"># optimizer minimizes -J_GRPO</span></span>
-<span id="lst-m5-c04-c01-27"><a href="#lst-m5-c04-c01-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m5-c04-c01-28"><a href="#lst-m5-c04-c01-28" aria-hidden="true" tabindex="-1"></a>optimizer.zero_grad()</span>
-<span id="lst-m5-c04-c01-29"><a href="#lst-m5-c04-c01-29" aria-hidden="true" tabindex="-1"></a>loss.backward()</span>
-<span id="lst-m5-c04-c01-30"><a href="#lst-m5-c04-c01-30" aria-hidden="true" tabindex="-1"></a>optimizer.step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m5-c04-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m5-c04-c01-1"><a href="#lst-m5-c04-c01-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Grouped rollout, fixed targets, and policy update</span></span>
+<span id="lst-m5-c04-c01-2"><a href="#lst-m5-c04-c01-2" aria-hidden="true" tabindex="-1"></a>prompts <span class="op">=</span> <span class="bu">next</span>(prompt_loader)                       <span class="co"># one prompt batch</span></span>
+<span id="lst-m5-c04-c01-3"><a href="#lst-m5-c04-c01-3" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():</span>
+<span id="lst-m5-c04-c01-4"><a href="#lst-m5-c04-c01-4" aria-hidden="true" tabindex="-1"></a>    groups, old_logps <span class="op">=</span> grouped_rollout(</span>
+<span id="lst-m5-c04-c01-5"><a href="#lst-m5-c04-c01-5" aria-hidden="true" tabindex="-1"></a>        policy,</span>
+<span id="lst-m5-c04-c01-6"><a href="#lst-m5-c04-c01-6" aria-hidden="true" tabindex="-1"></a>        prompts,</span>
+<span id="lst-m5-c04-c01-7"><a href="#lst-m5-c04-c01-7" aria-hidden="true" tabindex="-1"></a>        completions_per_prompt <span class="op">=</span> group_size,</span>
+<span id="lst-m5-c04-c01-8"><a href="#lst-m5-c04-c01-8" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="lst-m5-c04-c01-9"><a href="#lst-m5-c04-c01-9" aria-hidden="true" tabindex="-1"></a>    ref_logps <span class="op">=</span> score_selected_tokens(reference, groups)</span>
+<span id="lst-m5-c04-c01-10"><a href="#lst-m5-c04-c01-10" aria-hidden="true" tabindex="-1"></a>    rewards   <span class="op">=</span> verifier.score(groups)              <span class="co"># verifier scores: (B, G)</span></span>
+<span id="lst-m5-c04-c01-11"><a href="#lst-m5-c04-c01-11" aria-hidden="true" tabindex="-1"></a>    mean_r    <span class="op">=</span> rewards.mean(dim<span class="op">=</span><span class="dv">1</span>, keepdim<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m5-c04-c01-12"><a href="#lst-m5-c04-c01-12" aria-hidden="true" tabindex="-1"></a>    std_r     <span class="op">=</span> rewards.std(</span>
+<span id="lst-m5-c04-c01-13"><a href="#lst-m5-c04-c01-13" aria-hidden="true" tabindex="-1"></a>        dim        <span class="op">=</span> <span class="dv">1</span>,</span>
+<span id="lst-m5-c04-c01-14"><a href="#lst-m5-c04-c01-14" aria-hidden="true" tabindex="-1"></a>        correction <span class="op">=</span> <span class="dv">0</span>,</span>
+<span id="lst-m5-c04-c01-15"><a href="#lst-m5-c04-c01-15" aria-hidden="true" tabindex="-1"></a>        keepdim    <span class="op">=</span> <span class="va">True</span>,</span>
+<span id="lst-m5-c04-c01-16"><a href="#lst-m5-c04-c01-16" aria-hidden="true" tabindex="-1"></a>    ).clamp_min(<span class="fl">1e-6</span>)</span>
+<span id="lst-m5-c04-c01-17"><a href="#lst-m5-c04-c01-17" aria-hidden="true" tabindex="-1"></a>    adv <span class="op">=</span> (rewards <span class="op">-</span> mean_r) <span class="op">/</span> std_r                <span class="co"># completion advantage: (B, G)</span></span>
+<span id="lst-m5-c04-c01-18"><a href="#lst-m5-c04-c01-18" aria-hidden="true" tabindex="-1"></a>objective <span class="op">=</span> grpo_objective(</span>
+<span id="lst-m5-c04-c01-19"><a href="#lst-m5-c04-c01-19" aria-hidden="true" tabindex="-1"></a>    policy,</span>
+<span id="lst-m5-c04-c01-20"><a href="#lst-m5-c04-c01-20" aria-hidden="true" tabindex="-1"></a>    groups,</span>
+<span id="lst-m5-c04-c01-21"><a href="#lst-m5-c04-c01-21" aria-hidden="true" tabindex="-1"></a>    old_logps,</span>
+<span id="lst-m5-c04-c01-22"><a href="#lst-m5-c04-c01-22" aria-hidden="true" tabindex="-1"></a>    ref_logps,</span>
+<span id="lst-m5-c04-c01-23"><a href="#lst-m5-c04-c01-23" aria-hidden="true" tabindex="-1"></a>    adv,</span>
+<span id="lst-m5-c04-c01-24"><a href="#lst-m5-c04-c01-24" aria-hidden="true" tabindex="-1"></a>    clip_eps <span class="op">=</span> <span class="fl">0.20</span>,</span>
+<span id="lst-m5-c04-c01-25"><a href="#lst-m5-c04-c01-25" aria-hidden="true" tabindex="-1"></a>    kl_coef  <span class="op">=</span> <span class="fl">0.04</span>,</span>
+<span id="lst-m5-c04-c01-26"><a href="#lst-m5-c04-c01-26" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="lst-m5-c04-c01-27"><a href="#lst-m5-c04-c01-27" aria-hidden="true" tabindex="-1"></a>loss <span class="op">=</span> <span class="op">-</span>objective.mean()                            <span class="co"># optimizer minimizes -J_GRPO</span></span>
+<span id="lst-m5-c04-c01-28"><a href="#lst-m5-c04-c01-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m5-c04-c01-29"><a href="#lst-m5-c04-c01-29" aria-hidden="true" tabindex="-1"></a>optimizer.zero_grad()</span>
+<span id="lst-m5-c04-c01-30"><a href="#lst-m5-c04-c01-30" aria-hidden="true" tabindex="-1"></a>loss.backward()</span>
+<span id="lst-m5-c04-c01-31"><a href="#lst-m5-c04-c01-31" aria-hidden="true" tabindex="-1"></a>optimizer.step()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The update uses four groups of values.</p>
 <ul>
 <li><p><strong>Sibling group:</strong> <code>groups</code> contains <span class="math inline">\(G\)</span> completions for each prompt, the batch structure that distinguishes GRPO from PPO.</p></li>
-<li><p><strong>Stored rollout and reference probabilities:</strong> <code>old_logps</code> contains selected-token log probabilities recorded when each sibling was sampled. <code>ref_logps</code> scores those same token IDs under the frozen reference. <code>grpo_objective</code> re-scores them under <code>policy</code> to form current-to-old ratios and uses current/reference selected-token scores in the non-negative sampled KL estimator defined above.</p></li>
+<li><p><strong>Stored rollout and reference probabilities:</strong> <code>old_logps</code> contains selected-token log probabilities recorded when each sibling was sampled. <code>ref_logps</code> scores those same token IDs under the frozen reference. Both arrays are detached update inputs. <code>grpo_objective</code> re-scores the tokens under <code>policy</code> to form current-to-old ratios and uses current/reference selected-token scores in the non-negative sampled KL estimator defined above.</p></li>
 <li><p><strong>Reward normalization:</strong> <code>rewards</code> is the verifier or reward-model output; <code>mean_r</code> and <code>std_r</code> create the within-prompt baseline and scale. The <code>clamp_min(1e-6)</code> value is <span class="math inline">\(\epsilon_{\mathrm{std}}\)</span>, an illustrative floor in the same units as the reward standard deviation.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Advantage, objective, and update:</strong></span> <code>adv</code> is the group-relative advantage calculated from sibling completion scores. <code>grpo_objective</code> applies the clipped ratio objective with illustrative configured values <code>clip_eps=0.20</code> and <code>kl_coef=0.04</code>; both require task-specific tuning. The explicit <code>loss = -objective.mean()</code> line converts the maximized objective <span class="math inline">\(J_{\mathrm{GRPO}}\)</span> into the scalar minimized by PyTorch. A trainer can manage the bookkeeping, but it cannot make a weak verifier informative.</p></li>
 </ul>
 <p>A production TRL path packages the same responsibilities differently. <code>GRPOConfig</code> holds the number of generations, maximum response length, clip and KL settings, batching, and logging. <code>GRPOTrainer</code> calls the model to generate sibling completions and invokes one or more project-defined reward functions that return a scalar for every completion. <code>transformers</code> supplies tokenization and model generation, <code>accelerate</code> places the work on available devices, and <code>peft</code> can restrict updates to LoRA adapters. Exact class arguments must be checked against the installed TRL release.</p>
-<p>Generation usually dominates the computational cost because every prompt produces several completions before one update. Batch prompts by compatible length, record generated-token counts, and separate rollout time from optimizer time. A version-compatible vLLM generation backend can raise sampling throughput, but it does not calculate the verifier or determine whether the resulting reward is valid.</p>
+<p>Generation usually dominates the computational cost because every prompt produces several completions before one update. Batch prompts by compatible length, record generated-token counts, and separate rollout time from optimizer time. vLLM is an optimized LLM generation engine that can raise sampling throughput when its version is compatible with the trainer. It does not calculate the verifier or determine whether the resulting reward is valid.</p>
 <p>Monitor the quantities that can make a grouped update silently uninformative.</p>
 <ul>
 <li><p><strong>Reward spread:</strong> Track the standard deviation within each prompt group and the fraction of all-equal groups.</p></li>
@@ -614,6 +615,7 @@ Figure&nbsp;4.3: Sampling, weighting, and clipping shape the update (Session 3 v
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Policy movement:</strong></span> Track clip fraction and, when configured, reference-policy KL separately from task reward.</p></li>
 <li><p><strong>Verifier behavior:</strong> Test reward functions on known correct, incorrect, malformed, and adversarial completions before allowing them to drive rollouts.</p></li>
 </ul>
+<p>GRPO and DAPO obtain a task-reward contribution to the policy gradient only when sibling rewards differ. A configured GRPO reference-KL term can still contribute a regularization gradient when the group advantage is zero. Chapter 5 keeps these policy-update methods but asks how executable checks and tool results supply the reward, and how to keep training checks separate from final evaluation.</p>
 
 
 </section>

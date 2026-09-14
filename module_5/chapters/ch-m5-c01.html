@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -314,26 +314,26 @@ window.Quarto = {
 </header>
 
 
-<p>A pre-trained model can produce plausible text without consistently following a task’s format or constraints. Supervised fine-tuning (SFT) uses trusted prompt-response examples to make those demonstrated responses more likely. This chapter traces one example from text to token probabilities and a supervised update, then separates what imitation teaches from questions that require other evidence.</p>
+<p>A pre-trained model can produce plausible text without consistently following a task’s format or constraints. Supervised fine-tuning (SFT) uses trusted prompt-response examples to make those demonstrated responses more likely. Demonstrated text becomes recorded token probabilities and a supervised update. SFT directly rewards reproducing its supplied answers, so later methods add comparisons or outcome evidence when the task needs more.</p>
 <ul>
 <li><p><strong>Pre-trained language model:</strong> A model trained to predict the next token in internet-scale text. It has broad linguistic and factual capability, but it does not yet have task-specific evidence about which valid response best serves a user.</p></li>
-<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Supervised Fine-Tuning (SFT):</strong></span> Training that continues from the pre-trained model using trusted prompt-response examples. It increases the probability of the demonstrated response and teaches formats, tones, and skills shown in those examples.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Supervised Fine-Tuning (SFT):</strong></span> Training that continues from the pre-trained model using trusted prompt-response examples. It increases the probability of the demonstrated response, making the formats, tones, and skills shown in those examples more likely.</p></li>
 </ul>
-<p>Post-training changes how that same model responds to prompts used in deployment. SFT, preference optimization, and online reinforcement learning use different evidence; they are not compulsory stages in one training chain.</p>
+<p>Post-training changes how that same model responds to prompts used in deployment. SFT, preference optimization, and online reinforcement learning use different evidence. They are not compulsory stages in one training chain.</p>
 <section id="sec-m5-c01-s01" class="level2" data-number="1.1">
 <h2 data-number="1.1" class="anchored" data-anchor-id="sec-m5-c01-s01"><span class="header-section-number">1.1</span> From pre-training to task behavior</h2>
 <p>The starting model already knows many language patterns, while SFT supplies trusted task examples. The useful distinction is the evidence each method adds. A project may stop after SFT, use preference training without later PPO, or use online rewards when newly generated attempts must be scored.</p>
-<p>A pre-trained model may know many facts and still answer an instruction in the wrong format, overlook the user’s constraint, or choose a plausible but inferior response. Post-training begins from that capable baseline and supplies evidence about what a good answer should look like for a particular use. It changes behavior; it is not a substitute for learning the underlying language and world regularities during pre-training.</p>
+<p>A pre-trained model may know many facts and still answer an instruction in the wrong format, overlook the user’s constraint, or choose a plausible but inferior response. Post-training begins from that capable baseline and supplies evidence about what a good answer should look like for the task. It changes behavior. It is not a substitute for learning the underlying language and world regularities during pre-training.</p>
 <p>The following methods answer different training questions.</p>
 <ul>
-<li><p><strong>Pre-training:</strong> Next-token likelihood builds language, world regularities, and broad skills, but gives no task-specific notion of helpfulness.</p></li>
-<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>SFT:</strong></span> One target completion per prompt teaches instruction format, tone, and demonstrated skills, but treats that one sample as the only target.</p></li>
-<li><p><strong>Preference optimization:</strong> A chosen-versus-rejected pair teaches relative quality and alignment, but the quality signal is only as good as the comparison or reward behind it.</p></li>
+<li><p><strong>Pre-training:</strong> Next-token likelihood builds language, world regularities, and broad skills, but does not provide task-specific evidence of helpfulness.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>SFT:</strong></span> One target completion for each prompt makes its instruction format, tone, and demonstrated skills more likely, but treats that one sample as the only target.</p></li>
+<li><p><strong>Preference optimization:</strong> A chosen-versus-rejected pair identifies relative quality and alignment, but the quality signal is only as good as the comparison or reward behind it.</p></li>
 <li><p><strong>RL for reasoning and agents:</strong> A learned, human, or verifier reward can shape multi-step behavior toward an outcome, but reward design can distort the behavior it reinforces.</p></li>
 </ul>
 <p>The available evidence determines which method fits the task.</p>
 <ul>
-<li><p><strong>Demonstrations:</strong> Use SFT when one clear answer is enough to teach the missing behavior.</p></li>
+<li><p><strong>Demonstrations:</strong> Use SFT when one clear answer is enough to show the required behavior.</p></li>
 <li><p><strong>Comparisons:</strong> Add preference evidence when the important distinction is which of two acceptable-looking answers is better.</p></li>
 <li><p><strong>Online rewards:</strong> Use online rewards when the current policy must generate new attempts and a scorer can evaluate them reliably.</p></li>
 </ul>
@@ -341,15 +341,15 @@ window.Quarto = {
 </section>
 <section id="sec-m5-c01-s02" class="level2" data-number="1.2">
 <h2 data-number="1.2" class="anchored" data-anchor-id="sec-m5-c01-s02"><span class="header-section-number">1.2</span> Computing probabilities for text</h2>
-<p>The LLM policy <span class="math inline">\(\pi_\theta\)</span> is the complete next-token decision rule, while <span class="math inline">\(\pi_\theta(y\mid x)\)</span> is the probability it assigns to one exact answer. To connect the model’s weights to the number used in training, hold the prompt and current text prefix fixed, normalize the model’s raw scores into a next-token distribution, select the probability of the recorded token, and combine those selected values into one answer score.</p>
+<p>To make a trusted answer more likely, the trainer needs a number that says how probable its recorded tokens already are. The LLM policy <span class="math inline">\(\pi_\theta\)</span> is the complete next-token decision rule, while <span class="math inline">\(\pi_\theta(y\mid x)\)</span> is the probability it assigns to one exact answer. To calculate that score, hold the prompt and current text prefix fixed, normalize the model’s raw scores into a next-token distribution, select the probability of each recorded token, and combine the selected values into one answer score.</p>
 <ul>
 <li><strong>LLM policy <span class="math inline">\(\pi_\theta\)</span>:</strong> The symbol <span class="math inline">\(\pi_\theta\)</span> names the LLM’s complete decision rule, with <span class="math inline">\(\theta\)</span> denoting its trainable weights. For one text state <span class="math inline">\(s_t\)</span>, <span class="math inline">\(\pi_\theta(\cdot\mid s_t)\)</span> is the full next-token probability distribution returned by that rule. Selecting candidate token <span class="math inline">\(a_t\)</span> gives the scalar <span class="math inline">\(\pi_\theta(a_t\mid s_t)\)</span>. Repeating the calculation for every recorded answer token and multiplying the selected values gives <span class="math inline">\(\pi_\theta(y\mid x)\)</span> for one exact answer <span class="math inline">\(y\)</span> after prompt <span class="math inline">\(x\)</span>.</li>
 </ul>
-<p>The policy is the complete rule; a policy probability is one output of that rule. The numerical calculation begins by fixing exactly what text the LLM can see before it chooses the next token.</p>
+<p>The policy is the complete rule. A policy probability is one output of that rule. The numerical calculation begins by fixing exactly what text the LLM can see before it chooses the next token.</p>
 <ul>
 <li><strong>Current text state <span class="math inline">\(s_t\)</span>:</strong> The prompt <span class="math inline">\(x\)</span> plus the answer tokens already present before token step <span class="math inline">\(t\)</span>. The state is the complete text input used for the next-token calculation at that step.</li>
 </ul>
-<p>A forward pass applies the model weights <span class="math inline">\(\theta\)</span> to this fixed state and returns one raw score for every vocabulary token. These raw scores are logits; they do not yet sum to one and are not probabilities.</p>
+<p>A forward pass applies the model weights <span class="math inline">\(\theta\)</span> to this fixed state and returns one raw score for every vocabulary token. These raw scores are logits. They do not yet sum to one and are not probabilities.</p>
 <ul>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Softmax:</strong></span> At token step <span class="math inline">\(t\)</span>, the model returns a logit vector <span class="math inline">\(z_t\)</span> with one raw score for every vocabulary token. Softmax exponentiates and normalizes that vector into non-negative next-token probabilities that sum to one. Training then selects the probability assigned to the recorded token.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Policy output <span class="math inline">\(\pi_\theta(\cdot\mid s_t)\)</span>:</strong></span> The complete probability vector produced after softmax for state <span class="math inline">\(s_t\)</span>. The dot represents every candidate token in the vocabulary. Selecting the entry for candidate token <span class="math inline">\(a_t\)</span> gives <span class="math inline">\(\pi_\theta(a_t\mid s_t)\)</span>, one scalar probability between zero and one rather than the policy itself.</p></li>
@@ -361,7 +361,7 @@ window.Quarto = {
 <p><strong>Variables</strong></p>
 <ul>
 <li><strong><span class="math inline">\(\pi_\theta(a_t\mid s_t)\)</span>:</strong> Scalar probability assigned to candidate token <span class="math inline">\(a_t\)</span> in state <span class="math inline">\(s_t\)</span>.</li>
-<li><strong><span class="math inline">\(\theta\)</span>:</strong> All LLM weights used by the forward pass; post-training changes some or all of these numerical parameters.</li>
+<li><strong><span class="math inline">\(\theta\)</span>:</strong> All LLM weights used by the forward pass. Post-training changes some or all of these numerical parameters.</li>
 <li><strong><span class="math inline">\(t\)</span>:</strong> Index of the current answer position.</li>
 <li><strong><span class="math inline">\(s_t\)</span>:</strong> Prompt plus the response prefix already present at token step <span class="math inline">\(t\)</span>.</li>
 <li><strong><span class="math inline">\(a_t\)</span>:</strong> Candidate next token being selected or scored.</li>
@@ -377,7 +377,7 @@ window.Quarto = {
 <p><strong>Example: softmax turns logits into a token probability</strong></p>
 <p>At one fixed prompt and response prefix, a toy model has token IDs 0, 1, and 2 with logits 2, 1, and 0 in that order.</p>
 <p><strong>Inputs and measurement</strong></p>
-<p>One policy forward pass returns one raw logit for every token in this three-token toy vocabulary. Softmax exponentiates and normalizes all three values; the trainer then reads the share assigned to token ID 0.</p>
+<p>One policy forward pass returns one raw logit for every token in this three-token toy vocabulary. Softmax exponentiates and normalizes all three values. The trainer then reads the share assigned to token ID 0.</p>
 <p><strong>Calculation</strong></p>
 <ol type="1">
 <li><strong>Calculation:</strong> <span class="math inline">\(\pi_\theta(a_t=0\mid s_t)=e^2/(e^2+e^1+e^0)=0.665\)</span>.</li>
@@ -387,15 +387,15 @@ window.Quarto = {
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Nat:</strong></span> The unit used for information quantities calculated with the natural logarithm <span class="math inline">\(\ln\)</span>. Using logarithm base 2 gives bits instead. A log probability and its negative-log loss have opposite signs, even though both use the same logarithm.</li>
 </ul>
-<p>Applying <span class="math inline">\(\ln\)</span> changes the numerical representation; it does not replace the original probability. For <span class="math inline">\(p=0.5\)</span>, the probability remains 0.5, its log-probability is <span class="math inline">\(-0.693\)</span>, and the corresponding negative-log loss is <span class="math inline">\(0.693\)</span>.</p>
+<p>Applying <span class="math inline">\(\ln\)</span> changes the numerical representation. It does not replace the original probability. For <span class="math inline">\(p=0.5\)</span>, the probability remains 0.5, its log-probability is <span class="math inline">\(-0.693\)</span>, and the corresponding negative-log loss is <span class="math inline">\(0.693\)</span>.</p>
 <p><span id="eq-m5-c01-e02"><span class="math display">\[
 p = 0.5, \ln p = -0.693, -\ln p = 0.693
 \tag{1.2}\]</span></span></p>
 <p>Because <span class="math inline">\(\ln\)</span> is used, the two logarithmic values may be described as <span class="math inline">\(-0.693\)</span> nats and <span class="math inline">\(0.693\)</span> nats. A log-probability is at most zero and moves closer to zero as the text becomes more likely. Its negative is the non-negative value commonly used in training losses.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Teacher-forced scoring:</strong></span> A controlled scoring pass for a fixed prompt and written answer. The recorded answer tokens are supplied to the model; no replacement answer is sampled.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Teacher-forced scoring:</strong></span> A controlled scoring pass for a fixed prompt and written answer. The recorded answer tokens are supplied to the model. No replacement answer is sampled.</li>
 </ul>
-<p>A full-answer probability is one score derived from the policy, not a second policy. For fixed prompt <span class="math inline">\(x\)</span> and complete answer <span class="math inline">\(y\)</span>, teacher forcing supplies the recorded answer rather than sampling a replacement. A causal model reads the prompt and shifted answer prefix; the logit row before each recorded token scores that token. One forward pass normally returns all of those rows at once. Multiplying the selected probabilities gives <span class="math inline">\(\pi_\theta(y\mid x)\)</span>, while summing their logarithms gives the stable answer score used in training. Here <span class="math inline">\(y\)</span> includes the model’s end or stop token, so the result is the probability of the complete sequence. If the stop token is omitted, the product describes only the recorded prefix.</p>
+<p>A full-answer probability is one score derived from the policy, not a second policy. For fixed prompt <span class="math inline">\(x\)</span> and complete answer <span class="math inline">\(y\)</span>, teacher forcing supplies the recorded answer rather than sampling a replacement. A causal model reads the prompt and shifted answer prefix. The logit row before each recorded token scores that token. One forward pass normally returns all of those rows at once. Multiplying the selected probabilities gives <span class="math inline">\(\pi_\theta(y\mid x)\)</span>, while summing their logarithms gives the stable answer score used in training. Here <span class="math inline">\(y\)</span> includes the model’s end or stop token, so the result is the probability of the complete sequence. If the stop token is omitted, the product describes only the recorded prefix.</p>
 <p><span id="eq-m5-c01-e03"><span class="math display">\[
 \pi_{\theta}(y \mid x) = \prod_{t=1}^{T}\pi_{\theta}(y_t \mid x, y_{&lt;t})
 \tag{1.3}\]</span></span></p>
@@ -434,9 +434,9 @@ p = 0.5, \ln p = -0.693, -\ln p = 0.693
 <p>The token trace maps to four reinforcement-learning objects.</p>
 <ul>
 <li><p><strong>State:</strong> Prompt, prior generated tokens, relevant conversation history, and in agentic systems tool observations.</p></li>
-<li><p><strong>Action:</strong> Usually the next token; at a higher level it can be a full completion, tool call, or structured decision.</p></li>
+<li><p><strong>Action:</strong> Usually the next token. At a higher level, an action can be a full completion, tool call, or structured decision.</p></li>
 <li><p><strong>Reward:</strong> A scalar score from human preferences, a learned reward model, or a verifiable outcome such as unit tests.</p></li>
-<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Policy:</strong></span> <span class="math inline">\(\pi_\theta\)</span>, the complete LLM decision rule introduced earlier; at each state it returns a next-token distribution, and post-training changes <span class="math inline">\(\theta\)</span> so preferred actions become more likely.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Policy:</strong></span> <span class="math inline">\(\pi_\theta\)</span>, the complete LLM decision rule introduced earlier. At each state it returns a next-token distribution, and post-training changes <span class="math inline">\(\theta\)</span> so preferred actions become more likely.</p></li>
 </ul>
 <p>The generic reinforcement-learning loop has one key difference from supervised learning: feedback arrives from an environment after an action, rather than from a fixed target sequence.</p>
 <div id="fig-m5-c01-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A state enters an LLM policy, which selects an action. The environment returns an observation and score that influence the next update and state.">
@@ -455,16 +455,16 @@ Figure&nbsp;1.1: Result feedback closes the LLM action loop (Session 1, PDF p.&n
 <h2 data-number="1.3" class="anchored" data-anchor-id="sec-m5-c01-s03"><span class="header-section-number">1.3</span> Training on demonstrated answers</h2>
 <p>The policy calculation can score any fixed answer token by token. SFT now needs to turn a trusted recorded answer into a loss while preventing prompt text and role markers from becoming training targets. Prepare the recorded conversation first, identify the assistant response positions, and then calculate the loss only on those positions.</p>
 <ul>
-<li><strong>Response-only masking prepares token targets:</strong> The conversation supplies context, but normally only assistant response tokens are training targets. The chat template converts role-structured messages into the exact text and special tokens seen by the model; response-only masking then sets prompt and role-marker positions to −100 so PyTorch cross-entropy ignores them. If every token is left as a target, the model is trained to reproduce the user prompt and template markers instead of learning only the demonstrated answer.</li>
+<li><strong>Response-only masking prepares token targets:</strong> The conversation supplies context, but normally only assistant response tokens are training targets. The chat template converts role-structured messages into the exact text and special tokens seen by the model. Response-only masking then sets prompt and role-marker positions to −100 so PyTorch cross-entropy ignores them. If every token is left as a target, the model is trained to reproduce the user prompt and template markers instead of learning only the demonstrated answer.</li>
 </ul>
-<p>Four software components carry the demonstrated answer into the update.</p>
+<p>The training pipeline uses four software components to carry the demonstrated answer into the update.</p>
 <ul>
 <li><p><strong><code>datasets</code>:</strong> Store role-structured conversations and keep training prompts separate from held-out prompts.</p></li>
 <li><p><strong><code>transformers</code>:</strong> Apply the checkpoint’s chat template, tokenize the text, and run the causal language model.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>TRL <code>SFTTrainer</code>:</strong></span> Batch examples and calculate the supervised token loss using the prepared response labels.</p></li>
 <li><p><strong><code>peft</code>:</strong> Optionally limit the update to LoRA adapters instead of changing every base-model parameter.</p></li>
 </ul>
-<p><strong>Code 1.1. SFT preprocessing creates response-only training labels.</strong> This is an abbreviated preprocessing excerpt, not a runnable program. Its inputs are one <code>record</code> and a tokenizer with the checkpoint’s chat template; its output is <code>batch</code>, whose <code>labels</code> tensor has the same shape as <code>input_ids</code>. The template-specific <code>find_assistant_start</code> helper is intentionally not defined here: production code must replace it with a tokenizer-provided assistant mask or a helper verified for the exact chat template.</p>
+<p><strong>Code 1.1. SFT preprocessing creates response-only training labels.</strong> This is an abbreviated preprocessing excerpt, not a runnable program. Its inputs are one <code>record</code> and a tokenizer with the checkpoint’s chat template. Its output is <code>batch</code>, whose <code>labels</code> tensor has the same shape as <code>input_ids</code>. The template-specific <code>find_assistant_start</code> helper is intentionally not defined here: production code must replace it with a tokenizer-provided assistant mask or a helper verified for the exact chat template.</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m5-c01-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m5-c01-c01-1"><a href="#lst-m5-c01-c01-1" aria-hidden="true" tabindex="-1"></a>record <span class="op">=</span> {</span>
 <span id="lst-m5-c01-c01-2"><a href="#lst-m5-c01-c01-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"messages"</span>: [</span>
 <span id="lst-m5-c01-c01-3"><a href="#lst-m5-c01-c01-3" aria-hidden="true" tabindex="-1"></a>        {<span class="st">"role"</span>: <span class="st">"user"</span>,      <span class="st">"content"</span>: <span class="st">"Explain why a test failed."</span>},</span>
@@ -484,7 +484,7 @@ Figure&nbsp;1.1: Result feedback closes the LLM action loop (Session 1, PDF p.&n
 <span id="lst-m5-c01-c01-17"><a href="#lst-m5-c01-c01-17" aria-hidden="true" tabindex="-1"></a>labels[:, :assistant_start]  <span class="op">=</span> <span class="op">-</span><span class="dv">100</span>              <span class="co"># context: ignore in loss</span></span>
 <span id="lst-m5-c01-c01-18"><a href="#lst-m5-c01-c01-18" aria-hidden="true" tabindex="-1"></a>batch[<span class="st">"labels"</span>]              <span class="op">=</span> labels             <span class="co"># response token IDs remain targets</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p><code>record</code> holds the role-structured text, <code>apply_chat_template</code> serializes the roles, and <code>batch["input_ids"]</code> is the token sequence consumed by the causal model. The expected invariant is that every context label before <code>assistant_start</code> equals <code>-100</code>, while assistant-token labels equal their corresponding token IDs. The excerpt prints nothing and does not perform an optimizer step. Multi-turn code must identify every assistant span and retain an assistant termination token when it is part of the desired response.</p>
-<p>The SFT objective converts one recorded answer into token-by-token training pressure. It rewards the model for assigning high probability to each demonstrated next token, so it teaches imitation before comparison or outcome quality.</p>
+<p>The SFT objective converts one recorded answer into token-by-token training pressure. It rewards the model for assigning high probability to each demonstrated next token. The update makes the demonstrated continuation more likely without comparing alternative answers or outcome quality.</p>
 <p><span id="eq-m5-c01-e04"><span class="math display">\[
 L_{\mathrm{SFT}} = -\frac{1}{|M|}\sum_{t\in M}\log\pi_{\theta}(y_t \mid x, y_{&lt;t})
 \tag{1.4}\]</span></span></p>
@@ -496,12 +496,12 @@ L_{\mathrm{SFT}} = -\frac{1}{|M|}\sum_{t\in M}\log\pi_{\theta}(y_t \mid x, y_{&l
 <li><strong><span class="math inline">\(y_t\)</span> and <span class="math inline">\(y_{&lt;t}\)</span>:</strong> Demonstrated token at <span class="math inline">\(t\)</span> and its earlier demonstrated prefix.</li>
 <li><strong><span class="math inline">\(\pi_\theta\)</span>:</strong> Trainable next-token policy.</li>
 </ul>
-<p><strong>Mechanism:</strong> The condition <span class="math inline">\(t\in M\)</span> excludes tokens outside assistant spans; an assistant termination token remains a target when it is part of the desired response. The sum adds negative log-probability for each retained token, and division by <span class="math inline">\(|M|\)</span> gives a mean. <strong>Interpretation:</strong> Increase probability of the recorded continuation. The equation cannot rank a second plausible whole answer by itself. <strong>Scale:</strong> Because the loss uses the natural logarithm and averages over target positions, report it in nats per target token. <strong>Limit:</strong> If <span class="math inline">\(|M|=0\)</span> because truncation or a malformed template leaves no assistant tokens, the mean is undefined. Filter that record or batch before calculating the loss.</p>
+<p><strong>Mechanism:</strong> The condition <span class="math inline">\(t\in M\)</span> excludes tokens outside assistant spans. An assistant termination token remains a target when it is part of the desired response. The sum adds negative log-probability for each retained token, and division by <span class="math inline">\(|M|\)</span> gives a mean. <strong>Interpretation:</strong> Increase probability of the recorded continuation. The equation cannot rank a second plausible whole answer by itself. <strong>Scale:</strong> Because the loss uses the natural logarithm and averages over target positions, report it in nats per target token. <strong>Limit:</strong> If <span class="math inline">\(|M|=0\)</span> because truncation or a malformed template leaves no assistant tokens, the mean is undefined. Filter that record or batch before calculating the loss.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: SFT token-loss arithmetic</strong></p>
 <p>A recorded answer contains three target token positions. The policy currently assigns the recorded IDs probabilities 0.80, 0.50, and 0.25 at those positions.</p>
 <p><strong>Inputs and measurement</strong></p>
-<p>The tokenizer supplies the known target IDs. One policy forward pass returns logits at every target position; log-softmax and gather return the selected-token log probabilities. Exponentiation gives the three probabilities used here.</p>
+<p>The tokenizer supplies the known target IDs. One policy forward pass returns logits at every target position. Log-softmax and gather return the selected-token log probabilities. Exponentiation gives the three probabilities used here.</p>
 <p><strong>Calculation</strong></p>
 <ol type="1">
 <li><strong>Calculation:</strong> <span class="math inline">\(-\log(0.80)=0.223\)</span>; <span class="math inline">\(-\log(0.50)=0.693\)</span>; <span class="math inline">\(-\log(0.25)=1.386\)</span>; mean loss <span class="math inline">\(=(0.223+0.693+1.386)/3=0.767\)</span> nats per target token.</li>
@@ -510,7 +510,7 @@ L_{\mathrm{SFT}} = -\frac{1}{|M|}\sum_{t\in M}\log\pi_{\theta}(y_t \mid x, y_{&l
 </div>
 <ul>
 <li><p><strong>Imitation, not ranking:</strong> The loss is a supervised correction signal attached to the exact demonstrated token sequence, not a quality score for free-form answers. If two answers are both acceptable but only one appears in the dataset, SFT receives no direct evidence that the other should be ranked below it. Preference evidence adds that comparison through a direct preference objective.</p></li>
-<li><p><strong>Preference evidence:</strong> Suppose a prompt asks for a Python function. An SFT example may demonstrate one correct implementation. A preference pair can additionally identify that a second response is preferred because it validates input, has the requested signature, and explains complexity. SFT raises probability for the demonstration; preference optimization raises the relative probability of the chosen answer over the rejected answer. The pair therefore identifies which answer better satisfies the requested constraints.</p></li>
+<li><p><strong>Preference evidence:</strong> Suppose a user requests a Python function. An SFT example may demonstrate one correct implementation. A preference pair can show that a second response is preferred because it validates input, has the requested signature, and explains complexity. SFT raises the probability of the demonstration. Preference optimization raises the chosen answer’s probability relative to the rejected answer. The pair identifies which answer better meets the requested constraints.</p></li>
 </ul>
 <p>SFT is a good fit when trusted demonstrations directly show the required response format and behavior. It raises the probability of those demonstrated assistant tokens, but it does not rank alternative answers or score newly generated attempts. The resulting checkpoint can be deployed as-is or used as the reference or starting policy for another method when the task has additional feedback.</p>
 
