@@ -111,6 +111,35 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   }
 }</script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 <link rel="stylesheet" href="../styles.css">
 </head>
@@ -284,15 +313,30 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </header>
 
 
+<div class="publisher-purpose">
 <p>The earlier chapters connected each training method to the feedback it can use: demonstrated answers, preference pairs, scores for fresh attempts, and checks on results or tool actions. A project may have only some of that feedback. The training method must fit both the available data and the behavior the model needs to improve; the final choice is tested by comparing saved models under the same evaluation procedure.</p>
+</div>
+<p>The earlier chapters connected each training method to the feedback it can use: demonstrated answers, preference pairs, scores for fresh attempts, and checks on results or tool actions. A project may have only some of that feedback. The training method must fit both the available data and the behavior the model needs to improve. The final choice is tested by comparing saved models under the same evaluation procedure.</p>
 <p>Begin with the least complex training loop that can use the evidence already available. Add online generation only when new model behavior must be explored and can be scored reliably.</p>
+<p>Choosing a training method and accepting a trained model are separate decisions. The first uses the feedback a project can collect; the second uses results from a fixed, independent evaluation.</p>
+<div id="fig-m5-c06-map" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Two numbered regions: 6.1 matches demonstrations, preference pairs, or scored fresh attempts to suitable methods; 6.2 compares saved checkpoints on held-out tasks and accepts a candidate or retains the previous model.">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m5-c06-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../assets/fig-m5-c06-map.png" class="img-fluid figure-img" style="width:6.35in" alt="Two numbered regions: 6.1 matches demonstrations, preference pairs, or scored fresh attempts to suitable methods; 6.2 compares saved checkpoints on held-out tasks and accepts a candidate or retains the previous model.">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m5-c06-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6.1: Available feedback selects the method; held-out results select the model.
+</figcaption>
+</figure>
+</div>
+<p>The three branches in Section 6.1 are alternatives, not required stages. Section 6.2 records task results, cost, and failure details under the same evaluation procedure. Its symbols illustrate the records to collect, not measured performance rankings. A candidate replaces the previous model only when the acceptance criteria are met.</p>
 <section id="sec-m5-c06-s01" class="level2" data-number="6.1">
 <h2 data-number="6.1" class="anchored" data-anchor-id="sec-m5-c06-s01"><span class="header-section-number">6.1</span> Matching the method to the feedback</h2>
-<p>The methods differ first by the feedback available for training. A set of demonstrated answers can support SFT; saved rankings can support DPO; a reliable way to score newly generated answers can support online reinforcement learning. A project does not have to pass through every method. The question is which training loop can use its feedback and improve the target behavior at an acceptable cost.</p>
+<p>The methods differ first by the feedback available for training. A set of demonstrated answers can support SFT. Saved rankings can support DPO. A reliable way to score newly generated answers can support online reinforcement learning. A project does not have to pass through every method. The question is which training loop can use its feedback and improve the target behavior at an acceptable cost.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Training feedback:</strong></span> The information used to judge an update: a demonstrated answer, a relative ranking, a score for a fresh attempt, or checks on an interaction. These are different kinds of evidence, not mandatory steps in a single training pipeline.</li>
 </ul>
-<p>The decision table separates the available evidence, the training setup that can use it, and the optimizer that applies the update. This prevents a feedback source such as a verifier from being mistaken for an update rule such as PPO or GRPO.</p>
+<p>The decision table separates the available evidence, the training setup that can use it, and the method for calculating an update. SFT, DPO, PPO, and GRPO define different training calculations. An optimizer, such as AdamW, applies the resulting parameter changes. A verifier supplies feedback to one of those calculations.</p>
 <div id="tbl-m5-c06-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m5-c06-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -329,9 +373,9 @@ Table&nbsp;6.1: Evidence selects the training setup.
 </tr>
 <tr class="odd">
 <td>A trusted scorer for fresh outputs</td>
-<td>Online RLHF</td>
-<td>PPO</td>
-<td>Explore new behavior with a learned or human-derived score.</td>
+<td>Online RL; RLHF when the reward reflects human feedback</td>
+<td>PPO or GRPO</td>
+<td>Explore new behavior using a reliable reward for each attempt.</td>
 </tr>
 <tr class="even">
 <td>Reliable tests or exact outcomes</td>
@@ -350,8 +394,8 @@ Table&nbsp;6.1: Evidence selects the training setup.
 </div>
 </figure>
 </div>
-<p>For example, demonstrations alone do not supply PPO with a reward for an arbitrary new answer; an additional scorer or rule would be needed. A reliable test suite can supply that reward directly, without first training a preference model. The table therefore separates the feedback source, such as a verifier, from the update rule, such as PPO or GRPO.</p>
-<p>The method may change as the feedback changes. A project can start with SFT to establish the task format, add DPO when it collects reliable chosen/rejected comparisons, and move to PPO or GRPO only when it can score fresh generated behavior. For a testable coding or math task, an RLVR verifier can often replace subjective scoring; for tool use, the environment must also provide the next observation and enforce action limits.</p>
+<p>For example, demonstrations alone do not supply PPO with a reward for an arbitrary new answer. An additional scorer or rule would be needed. A reliable test suite can supply that reward directly, without first training a preference model. The table therefore separates the feedback source, such as a verifier, from the update rule, such as PPO or GRPO.</p>
+<p>The method may change as the feedback changes. A project can start with SFT to establish the task format, add DPO when it collects reliable chosen/rejected comparisons, and move to PPO or GRPO only when it can score fresh generated behavior. For a testable coding or math task, an RLVR verifier can often replace subjective scoring. For tool use, the environment must also provide the next observation and enforce action limits.</p>
 </section>
 <section id="sec-m5-c06-s02" class="level2" data-number="6.2">
 <h2 data-number="6.2" class="anchored" data-anchor-id="sec-m5-c06-s02"><span class="header-section-number">6.2</span> Comparing models on held-out tasks</h2>
@@ -360,7 +404,8 @@ Table&nbsp;6.1: Evidence selects the training setup.
 <li><p><strong>Evaluation must match the target behavior:</strong> Training curves alone are not evidence of improvement. For SFT, inspect held-out likelihood and task generations. For DPO, monitor preference accuracy and reward margin on held-out pairs. For PPO and GRPO, report reward, KL or clipping diagnostics where applicable, and performance on independent evaluators. For RLVR and agents, use held-out tests, adversarial cases, tool-cost measures, and failure-recovery evaluation.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>Evaluation procedure:</strong></span> The fixed prompt split, generation settings, evaluator, cost measurements, and acceptance rules used to compare checkpoints. It remains separate from the training reward so the method cannot define its own success test.</p></li>
 </ul>
-<p>Keep evaluation prompts disjoint from training and report both average performance and failure categories; otherwise a higher reward can hide regressions in safety, latency, cost, or capability retention. Compare the same base, SFT, DPO, and online-RL checkpoints under the same generation budget so the method, rather than a changed sampler, receives credit.</p>
+<p>Keep evaluation prompts disjoint from fine-tuning data, including related answers, preference pairs, and near-duplicate tasks, and report both average performance and failure categories. Otherwise a higher reward can hide regressions in safety, latency, cost, or capability retention. Compare the same base, SFT, DPO, and online-RL checkpoints under the same generation budget so the method, rather than a changed sampler, receives credit.</p>
+<p>That split does not establish whether the base model saw benchmark questions during pretraining. <span class="definition-term" data-custom-style="Definition Term"><strong>Benchmark contamination</strong></span> occurs when test material, or a close version of it, appears in training data, so a high score may reflect prior exposure. If the pretraining corpus is unavailable, that exposure is unknown. Report the fine-tuning split and duplicate-removal rules, which training data could be inspected, and what overlap checks found. A clean fine-tuning split does not establish a clean pretraining history. Simple string matching can miss rephrased overlap, as a <a href="https://arxiv.org/abs/2311.04850">contamination study</a> shows.</p>
 <p>Compare methods and checkpoints with five practical questions.</p>
 <ul>
 <li><p><strong>Feedback:</strong> Is the training signal trustworthy for the target behavior?</p></li>
@@ -369,9 +414,10 @@ Table&nbsp;6.1: Evidence selects the training setup.
 <li><p><strong>Recovery:</strong> Can the update be rolled back if behavior regresses?</p></li>
 <li><p><strong>Exploitation:</strong> Can the model exploit the scorer, verifier, or tools?</p></li>
 </ul>
-<p>SFT and DPO remain offline and are relatively easy to repeat. PPO and GRPO add exploration but require rollout systems and drift monitoring. RLVR and agentic RL reduce subjective scoring only when their verifiers and environments are carefully maintained.</p>
+<p>The saved-data SFT and DPO workflows are relatively easy to repeat. Online DPO, PPO, and GRPO add exploration but require generation and scoring systems. RLVR and agentic RL reduce subjective scoring only when their verifiers and environments are carefully maintained.</p>
 <p><strong>Code 6.1. One held-out loop compares checkpoints under fixed settings.</strong></p>
-<p>This is <strong>evaluation pseudocode</strong>. It assumes implementations of task loading, generation, scoring, failure classification, and reporting, plus already loaded models. <code>generate</code> returns both text outputs and measured run statistics; the evaluator receives the tasks as well as the outputs so it can compare each answer with the correct requirement. Expected output is one report per checkpoint with per-task results, measured cost, and grouped failures. No particular improvement is implied by this example.</p>
+<p>This is <strong>evaluation pseudocode</strong>. It assumes implementations of task loading, generation, scoring, failure classification, and reporting, plus already loaded models. <code>generate</code> returns both text outputs and measured run statistics. The evaluator receives the tasks as well as the outputs so it can compare each answer with the correct requirement. Expected output is one report per checkpoint with per-task results, measured cost, and grouped failures. The example does not claim that any checkpoint improved.</p>
+<p>The loop scores fixed checkpoints and does not update their parameters.</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m5-c06-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m5-c06-c01-1"><a href="#lst-m5-c06-c01-1" aria-hidden="true" tabindex="-1"></a>evaluation_items <span class="op">=</span> load_held_out_tasks(split<span class="op">=</span><span class="st">"evaluation"</span>)</span>
 <span id="lst-m5-c06-c01-2"><a href="#lst-m5-c06-c01-2" aria-hidden="true" tabindex="-1"></a>checkpoints      <span class="op">=</span> {<span class="st">"base"</span>: base_model, <span class="st">"sft"</span>: sft_model, <span class="st">"dpo"</span>: dpo_model}</span>
 <span id="lst-m5-c06-c01-3"><a href="#lst-m5-c06-c01-3" aria-hidden="true" tabindex="-1"></a>generation_cfg   <span class="op">=</span> GenerationConfig(max_new_tokens<span class="op">=</span><span class="dv">256</span>, do_sample<span class="op">=</span><span class="va">False</span>)</span>
@@ -385,7 +431,7 @@ Table&nbsp;6.1: Evidence selects the training setup.
 <span id="lst-m5-c06-c01-11"><a href="#lst-m5-c06-c01-11" aria-hidden="true" tabindex="-1"></a>        cost     <span class="op">=</span> run_stats,</span>
 <span id="lst-m5-c06-c01-12"><a href="#lst-m5-c06-c01-12" aria-hidden="true" tabindex="-1"></a>        failures <span class="op">=</span> classify_failures(outputs, results),</span>
 <span id="lst-m5-c06-c01-13"><a href="#lst-m5-c06-c01-13" aria-hidden="true" tabindex="-1"></a>    )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The dictionary contains base, SFT, and DPO checkpoints as an example. A PPO- or GRPO-trained text checkpoint can be added to the same comparison if it uses the same task interface. Evaluating an agent requires an episode runner that executes tool interactions; replacing it with a single text-generation call would miss the behavior being tested.</p>
+<p>The dictionary contains base, SFT, and DPO checkpoints as an example. A PPO- or GRPO-trained text checkpoint can be added to the same comparison if it uses the same task interface. Evaluating an agent requires an episode runner that executes tool interactions. Replacing it with a single text-generation call would miss the behavior being tested.</p>
 <p>This held-out loop separates five evaluation jobs from trainer metrics.</p>
 <ul>
 <li><p><strong><code>evaluation_items</code>:</strong> Provide prompts excluded from training.</p></li>
@@ -394,11 +440,29 @@ Table&nbsp;6.1: Evidence selects the training setup.
 <li><p><strong><code>run_stats</code>:</strong> Retain measurements taken during generation, such as token counts, elapsed time, and peak memory. These cannot all be recovered from the answer strings afterward.</p></li>
 <li><p><strong><code>report</code>:</strong> Record mean results, cost, and failure categories for each checkpoint.</p></li>
 </ul>
-<p>Trainer metrics support diagnosis; acceptance depends on independent evaluation and regression checks for the intended use.</p>
+<p>For open-ended answers without a checkable result, an LLM can act as a judge only under controlled conditions. Fix the judge model revision, prompt, rubric, and decision rule. Randomize answer labels and score each pair with the answer positions swapped, then record any disagreement. A judge can favor the first position, more verbose answers, or answers from its own model family. Validate the judging procedure against blinded human ratings or a checkable subset before using it for an acceptance decision. <a href="https://arxiv.org/abs/2306.05685">MT-Bench and Chatbot Arena</a> document these biases and compare judge decisions with human preferences.</p>
+<p>For a task with an executable or otherwise reliable check, <a href="https://arxiv.org/abs/2107.03374">HumanEval</a> illustrates a different question: how often can sampling find a correct answer? For one task, <strong><code>pass@k</code></strong> is the probability that at least one of <span class="math inline">\(k\)</span> sampled answers passes. A benchmark reports an estimate averaged across its tasks. <strong><code>pass@1</code></strong> uses one answer per attempt. Fix decoding settings, <span class="math inline">\(k\)</span>, and the total generation budget before comparing checkpoints. These metrics measure success within a sampling budget, not whether the model’s confidence matches its accuracy. Evaluation sample count <span class="math inline">\(k\)</span> and GRPO training group size <span class="math inline">\(G\)</span> are separate choices, even when their numerical values happen to match.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: reading <code>pass@1</code> and <code>pass@3</code></strong></p>
+<p>A coding task has a reliable test suite. Under one fixed prompt and sampling setup, suppose each independent answer has a 20% chance of passing. With one answer, <code>pass@1</code> is 20%. With three answers, the chance that none passes is <span class="math inline">\((1 - 0.20)^3 = 51.2\%\)</span>, so the chance that at least one passes is <span class="math inline">\(1 - 51.2\% = 48.8\%\)</span>.</p>
+<p>The evaluator records the three samples, the same decoding settings, and the total token and computation budget for all three. A deployed system that returns one untested answer cannot use this result to know that its chosen answer is correct. It needs the test suite or another reliable selector.</p>
+<p><strong>Conclusion:</strong> <code>pass@3</code> describes an opportunity to find a correct answer within a stated sampling budget. It is not evidence that a three-sample deployment will select the correct answer without a selector.</p>
+</div>
+<p>Trainer metrics support diagnosis. Acceptance depends on independent evaluation and regression checks for the intended use.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: choosing a coding checkpoint</strong></p>
+<p>An application currently uses an SFT checkpoint and is considering a DPO candidate. This is evaluation: both saved models stay fixed. Each answers the same 100 held-out coding tasks using greedy decoding and a limit of 256 new tokens. Separate tests determine whether each answer solves its task. The acceptance rule requires improved correctness, no failed safety check, and a median answer length of at most 140 tokens to keep response cost within the chosen budget.</p>
+<ol type="1">
+<li>The current SFT checkpoint passes 78 tasks, fails no safety checks, and uses a median of 110 tokens per answer.</li>
+<li>The DPO candidate passes 82 tasks and fails no safety checks, but its median answer length is 150 tokens.</li>
+<li>The candidate solves four additional tasks, yet exceeds the length limit by ten tokens. The evaluator records both results and retains the current SFT checkpoint.</li>
+</ol>
+<p><strong>Conclusion:</strong> Better correctness alone does not satisfy the stated acceptance rule. The next experiment should investigate the longer answers and repeat the comparison with the same reserved evaluation procedure. These numbers illustrate the decision process. They are not measured course results. In a real comparison, paired per-task results, uncertainty, and repeated-run variation are needed before attributing a small difference to training.</p>
+</div>
 <ul>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>SFT acceptance:</strong></span> Held-out likelihood and task generations improve without copying the prompt or losing the required format.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>DPO acceptance:</strong></span> Implicit chosen-versus-rejected reward accuracy and target behavior improve on held-out prompts without unacceptable capability or safety regression.</p></li>
-<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>PPO/GRPO acceptance:</strong></span> Reward rises with controlled KL or clipping diagnostics and independent task performance; rollout cost and variance remain within the budget.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>PPO/GRPO acceptance:</strong></span> Reward rises with controlled KL or clipping diagnostics and independent task performance. Rollout cost and variance remain within the budget.</p></li>
 <li><p><span class="definition-term" data-custom-style="Definition Term"><strong>RLVR/agent acceptance:</strong></span> Held-out tests never used for reward, adversarial cases, action safety, recovery, latency, and tool cost satisfy the written requirements rather than only the training-verifier reward.</p></li>
 </ul>
 <p>Five records make the comparison reproducible and allow its conclusions to be checked.</p>
