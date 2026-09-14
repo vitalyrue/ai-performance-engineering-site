@@ -374,19 +374,19 @@ window.Quarto = {
 <div class="publisher-purpose">
 <p>Explain why GPU communication enters the critical path, how topology and collective algorithms shape its cost, and how to measure it.</p>
 </div>
-<p>Communication is where a single-GPU workload becomes a distributed system. The performance question is no longer only one kernel or one memory hierarchy; it is how tensors move and synchronize across processes, devices, nodes, and network fabrics.</p>
+<p>Communication is where a single-GPU workload becomes a distributed system. The performance question is no longer only one kernel or one memory hierarchy. It is how tensors move and synchronize across processes, devices, nodes, and network fabrics.</p>
 <p>The dependency begins with an object another worker process needs: a gradient bucket, parameter shard, activation, expert-routed token block, or serving state. Distributed runtimes assign each participating process an integer rank inside a process group. Payload size, frequency, destination, and readiness time determine whether startup latency, sustained bandwidth, topology distance, or waiting between ranks dominates the transfer.</p>
-<p>Communication analysis starts with the bytes that must move and the physical path they cross. Point-to-point operations and collectives define the data relationship; schedules, backend libraries, and transports implement it. Overlap and profiling then show how much of the communication remains on the critical path.</p>
+<p>Communication analysis starts with the bytes that must move and the physical path they cross. Point-to-point operations and collectives define the data relationship. Schedules, backend libraries, and transports implement it. Overlap and profiling then show how much of the communication remains on the critical path.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Process:</strong></span> An operating-system program instance. GPU jobs commonly use one process per GPU, although other mappings are possible.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Rank:</strong></span> The integer identity of one process inside a distributed group.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Process group:</strong></span> A named set of ranks that issue compatible communication operations through one selected backend.</li>
 </ul>
 <p>When ranks depend on remote tensors, communication time includes waiting, software coordination, transfer over the available fabric, and synchronization before dependent work can continue.</p>
-<div id="fig-m4-c12-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Ranks waiting for communication connect through a physical fabric and NCCL. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all use distinct data-flow drawings, followed by compute and communication overlap.">
+<div id="fig-m4-c12-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Ranks waiting for communication connect through a physical fabric and NCCL. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all use distinct data-flow drawings, followed by compute and communication overlap. Navigation key lists chapter 12 section map: 12.1 - Communication on the critical path; 12.2 - Topology and communication distance; 12.3 - Communication cost model; 12.4 - Physical communication paths; 12.5 - Point-to-point and collective communication; 12.6 - Collective primitives; 12.7 - Collective algorithms; 12.8 - Framework and communication backends; 12.9 - Communication and computation overlap; 12.10 - Profiling communication; 12.11 - Topology-aware design; 12.12 - Communication design checks.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c12-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m4-c12-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="Ranks waiting for communication connect through a physical fabric and NCCL. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all use distinct data-flow drawings, followed by compute and communication overlap.">
+<img src="../assets/fig-m4-c12-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="Ranks waiting for communication connect through a physical fabric and NCCL. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all use distinct data-flow drawings, followed by compute and communication overlap. Navigation key lists chapter 12 section map: 12.1 - Communication on the critical path; 12.2 - Topology and communication distance; 12.3 - Communication cost model; 12.4 - Physical communication paths; 12.5 - Point-to-point and collective communication; 12.6 - Collective primitives; 12.7 - Collective algorithms; 12.8 - Framework and communication backends; 12.9 - Communication and computation overlap; 12.10 - Profiling communication; 12.11 - Topology-aware design; 12.12 - Communication design checks.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c12-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;12.1: GPU communication combines software coordination, collective data relationships, and physical transport.
@@ -459,13 +459,13 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <section id="sec-m4-c12-s02" class="level2" data-number="12.2">
 <h2 data-number="12.2" class="anchored" data-anchor-id="sec-m4-c12-s02"><span class="header-section-number">12.2</span> Topology and communication distance</h2>
 <p>Scalable clusters use switched hierarchy: endpoints connect to local switches, and the fabric routes traffic through switch layers rather than requiring every device pair to have a dedicated cable.</p>
-<p>Large clusters often use hierarchical switch designs such as leaf-spine topologies. Leaf switches connect servers in a rack or local group; spine switches connect leaf groups. This provides scalable bisection bandwidth, while every extra hop adds latency and every shared link can become congested.</p>
+<p>Large clusters often use hierarchical switch designs such as leaf-spine topologies. Leaf switches connect servers in a rack or local group. Spine switches connect leaf groups. This provides scalable bisection bandwidth, while every extra hop adds latency and every shared link can become congested.</p>
 <p>A direct full mesh is the contrasting limit: every device connects to every other device. Port and cable demand grows rapidly with device count, which is why large systems use switched hierarchy instead.</p>
 <p>Scale-up communication stays inside a tightly coupled accelerator domain with fast GPU-to-GPU paths. That domain is often one server, but rack-scale NVLink systems can join GPUs across more than one compute tray or node. Scale-out communication crosses the cluster network through network interface cards (NICs) and fabrics such as InfiniBand, RDMA over Converged Ethernet (RoCE), or Ethernet. Frequent latency-sensitive traffic such as tensor-parallel collectives should remain inside the fastest available scale-up domain whenever possible.</p>
 <p><span id="eq-m4-c12-e02"><span class="math display">\[
 \text{full-mesh links} = \frac{N(N - 1)}{2}
 \tag{12.2}\]</span></span></p>
-<p>A full mesh among N endpoints needs N(N - 1)/2 undirected links, so direct wiring grows quadratically. Leaf-spine and related Clos fabrics replace those dedicated pairwise links with shared switch paths. A host-to-host path can be counted by switches or by physical links; state the convention before describing a path as a particular number of hops.</p>
+<p>A full mesh among N endpoints needs N(N - 1)/2 undirected links, so direct wiring grows quadratically. Leaf-spine and related Clos fabrics replace those dedicated pairwise links with shared switch paths. A host-to-host path can be counted by switches or by physical links. State the convention before describing a path as a particular number of hops.</p>
 </section>
 <section id="sec-m4-c12-s03" class="level2" data-number="12.3">
 <h2 data-number="12.3" class="anchored" data-anchor-id="sec-m4-c12-s03"><span class="header-section-number">12.3</span> Communication cost model</h2>
@@ -483,12 +483,13 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>InfiniBand:</strong></span> High-performance cluster fabric commonly used for multi-node training and GPU collectives through RDMA-capable networking.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>RoCE:</strong></span> RDMA over Converged Ethernet. It can support high-performance cluster communication, but performance depends strongly on network configuration, congestion control, and lossless or near-lossless behavior.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Ethernet:</strong></span> General-purpose network fabric. It is flexible and common, but standard Ethernet paths are often a poor fit for frequent latency-sensitive GPU collectives unless engineered specifically for that workload.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>GPUDirect RDMA:</strong></span> Lets a compatible NIC directly access GPU memory over PCIe instead of staging the payload through host memory. The CPU still prepares and submits the communication. Direct access removes a copy path, not all CPU coordination, and it requires compatible GPU, NIC, driver, PCIe topology, and IOMMU settings. An unsupported or poorly connected path can fall back to host staging or perform badly.</li>
 </ul>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Fabric caveat</strong></p>
 <p>A fabric name is only the starting point for a performance estimate. Effective bandwidth depends on topology, routing, contention, message size, collective algorithm, and whether the software stack actually uses the intended path.</p>
 </div>
-<p>The critical distinction is local versus remote path. Frequent per-layer traffic is most viable inside a fast GPU fabric; cross-node traffic additionally traverses a GPU-to-NIC path, a network interface, switches, and the destination path. Product names and peak bandwidth figures are generation-specific, so verify the installed topology and achieved transfer rate rather than copying a nominal number.</p>
+<p>The critical distinction is local versus remote path. Frequent per-layer traffic is most viable inside a fast GPU fabric. Cross-node traffic additionally traverses a GPU-to-NIC path, a network interface, switches, and the destination path. Product names and peak bandwidth figures are generation-specific, so verify the installed topology and achieved transfer rate rather than copying a nominal number.</p>
 </section>
 <section id="sec-m4-c12-s05" class="level2" data-number="12.5">
 <h2 data-number="12.5" class="anchored" data-anchor-id="sec-m4-c12-s05"><span class="header-section-number">12.5</span> Point-to-point and collective communication</h2>
@@ -499,21 +500,21 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Ordering requirement:</strong></span> Ranks must call compatible collectives in compatible order. Mismatched ordering can hang or corrupt the distributed program.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Engineering trade-off:</strong></span> Point-to-point communication can be flexible but harder to reason about globally. Collectives are structured and optimized, but they create synchronization points.</li>
 </ul>
-<p>The semantics define who participates and which ranks receive results; they do not prescribe a central coordinator or physical traffic path. The next section names the common group transformations before their ring, tree, or hierarchical implementations are considered.</p>
+<p>The semantics define who participates and which ranks receive results. They do not prescribe a central coordinator or physical traffic path. The next section names the common group transformations before their ring, tree, or hierarchical implementations are considered.</p>
 </section>
 <section id="sec-m4-c12-s06" class="level2" data-number="12.6">
 <h2 data-number="12.6" class="anchored" data-anchor-id="sec-m4-c12-s06"><span class="header-section-number">12.6</span> Collective primitives</h2>
 <p>A collective operation is a group communication primitive used by strategies such as DDP, FSDP, tensor parallelism, and expert parallelism to move their required tensors.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Broadcast:</strong></span> One source rank sends the same tensor to every other rank. It copies a source value and is commonly used to initialize or synchronize parameters.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Reduce:</strong></span> Many ranks contribute tensors that are combined on one destination rank. The destination receives the aggregate; custom aggregation paths use this ownership pattern.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Reduce:</strong></span> Many ranks contribute tensors that are combined on one destination rank. The destination receives the aggregate. Custom aggregation paths use this ownership pattern.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>All-reduce:</strong></span> All ranks contribute tensors, the tensors are reduced, and every rank receives the reduced result. DDP uses it for gradient synchronization and pays both reduction and redistribution traffic.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>All-gather:</strong></span> Each rank starts with a shard, and all ranks receive the full collection of shards. Materializing sharded parameters or activations creates a full temporary result on every participant.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Reduce-scatter:</strong></span> Ranks reduce tensors and each rank receives one shard of the reduced result. FSDP and sharded optimizer paths use its combined reduction and partitioning behavior.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>All-to-all:</strong></span> Every rank sends a different slice to every other rank and receives different slices back. Expert-parallel token routing uses this latency- and topology-sensitive exchange.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>All-to-all:</strong></span> Every rank sends a different slice to every other rank and receives different slices back. Expert-parallel token routing uses this latency-sensitive and topology-sensitive exchange.</li>
 </ul>
 <p>Expert-parallel all-to-all cost comes from routing token representations, not from the expert MLP arithmetic alone. A rough payload estimate is the number of routed token copies times hidden dimension times bytes per element, split across destination ranks. Top-k routing multiplies token traffic because one token may be sent to more than one expert.</p>
-<p>Read the payload estimate through these five cost objects:</p>
+<p>The payload estimate uses these five cost objects:</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Routed tokens:</strong></span> Tokens assigned from each rank to remote expert ranks. Router imbalance creates tail latency when one expert or rank receives too much work.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Top-k multiplier:</strong></span> The number of experts selected per token. Top-2 routing can roughly double routed activation traffic before outputs are combined.</li>
@@ -524,15 +525,15 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <p><span id="eq-m4-c12-e03"><span class="math display">\[
 \text{ring all-reduce bytes sent per rank} \approx \frac{2(N - 1)}{N} \times \text{tensor}_{\text{bytes}}
 \tag{12.3}\]</span></span></p>
-<p>Here N is the number of ranks and tensor_bytes is the size of the tensor being reduced. Under the standard ring model, each rank sends approximately this many payload bytes across reduce-scatter and all-gather and receives the same amount. With 8 ranks and a 1 GiB tensor, the per-rank sent payload is 1.75 GiB; a send-plus-receive accounting convention would report 3.5 GiB. State the convention before converting traffic to bandwidth. The approximation omits latency per chunk, topology, protocol overhead, and overlap with backward computation.</p>
+<p>Here N is the number of ranks and tensor_bytes is the size of the tensor being reduced. Under the standard ring model, each rank sends approximately this many payload bytes across reduce-scatter and all-gather and receives the same amount. With 8 ranks and a 1 GiB tensor, the per-rank sent payload is 1.75 GiB. A send-plus-receive accounting convention would report 3.5 GiB. State the convention before converting traffic to bandwidth. The approximation omits latency per chunk, topology, protocol overhead, and overlap with backward computation.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Worked calculation - ring all-reduce traffic</strong></p>
 <p><strong>Inputs:</strong> Use N = 8 ranks and tensor_bytes = 1 GiB for one all-reduce payload.</p>
-<p><strong>Substitution:</strong> 2 x (8 - 1) / 8 x 1 GiB = 1.75 GiB sent by each rank across reduce-scatter and all-gather; each rank also receives about 1.75 GiB.</p>
+<p><strong>Substitution:</strong> 2 x (8 - 1) / 8 x 1 GiB = 1.75 GiB sent by each rank across reduce-scatter and all-gather. Each rank also receives about 1.75 GiB.</p>
 <p><strong>Meaning:</strong> The estimate uses a per-rank bytes-sent convention and describes payload traffic, not elapsed time. Link latency, chunking, topology, protocol overhead, rank skew, and overlap determine the measured duration.</p>
 <p><strong>Next measurement:</strong> Compare the estimate with NCCL traces and the actual interconnect path before changing bucket size or rank placement.</p>
 </div>
-<p>A ring all-reduce commonly implements a reduce-scatter phase followed by an all-gather phase over chunked tensors. Merely drawing ranks in a circle does not demonstrate those phases; verify the actual schedule or trace before using a ring-topology picture as algorithm evidence.</p>
+<p>A ring all-reduce commonly implements a reduce-scatter phase followed by an all-gather phase over chunked tensors. Merely drawing ranks in a circle does not demonstrate those phases. Verify the actual schedule or trace before using a ring-topology picture as algorithm evidence.</p>
 <p>Collective names specify before-and-after tensor ownership. Their measured cost still depends on the backend’s chosen schedule, chunking, topology, rank readiness, and overlap.</p>
 </section>
 <section id="sec-m4-c12-s07" class="level2" data-number="12.7">
@@ -544,7 +545,7 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Hierarchical collective:</strong></span> Communicates inside a fast scale-up domain first, then across slower domains, then inside the destination scale-up domain. This matches systems where NVLink/NVSwitch and InfiniBand/RoCE have different costs.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Topology awareness:</strong></span> Chooses or tunes the schedule using the actual device, switch, and network layout rather than treating every rank pair as equally expensive.</li>
 </ul>
-<p>A hierarchical schedule performs local aggregation inside a fast GPU island, exchanges reduced data across the slower inter-node path, and then distributes the result locally. A tree schedule is a different branching reduction and distribution algorithm; a two-node hierarchy should not be labeled as a tree unless the branching parent-child structure is actually shown.</p>
+<p>A hierarchical schedule performs local aggregation inside a fast GPU island, exchanges reduced data across the slower inter-node path, and then distributes the result locally. A tree schedule is a different branching reduction and distribution algorithm. A two-node hierarchy should not be labeled as a tree unless the branching parent-child structure is actually shown.</p>
 </section>
 <section id="sec-m4-c12-s08" class="level2" data-number="12.8">
 <h2 data-number="12.8" class="anchored" data-anchor-id="sec-m4-c12-s08"><span class="header-section-number">12.8</span> Framework and communication backends</h2>
@@ -552,7 +553,7 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong><code>torch.distributed</code>:</strong></span> The PyTorch API for initializing process groups, assigning rank identities, and issuing point-to-point or collective operations.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Backend:</strong></span> The implementation selected by a process group to execute its communication operations, such as NCCL for many CUDA tensor collectives or Gloo for common CPU/control paths.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Strategy boundary:</strong></span> DDP, FSDP, tensor parallelism, pipeline parallelism, and expert parallelism decide which objects and operations are required; the API and backend execute those requests.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Strategy boundary:</strong></span> DDP, FSDP, tensor parallelism, pipeline parallelism, and expert parallelism decide which objects and operations are required. The API and backend execute those requests.</li>
 </ul>
 <p>Backends do not all occupy one interchangeable role. NCCL is commonly selected for CUDA tensor collectives on NVIDIA GPUs. Gloo is commonly used for CPU tensors and control-oriented paths. Message Passing Interface (MPI) implementations provide broader HPC process and communication facilities. Unified Communication X (UCX) exposes transport abstractions used by several distributed-runtime stacks. Compatibility depends on the framework build, tensor location, operation, platform, and deployment configuration.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
@@ -566,7 +567,7 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Transport:</strong></span> The path used underneath the collective, such as peer-to-peer GPU links, PCIe, shared memory, sockets, InfiniBand, or RoCE depending on the system.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>NCCL logs:</strong></span> <code>NCCL_DEBUG=INFO</code> and related settings expose backend decisions. Logs are diagnostic evidence, not proof of achieved performance by themselves.</li>
 </ul>
-<p>Communication controls are read by processes at initialization. <code>CUDA_VISIBLE_DEVICES</code> changes visible devices and local numbering; <code>NCCL_SOCKET_IFNAME</code> selects socket interfaces; <code>NCCL_IB_DISABLE</code> and <code>NCCL_P2P_DISABLE</code> are diagnostic path toggles. These controls can test routing hypotheses, but they do not choose the model’s sharding strategy or prove that the enabled path reaches peak throughput.</p>
+<p>Communication controls are read by processes at initialization. <code>CUDA_VISIBLE_DEVICES</code> changes visible devices and local numbering. <code>NCCL_SOCKET_IFNAME</code> selects socket interfaces. <code>NCCL_IB_DISABLE</code> and <code>NCCL_P2P_DISABLE</code> are diagnostic path toggles. These controls can test routing hypotheses, but they do not choose the model’s sharding strategy or prove that the enabled path reaches peak throughput.</p>
 <p>A useful debugging question is: did the framework request the intended collective, did NCCL select the intended transport, and did the measured trace show that the collective was on the critical path?</p>
 <p>This ownership chain prevents a common diagnostic error: changing a framework strategy when the wrong network interface was selected, or changing a transport variable when the strategy itself communicates too often for the topology.</p>
 </section>
@@ -581,53 +582,62 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Serving limits:</strong></span> Decode has a short per-token critical path, so communication in tensor-parallel serving can be visible even when training overlap looks good.</li>
 </ul>
 <p>Overlap works only when there is independent computation available while communication runs. If the next layer or token needs the communicated result immediately, the communication remains exposed.</p>
-<p>Adjacent compute and collective blocks do not prove overlap. Align the compute and communication lanes, then inspect the end-to-end critical path: if a shorter collective would shorten the step, its remaining tail is exposed; otherwise independent computation has hidden it.</p>
+<p>Adjacent compute and collective blocks do not prove overlap. Aligned compute and communication lanes expose the end-to-end critical path: if a shorter collective would shorten the step, its remaining tail is exposed. Otherwise, independent computation has hidden it.</p>
 </section>
 <section id="sec-m4-c12-s10" class="level2" data-number="12.10">
 <h2 data-number="12.10" class="anchored" data-anchor-id="sec-m4-c12-s10"><span class="header-section-number">12.10</span> Profiling communication</h2>
 <p>Communication profiling asks where time is lost when ranks exchange tensors. The evidence can come from several layers: the framework call such as <code>dist.all_reduce</code>, the NCCL backend that chooses a collective algorithm and transport, the GPU timeline that shows copy or collective kernels, the network fabric that carries bytes between nodes, and the rank synchronization behavior that makes fast ranks wait for slow ranks.</p>
 <p>When communication is suspected, a dedicated distributed harness separates the collective from model computation. The template below warms the operation, measures repeated all-reduces on every rank, reports the slowest rank’s mean time, and converts the ring traffic estimate into an effective per-rank payload rate.</p>
-<p><strong>Example: NCCL collective timing probe.</strong> This distributed probe shows the objects involved in a simple all-reduce: process group, rank-assigned GPU, tensor payload, synchronization, and elapsed time. Launch it with <code>torchrun</code> across the intended number of GPUs.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: NCCL collective timing probe</strong></p>
+<p>This distributed probe shows the objects involved in a simple all-reduce: process group, rank-assigned GPU, tensor payload, synchronization, and elapsed time. It is launched with <code>torchrun</code> across the intended number of GPUs. Each warmup and timed all-reduce starts from a known payload value. Finite values and the expected world-size sum are checked outside the recorded timing intervals.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> NCCL collective timing probe</p>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c12-c01"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="lst-m4-c12-c01-1"><a href="#lst-m4-c12-c01-1" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> os</span>
-<span id="lst-m4-c12-c01-2"><a href="#lst-m4-c12-c01-2" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> torch</span>
-<span id="lst-m4-c12-c01-3"><a href="#lst-m4-c12-c01-3" aria-hidden="true" tabindex="-1"></a><span class="ex">import</span> torch.distributed as dist</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c12-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c12-c01-1"><a href="#lst-m4-c12-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="lst-m4-c12-c01-2"><a href="#lst-m4-c12-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c12-c01-3"><a href="#lst-m4-c12-c01-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch.distributed <span class="im">as</span> dist</span>
 <span id="lst-m4-c12-c01-4"><a href="#lst-m4-c12-c01-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c12-c01-5"><a href="#lst-m4-c12-c01-5" aria-hidden="true" tabindex="-1"></a><span class="ex">dist.init_process_group</span><span class="er">(</span><span class="st">"nccl"</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-6"><a href="#lst-m4-c12-c01-6" aria-hidden="true" tabindex="-1"></a><span class="ex">try:</span></span>
-<span id="lst-m4-c12-c01-7"><a href="#lst-m4-c12-c01-7" aria-hidden="true" tabindex="-1"></a>    <span class="ex">local_rank</span> = int<span class="er">(</span><span class="ex">os.environ[</span><span class="st">"LOCAL_RANK"</span><span class="ex">]</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-8"><a href="#lst-m4-c12-c01-8" aria-hidden="true" tabindex="-1"></a>    <span class="ex">torch.cuda.set_device</span><span class="er">(</span><span class="ex">local_rank</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-9"><a href="#lst-m4-c12-c01-9" aria-hidden="true" tabindex="-1"></a>    <span class="ex">device</span> = torch.device<span class="er">(</span><span class="st">"cuda"</span><span class="ex">,</span> local_rank<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-10"><a href="#lst-m4-c12-c01-10" aria-hidden="true" tabindex="-1"></a>    <span class="ex">payload</span> = torch.zeros<span class="er">(</span><span class="ex">256</span> <span class="pp">*</span> 1024 <span class="pp">*</span> 1024, device=device, dtype=torch.float16<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-11"><a href="#lst-m4-c12-c01-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c12-c01-12"><a href="#lst-m4-c12-c01-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> range<span class="er">(</span><span class="ex">5</span><span class="kw">)</span><span class="bu">:</span></span>
-<span id="lst-m4-c12-c01-13"><a href="#lst-m4-c12-c01-13" aria-hidden="true" tabindex="-1"></a>        <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">payload,</span> op=dist.ReduceOp.SUM<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-14"><a href="#lst-m4-c12-c01-14" aria-hidden="true" tabindex="-1"></a>    <span class="fu">torch.cuda.synchronize()</span></span>
-<span id="lst-m4-c12-c01-15"><a href="#lst-m4-c12-c01-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dist.barrier()</span></span>
-<span id="lst-m4-c12-c01-16"><a href="#lst-m4-c12-c01-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c12-c01-17"><a href="#lst-m4-c12-c01-17" aria-hidden="true" tabindex="-1"></a>    <span class="ex">samples_ms</span> = []</span>
-<span id="lst-m4-c12-c01-18"><a href="#lst-m4-c12-c01-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> range<span class="er">(</span><span class="ex">20</span><span class="kw">)</span><span class="bu">:</span></span>
-<span id="lst-m4-c12-c01-19"><a href="#lst-m4-c12-c01-19" aria-hidden="true" tabindex="-1"></a>        <span class="ex">start</span> = torch.cuda.Event<span class="er">(</span><span class="va">enable_timing</span><span class="op">=</span>True<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-20"><a href="#lst-m4-c12-c01-20" aria-hidden="true" tabindex="-1"></a>        <span class="ex">stop</span> = torch.cuda.Event<span class="er">(</span><span class="va">enable_timing</span><span class="op">=</span>True<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-21"><a href="#lst-m4-c12-c01-21" aria-hidden="true" tabindex="-1"></a>        <span class="fu">start.record()</span></span>
-<span id="lst-m4-c12-c01-22"><a href="#lst-m4-c12-c01-22" aria-hidden="true" tabindex="-1"></a>        <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">payload,</span> op=dist.ReduceOp.SUM<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-23"><a href="#lst-m4-c12-c01-23" aria-hidden="true" tabindex="-1"></a>        <span class="fu">stop.record()</span></span>
-<span id="lst-m4-c12-c01-24"><a href="#lst-m4-c12-c01-24" aria-hidden="true" tabindex="-1"></a>        <span class="fu">stop.synchronize()</span></span>
-<span id="lst-m4-c12-c01-25"><a href="#lst-m4-c12-c01-25" aria-hidden="true" tabindex="-1"></a>        <span class="ex">samples_ms.append</span><span class="er">(</span><span class="ex">start.elapsed_time</span><span class="er">(</span><span class="ex">stop</span><span class="kw">))</span></span>
-<span id="lst-m4-c12-c01-26"><a href="#lst-m4-c12-c01-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c12-c01-27"><a href="#lst-m4-c12-c01-27" aria-hidden="true" tabindex="-1"></a>    <span class="ex">mean_ms</span> = torch.tensor<span class="er">(</span><span class="fu">sum</span><span class="er">(</span><span class="ex">samples_ms</span><span class="kw">)</span> <span class="ex">/</span> len<span class="er">(</span><span class="ex">samples_ms</span><span class="kw">)</span><span class="ex">,</span> device=device<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-28"><a href="#lst-m4-c12-c01-28" aria-hidden="true" tabindex="-1"></a>    <span class="ex">dist.all_reduce</span><span class="er">(</span><span class="ex">mean_ms,</span> op=dist.ReduceOp.MAX<span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-29"><a href="#lst-m4-c12-c01-29" aria-hidden="true" tabindex="-1"></a>    <span class="ex">world</span> = dist.get_world_size<span class="er">(</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-30"><a href="#lst-m4-c12-c01-30" aria-hidden="true" tabindex="-1"></a>    <span class="ex">ring_bytes</span> = 2 <span class="pp">*</span> <span class="er">(</span><span class="ex">world</span> <span class="at">-</span> 1<span class="kw">)</span> <span class="ex">/</span> world <span class="pp">*</span> payload.numel<span class="er">(</span><span class="kw">)</span> <span class="ex">*</span> payload.element_size<span class="er">(</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-31"><a href="#lst-m4-c12-c01-31" aria-hidden="true" tabindex="-1"></a>    <span class="ex">effective_gb_s</span> = ring_bytes / <span class="er">(</span><span class="fu">mean_ms.item()</span> <span class="ex">/</span> 1000<span class="kw">)</span> <span class="ex">/</span> 1e9</span>
-<span id="lst-m4-c12-c01-32"><a href="#lst-m4-c12-c01-32" aria-hidden="true" tabindex="-1"></a></span>
-<span id="lst-m4-c12-c01-33"><a href="#lst-m4-c12-c01-33" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="fu">dist.get_rank()</span> <span class="ex">==</span> 0:</span>
-<span id="lst-m4-c12-c01-34"><a href="#lst-m4-c12-c01-34" aria-hidden="true" tabindex="-1"></a>        <span class="ex">print</span><span class="er">(</span><span class="ex">f</span><span class="st">"slowest_rank_mean_ms={mean_ms.item():.3f}"</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-35"><a href="#lst-m4-c12-c01-35" aria-hidden="true" tabindex="-1"></a>        <span class="ex">print</span><span class="er">(</span><span class="ex">f</span><span class="st">"estimated_ring_payload_GBps={effective_gb_s:.1f}"</span><span class="kw">)</span></span>
-<span id="lst-m4-c12-c01-36"><a href="#lst-m4-c12-c01-36" aria-hidden="true" tabindex="-1"></a><span class="ex">finally:</span></span>
-<span id="lst-m4-c12-c01-37"><a href="#lst-m4-c12-c01-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dist.destroy_process_group()</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="lst-m4-c12-c01-5"><a href="#lst-m4-c12-c01-5" aria-hidden="true" tabindex="-1"></a>dist.init_process_group(<span class="st">"nccl"</span>)</span>
+<span id="lst-m4-c12-c01-6"><a href="#lst-m4-c12-c01-6" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>:</span>
+<span id="lst-m4-c12-c01-7"><a href="#lst-m4-c12-c01-7" aria-hidden="true" tabindex="-1"></a>    local_rank <span class="op">=</span> <span class="bu">int</span>(os.environ[<span class="st">"LOCAL_RANK"</span>])</span>
+<span id="lst-m4-c12-c01-8"><a href="#lst-m4-c12-c01-8" aria-hidden="true" tabindex="-1"></a>    torch.cuda.set_device(local_rank)</span>
+<span id="lst-m4-c12-c01-9"><a href="#lst-m4-c12-c01-9" aria-hidden="true" tabindex="-1"></a>    device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, local_rank)</span>
+<span id="lst-m4-c12-c01-10"><a href="#lst-m4-c12-c01-10" aria-hidden="true" tabindex="-1"></a>    payload <span class="op">=</span> torch.zeros(<span class="dv">256</span> <span class="op">*</span> <span class="dv">1024</span> <span class="op">*</span> <span class="dv">1024</span>, device<span class="op">=</span>device, dtype<span class="op">=</span>torch.float16)</span>
+<span id="lst-m4-c12-c01-11"><a href="#lst-m4-c12-c01-11" aria-hidden="true" tabindex="-1"></a>    world <span class="op">=</span> dist.get_world_size()</span>
+<span id="lst-m4-c12-c01-12"><a href="#lst-m4-c12-c01-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-13"><a href="#lst-m4-c12-c01-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">5</span>):</span>
+<span id="lst-m4-c12-c01-14"><a href="#lst-m4-c12-c01-14" aria-hidden="true" tabindex="-1"></a>        payload.fill_(<span class="fl">1.0</span>)</span>
+<span id="lst-m4-c12-c01-15"><a href="#lst-m4-c12-c01-15" aria-hidden="true" tabindex="-1"></a>        dist.all_reduce(payload, op<span class="op">=</span>dist.ReduceOp.SUM)</span>
+<span id="lst-m4-c12-c01-16"><a href="#lst-m4-c12-c01-16" aria-hidden="true" tabindex="-1"></a>    torch.cuda.synchronize()</span>
+<span id="lst-m4-c12-c01-17"><a href="#lst-m4-c12-c01-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> torch.isfinite(payload).<span class="bu">all</span>(), <span class="st">"Non-finite result in warmup"</span></span>
+<span id="lst-m4-c12-c01-18"><a href="#lst-m4-c12-c01-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> (payload <span class="op">==</span> world).<span class="bu">all</span>(), <span class="st">"Incorrect all_reduce result"</span></span>
+<span id="lst-m4-c12-c01-19"><a href="#lst-m4-c12-c01-19" aria-hidden="true" tabindex="-1"></a>    dist.barrier()</span>
+<span id="lst-m4-c12-c01-20"><a href="#lst-m4-c12-c01-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-21"><a href="#lst-m4-c12-c01-21" aria-hidden="true" tabindex="-1"></a>    samples_ms <span class="op">=</span> []</span>
+<span id="lst-m4-c12-c01-22"><a href="#lst-m4-c12-c01-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">20</span>):</span>
+<span id="lst-m4-c12-c01-23"><a href="#lst-m4-c12-c01-23" aria-hidden="true" tabindex="-1"></a>        payload.fill_(<span class="fl">1.0</span>)</span>
+<span id="lst-m4-c12-c01-24"><a href="#lst-m4-c12-c01-24" aria-hidden="true" tabindex="-1"></a>        start <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c12-c01-25"><a href="#lst-m4-c12-c01-25" aria-hidden="true" tabindex="-1"></a>        stop <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c12-c01-26"><a href="#lst-m4-c12-c01-26" aria-hidden="true" tabindex="-1"></a>        start.record()</span>
+<span id="lst-m4-c12-c01-27"><a href="#lst-m4-c12-c01-27" aria-hidden="true" tabindex="-1"></a>        dist.all_reduce(payload, op<span class="op">=</span>dist.ReduceOp.SUM)</span>
+<span id="lst-m4-c12-c01-28"><a href="#lst-m4-c12-c01-28" aria-hidden="true" tabindex="-1"></a>        stop.record()</span>
+<span id="lst-m4-c12-c01-29"><a href="#lst-m4-c12-c01-29" aria-hidden="true" tabindex="-1"></a>        stop.synchronize()</span>
+<span id="lst-m4-c12-c01-30"><a href="#lst-m4-c12-c01-30" aria-hidden="true" tabindex="-1"></a>        samples_ms.append(start.elapsed_time(stop))</span>
+<span id="lst-m4-c12-c01-31"><a href="#lst-m4-c12-c01-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> torch.isfinite(payload).<span class="bu">all</span>(), <span class="st">"Non-finite result in measured loop"</span></span>
+<span id="lst-m4-c12-c01-32"><a href="#lst-m4-c12-c01-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">assert</span> (payload <span class="op">==</span> world).<span class="bu">all</span>(), <span class="st">"Incorrect all_reduce result"</span></span>
+<span id="lst-m4-c12-c01-33"><a href="#lst-m4-c12-c01-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-34"><a href="#lst-m4-c12-c01-34" aria-hidden="true" tabindex="-1"></a>    mean_ms <span class="op">=</span> torch.tensor(<span class="bu">sum</span>(samples_ms) <span class="op">/</span> <span class="bu">len</span>(samples_ms), device<span class="op">=</span>device)</span>
+<span id="lst-m4-c12-c01-35"><a href="#lst-m4-c12-c01-35" aria-hidden="true" tabindex="-1"></a>    dist.all_reduce(mean_ms, op<span class="op">=</span>dist.ReduceOp.MAX)</span>
+<span id="lst-m4-c12-c01-36"><a href="#lst-m4-c12-c01-36" aria-hidden="true" tabindex="-1"></a>    ring_bytes <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> (world <span class="op">-</span> <span class="dv">1</span>) <span class="op">/</span> world <span class="op">*</span> payload.numel() <span class="op">*</span> payload.element_size()</span>
+<span id="lst-m4-c12-c01-37"><a href="#lst-m4-c12-c01-37" aria-hidden="true" tabindex="-1"></a>    effective_gb_s <span class="op">=</span> ring_bytes <span class="op">/</span> (mean_ms.item() <span class="op">/</span> <span class="dv">1000</span>) <span class="op">/</span> <span class="fl">1e9</span></span>
+<span id="lst-m4-c12-c01-38"><a href="#lst-m4-c12-c01-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="lst-m4-c12-c01-39"><a href="#lst-m4-c12-c01-39" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> dist.get_rank() <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="lst-m4-c12-c01-40"><a href="#lst-m4-c12-c01-40" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"slowest_rank_mean_ms=</span><span class="sc">{</span>mean_ms<span class="sc">.</span>item()<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="lst-m4-c12-c01-41"><a href="#lst-m4-c12-c01-41" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"estimated_ring_payload_GBps=</span><span class="sc">{</span>effective_gb_s<span class="sc">:.1f}</span><span class="ss">"</span>)</span>
+<span id="lst-m4-c12-c01-42"><a href="#lst-m4-c12-c01-42" aria-hidden="true" tabindex="-1"></a><span class="cf">finally</span>:</span>
+<span id="lst-m4-c12-c01-43"><a href="#lst-m4-c12-c01-43" aria-hidden="true" tabindex="-1"></a>    dist.destroy_process_group()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The probe isolates one payload and one collective, so it can compare rank placement or transport configurations without model noise. <code>NCCL_DEBUG=INFO</code> can reveal selected interfaces and topology decisions, but only the timed samples and system trace show achieved behavior. Compare the result with a topology-aware theoretical estimate and an Nsight Systems trace before assigning the gap to the fabric.</p>
 <p>PyTorch Profiler can show collective operators in the framework trace. Nsight Systems shows whether collectives overlap kernels or sit on the critical path. NCCL logs help diagnose backend selection, network interface choice, peer-to-peer paths, and failures.</p>
 </section>
@@ -639,7 +649,7 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Scale-up domain:</strong></span> A tightly connected GPU group such as one server, pod, or NVLink/NVSwitch island. It is the preferred place for frequent tensor-parallel or decode-critical communication.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Scale-out domain:</strong></span> Multiple nodes connected through NICs and switches. It provides capacity and aggregate throughput, but it usually adds latency, routing, and contention.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>GPU/NIC affinity:</strong></span> The locality relationship between a GPU and the network card used for cross-node traffic. Poor affinity can add PCIe hops, CPU-socket crossings, or host staging.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Bisection bandwidth:</strong></span> The aggregate bandwidth available when traffic crosses a cut through the topology. It matters when many ranks communicate at once; a fast single link is insufficient for concurrent traffic.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Bisection bandwidth:</strong></span> The aggregate bandwidth available when traffic crosses a cut through the topology. It matters when many ranks communicate at once. A fast single link is insufficient for concurrent traffic.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Oversubscription:</strong></span> A topology condition where the upstream fabric has less bandwidth than the sum of attached endpoints. It is common in cost-controlled networks and can hurt concurrent collectives.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Placement policy:</strong></span> The scheduler or launch decision that maps ranks, serving groups, workers, or replicas onto physical GPUs and nodes.</li>
 </ul>
@@ -741,14 +751,17 @@ Table&nbsp;12.2: Distributed system design patterns for communication-heavy work
 </section>
 <section id="sec-m4-c12-s12" class="level2" data-number="12.12">
 <h2 data-number="12.12" class="anchored" data-anchor-id="sec-m4-c12-s12"><span class="header-section-number">12.12</span> Communication design checks</h2>
-<p>Reliable distributed diagnosis names the framework call, backend library, physical path, and critical-path wait. Apply the following checks before changing a communication strategy.</p>
+<p>Reliable distributed diagnosis names the framework call, backend library, physical path, and critical-path wait. The following checklist establishes the evidence before a communication strategy changes.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Checklist: Communication design</strong></p>
 <ul>
-<li>Distinguish NVLink, a physical GPU interconnect, from NCCL, a collective communication library.</li>
-<li>Treat <code>torch.distributed</code> as the framework API that calls a backend; inspect the backend and selected transport separately.</li>
-<li>Keep tensor-parallel groups on the fastest available links when each layer requires frequent communication.</li>
-<li>Place ranks with topology awareness so a local collective does not cross an unnecessary slow path.</li>
-<li>Synchronize collective timing and separate warmup from steady-state measurement.</li>
+<li>NVLink, a physical GPU interconnect, is distinguished from NCCL, a collective communication library.</li>
+<li><code>torch.distributed</code> is identified as the framework API that calls a backend. The backend and selected transport remain separate evidence items.</li>
+<li>Tensor-parallel groups remain on the fastest available links when each layer requires frequent communication.</li>
+<li>Rank placement reflects topology so a local collective does not cross an unnecessary slow path.</li>
+<li>Collective timing is synchronized and warmup remains separate from steady-state measurement.</li>
 </ul>
+</div>
 <p>With the communication primitives and physical paths defined, Chapter 13 can compare distributed training and inference strategies by the tensors they exchange, the frequency of those exchanges, and the topology that carries them.</p>
 
 

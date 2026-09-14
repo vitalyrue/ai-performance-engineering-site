@@ -374,15 +374,15 @@ window.Quarto = {
 </header>
 
 
-<p>Performance debugging follows a causal chain: count work, bytes, and elapsed time; classify the likely constraint; construct a roofline bound; then verify the hypothesis in a trace. The sections below introduce those steps in that order.</p>
+<p>Performance debugging follows a causal chain: count work, bytes, and elapsed time. Classify the likely constraint. Construct a roofline bound. Then verify the hypothesis in a trace. The sections below introduce those steps in that order.</p>
 <p>Roofline reasoning supplies a plausibility model, while profiling supplies evidence about the gap between that model and the real execution. The gap can come from launch overhead, synchronization, communication, cache effects, or an incorrect workload model.</p>
 <p>The profiling workflow should start broad and then zoom in. PyTorch Profiler identifies expensive operations and memory pressure. Nsight Systems shows CPU/GPU timelines, launch gaps, and collectives. Nsight Compute diagnoses one kernel in detail.</p>
 <p>Roofline reasoning separates tensor-core-heavy training projections from optimizer or activation movement that transfers many bytes per operation. In decode, the same analysis explains why one-token projections can resemble matrix-vector multiplication and become sensitive to memory bandwidth.</p>
 <p>Floating-point operation count, bytes moved, and elapsed time place a measured region against memory-bandwidth and compute ceilings.</p>
-<div id="fig-m4-c05-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="FLOP count, byte count, and measured time produce arithmetic intensity and achieved throughput for a roofline point. A separate profiler timeline shows launch gaps before a targeted change and repeat measurement.">
+<div id="fig-m4-c05-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="FLOP count, byte count, and measured time produce arithmetic intensity and achieved throughput for a roofline point. A separate profiler timeline shows launch gaps before a targeted change and repeat measurement. Navigation key lists chapter 5 section map: 5.1 - Quantities and formulas; 5.2 - Limits on kernel performance; 5.3 - Roofline analysis; 5.4 - Profiling workflow; 5.5 - Runtime API probes.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c05-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m4-c05-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="FLOP count, byte count, and measured time produce arithmetic intensity and achieved throughput for a roofline point. A separate profiler timeline shows launch gaps before a targeted change and repeat measurement.">
+<img src="../assets/fig-m4-c05-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="FLOP count, byte count, and measured time produce arithmetic intensity and achieved throughput for a roofline point. A separate profiler timeline shows launch gaps before a targeted change and repeat measurement. Navigation key lists chapter 5 section map: 5.1 - Quantities and formulas; 5.2 - Limits on kernel performance; 5.3 - Roofline analysis; 5.4 - Profiling workflow; 5.5 - Runtime API probes.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c05-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;5.1: Roofline estimates and profiler timelines answer different performance questions.
@@ -478,7 +478,7 @@ Table&nbsp;5.1: Byte-count starting points. They are lower bounds or first-pass 
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>peak compute:</strong></span> Best plausible arithmetic throughput for the selected precision, GPU generation, and kernel path. FP16, BF16, TF32, FP8, and integer formats have different ceilings.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>peak bandwidth:</strong></span> Relevant memory bandwidth for the modeled path. HBM bandwidth is not the same as NVLink, PCIe, or network bandwidth.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>AI times peak bandwidth:</strong></span> The bandwidth ceiling expressed as FLOP/s. It says how much compute can be sustained if every byte must be supplied at that bandwidth.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>ridge point:</strong></span> Arithmetic intensity at which the bandwidth ceiling and compute ceiling meet. Left of the ridge, bandwidth is the first-order limit; right of the ridge, compute throughput is the first-order limit.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>ridge point:</strong></span> Arithmetic intensity at which the bandwidth ceiling and compute ceiling meet. Left of the ridge, bandwidth is the first-order limit. Right of the ridge, compute throughput is the first-order limit.</li>
 </ul>
 <p>If AI = 2 FLOPs/byte and bandwidth is 3 TB/s, the memory ceiling is 6 TFLOP/s, so a 200 TFLOP/s compute peak does not matter for that kernel until reuse improves. The roofline omits scheduler overhead, launch overhead, synchronization, imperfect occupancy, dynamic shapes, and distributed communication.</p>
 </section>
@@ -486,14 +486,14 @@ Table&nbsp;5.1: Byte-count starting points. They are lower bounds or first-pass 
 <h2 data-number="5.2" class="anchored" data-anchor-id="sec-m4-c05-s02"><span class="header-section-number">5.2</span> Limits on kernel performance</h2>
 <p>A workload is memory-bound when runtime is dominated by moving bytes, compute-bound when runtime is dominated by arithmetic throughput, launch-bound when fixed CPU/GPU dispatch overhead dominates small GPU work, and communication-bound when movement across devices or ranks sits on the critical path.</p>
 <p>These categories are diagnostic, not labels for whole applications. One training step can contain compute-bound GEMMs, memory-bound optimizer updates, launch-bound small operations, and communication-bound gradient synchronization. The right optimization depends on the region being measured.</p>
-<p>Use the following four labels for the measured region. Each label names the dominant cost and points to the first change worth testing:</p>
+<p>The following four labels describe a measured region. Each names the dominant cost and points to the first change worth testing:</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Memory-bound:</strong></span> Runtime follows bytes moved. Key-value cache reads during decode are a common example; test locality, precision, coalescing, and cache layout.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Compute-bound:</strong></span> Runtime follows arithmetic throughput. Large dense projections are a common example; test Tensor Core use, dimension alignment, and useful batch size.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Launch-bound:</strong></span> GPU work is short and CPU or dispatch gaps dominate. Many small eager operations are a common example; test fusion, compilation, or CUDA Graph replay.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Communication-bound:</strong></span> Collectives dominate the timeline. Distributed gradient synchronization is a common example; test overlap, sharding, rank placement, and topology.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Memory-bound:</strong></span> Runtime follows bytes moved. Key-value cache reads during decode are a common example. Test locality, precision, coalescing, and cache layout.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Compute-bound:</strong></span> Runtime follows arithmetic throughput. Large dense projections are a common example. Test Tensor Core use, dimension alignment, and useful batch size.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Launch-bound:</strong></span> GPU work is short and CPU or dispatch gaps dominate. Many small eager operations are a common example. Test fusion, compilation, or CUDA Graph replay.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Communication-bound:</strong></span> Collectives dominate the timeline. Distributed gradient synchronization is a common example. Test overlap, sharding, rank placement, and topology.</li>
 </ul>
-<p>These four labels apply to a measured region, and each points to a different first experiment rather than a permanent property of the model. These labels choose the first experiment; arithmetic intensity then tests whether memory bandwidth or compute throughput can explain the measured region.</p>
+<p>These four labels apply to a measured region, and each points to a different first experiment rather than a permanent property of the model. These labels choose the first experiment. Arithmetic intensity then tests whether memory bandwidth or compute throughput can explain the measured region.</p>
 </section>
 <section id="sec-m4-c05-s03" class="level2" data-number="5.3">
 <h2 data-number="5.3" class="anchored" data-anchor-id="sec-m4-c05-s03"><span class="header-section-number">5.3</span> Roofline analysis</h2>
@@ -501,7 +501,7 @@ Table&nbsp;5.1: Byte-count starting points. They are lower bounds or first-pass 
 <section id="sec-m4-c05-s04" class="level3" data-number="5.3.1">
 <h3 data-number="5.3.1" class="anchored" data-anchor-id="sec-m4-c05-s04"><span class="header-section-number">5.3.1</span> Constructing the model</h3>
 <p>The roofline chart places achieved throughput against arithmetic intensity on a log-log scale. Its diagonal memory-bandwidth ceiling and horizontal compute ceiling meet at the ridge point, which separates the first-order bandwidth-limited and compute-limited regions.</p>
-<p>Use the quantities from Section 5.1 for one measured region. Divide FLOPs by bytes moved to place the point on the horizontal axis, and divide FLOPs by elapsed time to place it on the vertical axis. Then compare that point with the bandwidth and compute ceilings for the same dtype, operation path, and memory level.</p>
+<p>For one measured region, FLOPs divided by bytes moved place the point on the horizontal axis, while FLOPs divided by elapsed time place it on the vertical axis. The comparison uses bandwidth and compute ceilings for the same dtype, operation path, and memory level.</p>
 <p>The roofline model connects measured performance to hardware limits. It separates memory-bandwidth limits from compute-throughput limits.</p>
 <div id="fig-m4-c05-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The roofline model connects measured performance to hardware limits. It separates memory-bandwidth limits from compute-throughput limits. The printed ceilings are an H100 FP16 theoretical-peak example. In the first-order model, points left of the ridge are bounded by the memory roof and points right of it by the compute roof; a point below either roof still requires profiling before choosing a kernel, precision, or hardware change.">
 <figure class="quarto-float quarto-float-fig figure">
@@ -513,19 +513,19 @@ Figure&nbsp;5.2: Roofline model
 </figcaption>
 </figure>
 </div>
-<p>The printed ceilings are an H100 FP16 theoretical-peak example. In the first-order model, points left of the ridge are bounded by the memory roof and points right of it by the compute roof; a point below either roof still requires profiling before choosing a kernel, precision, or hardware change.</p>
+<p>The printed ceilings are an H100 FP16 theoretical-peak example. In the first-order model, points left of the ridge are bounded by the memory roof and points right of it by the compute roof. A point below either roof still requires profiling before choosing a kernel, precision, or hardware change.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chart note</strong></p>
 <p><strong>Measured or compared:</strong> Achieved performance compared with hardware memory-bandwidth and compute-throughput ceilings.</p>
-<p><strong>Axes, units, and series:</strong> The horizontal axis is arithmetic intensity in FLOPs per byte. The vertical axis is performance or throughput. The diagonal series is the memory-bandwidth ceiling; the flat series is the peak-compute ceiling; the ridge marks where the active ceiling changes.</p>
-<p><strong>Read for:</strong> Read left of the ridge as memory-bandwidth-limited and right of the ridge as compute-throughput-limited. A measured point far below the roof suggests locality, launch, synchronization, or counting problems.</p>
-<p><strong>Source status:</strong> Exact source chart screenshot. The generator does not extract or redraw the plotted values; surrounding equations provide separate worked numbers for reading the chart.</p>
+<p><strong>Axes, units, and series:</strong> The horizontal axis is arithmetic intensity in FLOPs per byte. The vertical axis is performance or throughput. The diagonal series is the memory-bandwidth ceiling. The flat series is the peak-compute ceiling. The ridge marks where the active ceiling changes.</p>
+<p><strong>Interpretation:</strong> Points left of the ridge are memory-bandwidth-limited, while points right of it are compute-throughput-limited. A measured point far below the roof suggests locality, launch, synchronization, or counting problems.</p>
+<p><strong>Source status:</strong> Exact source chart screenshot. The generator does not extract or redraw the plotted values. Surrounding equations provide separate worked numbers for reading the chart.</p>
 </div>
-<p>For a kernel with known FLOPs and estimated bytes moved, the arithmetic intensity places the kernel on the horizontal axis of the roofline chart. The achieved throughput places it on the vertical axis. Low arithmetic intensity means the bandwidth ceiling is low. High arithmetic intensity can move the kernel toward the compute ceiling. The ridge point is the diagnostic boundary: to the left, reduce bytes or increase reuse; to the right, improve arithmetic throughput, tensor-core utilization, or useful batch shape.</p>
+<p>For a kernel with known FLOPs and estimated bytes moved, the arithmetic intensity places the kernel on the horizontal axis of the roofline chart. The achieved throughput places it on the vertical axis. Low arithmetic intensity means the bandwidth ceiling is low. High arithmetic intensity can move the kernel toward the compute ceiling. The ridge point is the diagnostic boundary: to the left, reduce bytes or increase reuse. To the right, improve arithmetic throughput, tensor-core utilization, or useful batch shape.</p>
 <p>The derivation is deliberately approximate. If the measured point appears above the roofline, the FLOP count, byte estimate, measurement window, or peak numbers are inconsistent. That inconsistency is useful because it forces the engineer to refine the model before choosing an optimization.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Roofline limit</strong></p>
-<p>Peak compute and peak HBM bandwidth define an upper bound. Real kernels can sit below it because of instruction mix, occupancy limits, shared-memory bank conflicts, register spilling, Tensor Core alignment, synchronization, launch overhead, cache misses, or incomplete overlap. Use profiler evidence to explain the gap below the bound.</p>
+<p>Peak compute and peak HBM bandwidth define an upper bound. Real kernels can sit below it because of instruction mix, occupancy limits, shared-memory bank conflicts, register spilling, Tensor Core alignment, synchronization, launch overhead, cache misses, or incomplete overlap. Profiler evidence explains the gap below the bound.</p>
 </div>
 <p>A point below the roofline shows unused headroom but does not identify whether launch gaps, occupancy, synchronization, or cache behavior caused it. The next question is whether a worked set of FLOPs, bytes, and elapsed time is internally consistent before an optimization is selected.</p>
 </section>
@@ -539,21 +539,24 @@ Figure&nbsp;5.2: Roofline model
 \text{achieved throughput} = \frac{2 \times 10^{12} \text{ FLOPs}}{0.020 \text{ s}} = 100 \text{ TFLOP/s}
 \tag{5.6}\]</span></span></p>
 <p>If the GPU peak bandwidth is 3 TB/s, the bandwidth ceiling at this intensity is 6 TFLOP/s, which would contradict the measured 100 TFLOP/s. That contradiction means the byte estimate is wrong, the FLOP estimate is wrong, or the kernel is reusing data much more effectively than the rough model assumed. This is exactly why the derivation is useful: it exposes which assumption needs refinement.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Worked calculation - roofline diagnosis</strong></p>
-<p><strong>Measured inputs:</strong> Count 2e12 FLOPs, estimate 1e12 bytes for the same measured region, and record 0.020 seconds. Use a 3 TB/s peak-bandwidth estimate for the target GPU.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked calculation: Roofline diagnosis</strong></p>
+<p><strong>Measured inputs:</strong> The model counts 2e12 FLOPs, estimates 1e12 bytes for the same measured region, and records 0.020 seconds. The target GPU has a 3 TB/s peak-bandwidth estimate.</p>
 <p><strong>Arithmetic intensity:</strong> 2e12 / 1e12 = 2 FLOPs per byte.</p>
 <p><strong>Achieved throughput:</strong> 2e12 / 0.020 s = 100 TFLOP/s.</p>
 <p><strong>First-order ceiling:</strong> 2 FLOPs/byte x 3 TB/s = 6 TFLOP/s. The measured 100 TFLOP/s is above that ceiling, so the byte estimate, FLOP count, timing region, or assumed memory level must be wrong.</p>
-<p><strong>Next measurement:</strong> Check profiler bytes, cache reuse, operation count, and timing boundaries before selecting a kernel change.</p>
+<p><strong>Next measurement:</strong> Profiler bytes, cache reuse, operation count, and timing boundaries identify the assumption that needs refinement before a kernel change is selected.</p>
 </div>
 <p>In LLM inference, this is why prefill and decode should not be tuned with one mental model. Large prefill projections are GEMM-like and can move toward the compute side of the roofline. Small-batch decode is often GEMV-like, repeatedly reading weights and key-value cache for few new tokens, so it tends to remain left of the ridge and bandwidth-sensitive unless batching or fusion changes the shape.</p>
 </section>
 </section>
 <section id="sec-m4-c05-s06" class="level2" data-number="5.4">
 <h2 data-number="5.4" class="anchored" data-anchor-id="sec-m4-c05-s06"><span class="header-section-number">5.4</span> Profiling workflow</h2>
-<p>Profiling is the primary method for verifying performance hypotheses and identifying the execution bottlenecks of deep learning models. When the slow layer is not yet known, start with PyTorch Profiler to connect framework operations with CPU time, CUDA activity, shapes, and allocations. Move to Nsight Systems for launch ordering and idle gaps, or to Nsight Compute after a specific kernel has been isolated:</p>
-<p><strong>Example: PyTorch profiler pass.</strong> This profiling template measures CPU and CUDA activity for one warmed-up function. Warmup avoids mixing initialization or compilation with steady-state timing. <code>cuda_time_total</code> identifies GPU kernels and operations that dominate device time. <code>profile_memory=True</code> helps connect bottlenecks to allocation and tensor size. If CPU time dominates, kernel optimization alone may not help.</p>
+<p>Profiling is the primary method for verifying performance hypotheses and identifying the execution bottlenecks of deep learning models. When the slow layer is not yet known, PyTorch Profiler connects framework operations with CPU time, CUDA activity, shapes, and allocations. Nsight Systems then reveals launch ordering and idle gaps, while Nsight Compute applies after a specific kernel has been isolated:</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: PyTorch profiler pass</strong></p>
+<p>This profiling template measures CPU and CUDA activity for one warmed-up function. Warmup avoids mixing initialization or compilation with steady-state timing. <code>cuda_time_total</code> identifies GPU kernels and operations that dominate device time. <code>profile_memory=True</code> helps connect bottlenecks to allocation and tensor size. If CPU time dominates, kernel optimization alone may not help.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> PyTorch profiler pass</p>
 </div>
@@ -591,11 +594,11 @@ Figure&nbsp;5.2: Roofline model
 <p>Profiling adds overhead. It can change timing, perturb scheduling, and force extra synchronization. Treat profiled runs as diagnostic evidence, not final benchmark numbers. Once the bottleneck is identified, measure a clean steady-state run without heavy profiling instrumentation.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Compute-bound trace:</strong></span> Long GPU kernels with high arithmetic utilization, little idle gap, and evidence of tensor-core or math throughput limits.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Memory-bound trace:</strong></span> Runtime tracks bytes moved; kernels show high memory throughput but lower arithmetic utilization, often visible in decode or KV-cache-heavy paths.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Memory-bound trace:</strong></span> Runtime tracks bytes moved. Kernels show high memory throughput but lower arithmetic utilization, often visible in decode or KV-cache-heavy paths.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Synchronization-bound trace:</strong></span> CUDA synchronizations, blocking copies, or collectives create wait regions where useful GPU work cannot proceed.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Transfer-bound trace:</strong></span> Host-to-device, device-to-host, or device-to-device copies occupy visible timeline spans and block the hot path.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>CPU/data-bound trace:</strong></span> GPU sits idle while the host handles tokenization, data loading, JSON parsing, sampling, or scheduler bookkeeping.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Launch-bound trace:</strong></span> Many tiny kernels are separated by CPU launch gaps; fusion, <code>torch.compile</code>, or CUDA Graphs may help if shapes and control flow are stable.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Launch-bound trace:</strong></span> Many tiny kernels are separated by CPU launch gaps. Fusion, <code>torch.compile</code>, or CUDA Graphs may help if shapes and control flow are stable.</li>
 </ul>
 <p>The first profiler should be the least expensive tool that can disprove the current bottleneck guess, and its instrumented timing should not be reported as clean benchmark performance. After selecting the tool, the next question is how one costly framework operation maps to the specific GPU kernel, copy, or host wait that produced its time.</p>
 </section>
@@ -663,10 +666,10 @@ Table&nbsp;5.2: Profiler layers and the question each one can answer.
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>GPU gaps between kernels:</strong></span> The device timeline has idle spaces between short kernels. Common causes are CPU launch overhead, Python scheduling, implicit synchronization, data-dependent control flow, or a serving scheduler that cannot feed work fast enough. Confirm with Nsight Systems or a PyTorch Profiler timeline before rewriting kernels.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>High memory throughput with low math utilization:</strong></span> The kernel is likely memory-bound. The next question is which bytes dominate: HBM reads, cache misses, uncoalesced global loads, key-value cache reads, or host-device copies.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Low occupancy:</strong></span> Too few warps are resident on each Streaming Multiprocessor (SM), or the kernel is limited by registers, shared memory, block size, or launch shape. Low occupancy is not always a bug; some kernels are intentionally limited by another resource.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Low occupancy:</strong></span> Too few warps are resident on each Streaming Multiprocessor (SM), or the kernel is limited by registers, shared memory, block size, or launch shape. Low occupancy is not always a bug. Some kernels are intentionally limited by another resource.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Many tiny kernels:</strong></span> The workload may be launch-bound or suffering from graph fragmentation. First check whether fusion, <code>torch.compile</code>, or CUDA Graph replay can remove repeated host-side overhead.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Long memory-copy spans:</strong></span> The trace is spending time moving data rather than computing. Distinguish CPU-to-GPU transfer, GPU-to-CPU transfer, peer-to-peer GPU transfer, and network transfer because each has a different fix.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>High cache-sector traffic:</strong></span> Nsight Compute may show that a kernel requests many L1 or L2 sectors for little useful payload. This usually points to poor coalescing, scattered strides, low spatial locality, or streaming data that is too large to reuse from cache. If sectors per request look reasonable but hit rate is still poor, check reuse distance, working-set size, and possible conflict patterns from stride or layout. Read counters by level: L1/TEX symptoms suggest per-SM access-pattern issues; L2 misses to device memory suggest HBM traffic; L2 misses to peer or system memory suggest remote or mapped-memory paths.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>High cache-sector traffic:</strong></span> Nsight Compute may show that a kernel requests many L1 or L2 sectors for little useful payload. This usually points to poor coalescing, scattered strides, low spatial locality, or streaming data that is too large to reuse from cache. If sectors per request look reasonable but hit rate is still poor, check reuse distance, working-set size, and possible conflict patterns from stride or layout. Read counters by level: L1/TEX symptoms suggest per-SM access-pattern issues. L2 misses to device memory suggest HBM traffic. L2 misses to peer or system memory suggest remote or mapped-memory paths.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Long collective spans:</strong></span> A distributed step may be communication-bound. Check whether ranks arrive late, whether NCCL used the expected fabric, and whether overlap with backward or layer computation is actually hiding the collective.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Allocator spikes:</strong></span> Repeated allocation or fragmentation can appear as CPU overhead, device synchronization, or memory-pressure stalls. Reuse buffers, stabilize shapes, or inspect PyTorch allocator statistics before assuming the math kernel is slow.</li>
 </ul>
@@ -721,18 +724,18 @@ Table&nbsp;5.3: Kernel-level metric families. Exact counter names vary with GPU 
 </div>
 </figure>
 </div>
-<p>Read profiler output as a map of hypotheses. A PyTorch table can say which operator is expensive, Nsight Systems can show whether the GPU is idle or communicating, and Nsight Compute can explain one kernel’s memory transactions and occupancy. Jumping directly from one table row to a rewrite is a common source of wasted optimization work.</p>
+<p>Profiler output is a map of hypotheses. A PyTorch table can say which operator is expensive, Nsight Systems can show whether the GPU is idle or communicating, and Nsight Compute can explain one kernel’s memory transactions and occupancy. Jumping directly from one table row to a rewrite is a common source of wasted optimization work.</p>
 </section>
 <section id="sec-m4-c05-s10" class="level3" data-number="5.4.4">
 <h3 data-number="5.4.4" class="anchored" data-anchor-id="sec-m4-c05-s10"><span class="header-section-number">5.4.4</span> End-to-end profiling case</h3>
 <p>The following case keeps one performance question intact from workload record to measured intervention. It uses a small decode workload so the reader can see how prompt shape, tokenization, model execution, cache state, and timing evidence connect without treating one kernel metric as the whole diagnosis.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Worked case - remove a decode launch gap</strong></p>
-<p><strong>Workload record:</strong> Fix 32 requests, 512-token prompts, 64 generated tokens, one model revision, one GPU, and the same sampling settings. Record prompt and output token counts before timing.</p>
-<p><strong>Input and state:</strong> Tokenization produces the fixed prompt IDs. Prefill builds the initial KV cache; decode then appends one token per active request and reads the existing cache.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked case: Remove a decode launch gap</strong></p>
+<p><strong>Workload record:</strong> The fixed workload contains 32 requests, 512-token prompts, 64 generated tokens, one model revision, one GPU, and the same sampling settings. Prompt and output token counts are recorded before timing.</p>
+<p><strong>Input and state:</strong> Tokenization produces the fixed prompt IDs. Prefill builds the initial KV cache. Decode then appends one token per active request and reads the existing cache.</p>
 <p><strong>Evidence:</strong> A PyTorch timeline shows many short decode kernels separated by CPU gaps, while Nsight Compute shows the isolated kernels are not close to the memory or compute ceiling.</p>
-<p><strong>Intervention:</strong> Warm up the shape family, capture the stable decode region with CUDA Graphs, and keep request admission and variable-length control outside the captured region.</p>
-<p><strong>Measurement:</strong> Repeat the same workload without profiler instrumentation. Compare TPOT, 95th-percentile (p95) request latency, GPU idle time, and output correctness. TPOT shows whether repeated decode became faster; p95 shows whether the change also improved slow requests rather than only the average run. Report compile and capture time separately from steady-state decode.</p>
+<p><strong>Intervention:</strong> The shape family is warmed up, CUDA Graphs capture the stable decode region, and request admission and variable-length control remain outside the captured region.</p>
+<p><strong>Measurement:</strong> The same workload runs without profiler instrumentation. TPOT, 95th-percentile (p95) request latency, GPU idle time, and output correctness are compared. TPOT shows whether repeated decode became faster. P95 shows whether the change also improved slow requests rather than only the average run. Compile and capture time remain separate from steady-state decode.</p>
 <p><strong>Conclusion:</strong> The improvement belongs to launch/control overhead, not to the arithmetic kernel. If the gap remains, inspect CPU scheduling, batching, or cache-management work next.</p>
 </div>
 </section>
@@ -740,8 +743,11 @@ Table&nbsp;5.3: Kernel-level metric families. Exact counter names vary with GPU 
 <section id="sec-m4-c05-s11" class="level2" data-number="5.5">
 <h2 data-number="5.5" class="anchored" data-anchor-id="sec-m4-c05-s11"><span class="header-section-number">5.5</span> Runtime API probes</h2>
 <p>A runtime API probe is a small code fragment that asks one narrow question about the execution layer. The notebooks use probes like these to check device capability, dtype footprint, GPU timing, trace export, and compiler graph breaks before applying larger optimizations.</p>
-<p>Choose the probe that answers the current question. Check device capability and dtype before using hardware ceilings or byte counts; use CUDA events for kernel timing; export a profiler trace for operation ordering and gaps; use TorchDynamo diagnostics when compilation splits the function. Combine probes only when the first result leaves the cause unclear.</p>
-<p><strong>Example: Device capability and dtype footprint.</strong> This probe shows that <code>torch.cuda</code> owns device visibility and basic CUDA runtime facts, while a tensor’s dtype determines its byte footprint. <code>get_device_capability</code> is a hardware probe, not a guarantee that every desired kernel path is enabled. <code>element_size</code> connects dtype to memory traffic: one million BF16 values occupy about two megabytes before allocator overhead.</p>
+<p>The probe follows the current question. Device capability and dtype establish hardware ceilings or byte counts. CUDA events measure kernel timing. A profiler trace shows operation ordering and gaps. TorchDynamo diagnostics reveal a split compiled function. Additional probes are useful only when the first result leaves the cause unclear.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: Device capability and dtype footprint</strong></p>
+<p>This probe shows that <code>torch.cuda</code> owns device visibility and basic CUDA runtime facts, while a tensor’s dtype determines its byte footprint. <code>get_device_capability</code> is a hardware probe, not a guarantee that every desired kernel path is enabled. <code>element_size</code> connects dtype to memory traffic: one million BF16 values occupy about two megabytes before allocator overhead.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Device capability and dtype footprint</p>
 </div>
@@ -758,7 +764,10 @@ Table&nbsp;5.3: Kernel-level metric families. Exact counter names vary with GPU 
 <span id="lst-m4-c05-c02-11"><a href="#lst-m4-c05-c02-11" aria-hidden="true" tabindex="-1"></a></span>
 <span id="lst-m4-c05-c02-12"><a href="#lst-m4-c05-c02-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(bytes_per_element, <span class="st">"bytes per element"</span>)</span>
 <span id="lst-m4-c05-c02-13"><a href="#lst-m4-c05-c02-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(footprint_bytes, <span class="st">"total bytes"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p><strong>Example: CUDA event timing.</strong> This probe measures elapsed time on the CUDA stream rather than trusting an unsynchronized CPU timer. It places allocation and warmup outside the measured region so the timing better reflects steady GPU work. CUDA launches are asynchronous from the CPU side, so CPU wall-clock timing can accidentally measure queueing rather than device execution. Events measure work between markers on a stream; they still need synchronization before reading elapsed time.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: CUDA event timing</strong></p>
+<p>This probe measures elapsed time on the CUDA stream rather than trusting an unsynchronized CPU timer. It places allocation and warmup outside the measured region so the timing better reflects steady GPU work. CUDA launches are asynchronous from the CPU side, so CPU wall-clock timing can accidentally measure queueing rather than device execution. Events measure work between markers on a stream. They still need synchronization before reading elapsed time.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> CUDA event timing</p>
 </div>
@@ -781,7 +790,10 @@ Table&nbsp;5.3: Kernel-level metric families. Exact counter names vary with GPU 
 <span id="lst-m4-c05-c03-17"><a href="#lst-m4-c05-c03-17" aria-hidden="true" tabindex="-1"></a></span>
 <span id="lst-m4-c05-c03-18"><a href="#lst-m4-c05-c03-18" aria-hidden="true" tabindex="-1"></a>torch.cuda.synchronize()</span>
 <span id="lst-m4-c05-c03-19"><a href="#lst-m4-c05-c03-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(start.elapsed_time(end), <span class="st">"ms"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p><strong>Example: Profiler trace export.</strong> This probe connects PyTorch-level operations to CPU time, CUDA time, tensor shapes, and a timeline trace. The table answers which PyTorch operations dominate; the exported trace helps inspect gaps, copies, launch bursts, and repeated decode-step structure. Profiler output identifies the next question; end-to-end latency or throughput determines whether the workload improved.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: Profiler trace export</strong></p>
+<p>This probe connects PyTorch-level operations to CPU time, CUDA time, tensor shapes, and a timeline trace. It expects a valid <code>model</code>, <code>tokenizer</code>, prepared <code>input_ids</code> on the correct <code>device</code> and <code>dtype</code>, and an initialized <code>decode_state</code> to produce output tokens. The table identifies dominant PyTorch operations, while the exported trace helps inspect gaps, copies, launch bursts, and repeated decode-step structure. Profiler output identifies the next question. End-to-end latency or throughput determines whether the workload improved.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Profiler trace export</p>
 </div>
@@ -800,7 +812,10 @@ Table&nbsp;5.3: Kernel-level metric families. Exact counter names vary with GPU 
 <span id="lst-m4-c05-c04-13"><a href="#lst-m4-c05-c04-13" aria-hidden="true" tabindex="-1"></a></span>
 <span id="lst-m4-c05-c04-14"><a href="#lst-m4-c05-c04-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(prof.key_averages().table(sort_by<span class="op">=</span><span class="st">"cuda_time_total"</span>, row_limit<span class="op">=</span><span class="dv">20</span>))</span>
 <span id="lst-m4-c05-c04-15"><a href="#lst-m4-c05-c04-15" aria-hidden="true" tabindex="-1"></a>prof.export_chrome_trace(<span class="st">"decode_trace.json"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p><strong>Example: Graph-break diagnosis.</strong> This probe uses TorchDynamo diagnostics to show why a Python function cannot remain one compiled graph. The scalar <code>.item()</code> forces a host-side value and creates data-dependent Python control flow, so the compiler must break the graph. This tool diagnoses compiler behavior; confirm any resulting change with steady-state workload measurements. The usual fix is to express the branch with tensor operations or keep the compiled region away from scalar Python decisions.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: Graph-break diagnosis</strong></p>
+<p>This probe uses TorchDynamo diagnostics to show why a Python function cannot remain one compiled graph. <code>torch._dynamo.explain</code> is a private API whose behavior can change across PyTorch versions. The scalar <code>.item()</code> forces a host-side value and creates data-dependent Python control flow, so the compiler must break the graph. This tool diagnoses compiler behavior. Confirm any resulting change with steady-state workload measurements. The usual fix is to express the branch with tensor operations or keep the compiled region away from scalar Python decisions.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Graph-break diagnosis</p>
 </div>

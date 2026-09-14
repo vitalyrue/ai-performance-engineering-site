@@ -381,13 +381,13 @@ window.Quarto = {
 
 
 <p>Distributed training changes the problem from one GPU executing one copy of the workload to many GPUs coordinating state and computation. The central design question is what is replicated, what is sharded, and what must be communicated every step.</p>
-<p>The scaling axis follows the object that prevents one device from meeting the target. Data parallelism splits examples or requests; sharded data parallelism splits model state; tensor and pipeline parallelism split model computation; expert parallelism splits expert modules and routes token representations.</p>
+<p>The scaling axis follows the object that prevents one device from meeting the target. Data parallelism splits examples or requests. Sharded data parallelism splits model state. Tensor and pipeline parallelism split model computation. Expert parallelism splits expert modules and routes token representations.</p>
 <p>Every split creates a communication schedule that must fit the topology and the user-facing metric. Replication, state sharding, model-parallel execution, and distributed serving divide different objects, so each produces different collectives, cache-placement rules, and waiting points.</p>
 <p>Distributed training may replicate batches, shard model state, divide layer computation, split layer sequences, or route tokens to experts. Distributed serving may instead divide requests across worker groups or shard one model within a group.</p>
-<div id="fig-m4-c13-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Distributed training plans divide data, model state, layers, stages, or experts. Distributed serving routes each request to one worker group and keeps that request's KV cache with the selected group.">
+<div id="fig-m4-c13-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Distributed training plans divide data, model state, layers, stages, or experts. Distributed serving routes each request to one worker group and keeps that request's KV cache with the selected group. Navigation key lists chapter 13 section map: 13.1 - Work and state beyond one GPU; 13.2 - DDP and gradient all-reduce; 13.3 - Communication and computation overlap; 13.4 - Sharding model state; 13.5 - Model-parallel strategies; 13.6 - Distributed inference and serving; 13.7 - KV-cache locality in distributed serving.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c13-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m4-c13-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="Distributed training plans divide data, model state, layers, stages, or experts. Distributed serving routes each request to one worker group and keeps that request's KV cache with the selected group.">
+<img src="../assets/fig-m4-c13-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="Distributed training plans divide data, model state, layers, stages, or experts. Distributed serving routes each request to one worker group and keeps that request's KV cache with the selected group. Navigation key lists chapter 13 section map: 13.1 - Work and state beyond one GPU; 13.2 - DDP and gradient all-reduce; 13.3 - Communication and computation overlap; 13.4 - Sharding model state; 13.5 - Model-parallel strategies; 13.6 - Distributed inference and serving; 13.7 - KV-cache locality in distributed serving.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c13-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;13.1: Distributed strategies divide different work or state and therefore require different communication.
@@ -413,7 +413,7 @@ Figure&nbsp;13.1: Distributed strategies divide different work or state and ther
 <p>Distributed Data Parallel (DDP) is the baseline multi-GPU training strategy when the full model fits on every GPU. Each process holds one model replica, receives a different mini-batch shard, computes local gradients, and then synchronizes gradients before the optimizer step.</p>
 <section id="sec-m4-c13-s03" class="level3" data-number="13.2.1">
 <h3 data-number="13.2.1" class="anchored" data-anchor-id="sec-m4-c13-s03"><span class="header-section-number">13.2.1</span> torch.distributed and DDP execution</h3>
-<p>PyTorch DDP is a training strategy implemented above <code>torch.distributed</code>. The wrapper registers gradient hooks and groups gradients into buckets; the process group and its backend execute the all-reduces required to keep replicas synchronized.</p>
+<p>PyTorch DDP is a training strategy implemented above <code>torch.distributed</code>. The wrapper registers gradient hooks and groups gradients into buckets. The process group and its backend execute the all-reduces required to keep replicas synchronized.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Rank:</strong></span> One distributed process participating in the job. A common setup uses one rank per GPU.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Replica:</strong></span> A full copy of the model parameters on one rank. DDP keeps replicas numerically synchronized by all-reducing gradients.</li>
@@ -451,14 +451,17 @@ Figure&nbsp;13.2: Distributed data parallel training
 <p>The DDP reducer turns many parameter gradients into bucket-level communication. The bucket is the scheduling unit: it can launch when all gradients inside it are ready, even while earlier layers in the backward pass are still computing.</p>
 <p>A bucket passes through four ordered steps:</p>
 <ol type="1">
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Form the buckets:</strong></span> Group parameter gradients using a configured limit such as <code>bucket_cap_mb</code>. Smaller buckets can start earlier; larger buckets usually use bandwidth more efficiently.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Form the buckets:</strong></span> Group parameter gradients using a configured limit such as <code>bucket_cap_mb</code>. Smaller buckets can start earlier. Larger buckets usually use bandwidth more efficiently.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Mark gradients ready:</strong></span> Autograd hooks mark each parameter gradient as backward propagation produces it. Parameter order and graph structure determine when every gradient in a bucket is available.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Launch all-reduce:</strong></span> Reduce a ready bucket across the data-parallel ranks, usually through NCCL on NVIDIA GPUs. The communication overlaps only while independent backward computation continues.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measure the exposed tail:</strong></span> Measure communication that remains after backward computation finishes. This tail directly lengthens the training step.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>All-reduce launch:</strong></span> A ready bucket is reduced across the data-parallel ranks, usually through NCCL on NVIDIA GPUs. The communication overlaps only while independent backward computation continues.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Exposed tail:</strong></span> Communication remaining after backward computation finishes directly lengthens the training step.</li>
 </ol>
 <p>The DDP implementation extends the Section 1.4 supervised loop with three distributed additions: each process owns a rank and its assigned GPU, the data stream is partitioned by rank, and backward propagation triggers gradient communication.</p>
 <p>A slow DDP step can still come from local causes such as data loading, forward kernels, backward memory pressure, or optimizer state. Distributed causes add rank skew, all-reduce bandwidth, bucket timing, and topology placement.</p>
-<p><strong>Example: DDP training template.</strong> This runnable synthetic template shows process roles, rank-to-device mapping, sampler behavior, optimizer flow, backward synchronization, and cleanup. Launch it with <code>torchrun --standalone --nproc-per-node=&lt;gpu_count&gt; script.py</code>; replace the synthetic dataset and linear model only after this distributed control path works.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: DDP training template</strong></p>
+<p>This runnable synthetic template shows process roles, rank-to-device mapping, sampler behavior, optimizer flow, backward synchronization, and cleanup. The launch command is <code>torchrun --standalone --nproc-per-node=&lt;gpu_count&gt; script.py</code>. The synthetic dataset and linear model serve only to establish the distributed control path.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> DDP training template</p>
 </div>
@@ -511,17 +514,17 @@ Figure&nbsp;13.2: Distributed data parallel training
 <section id="sec-m4-c13-s05" class="level2" data-number="13.4">
 <h2 data-number="13.4" class="anchored" data-anchor-id="sec-m4-c13-s05"><span class="header-section-number">13.4</span> Sharding model state</h2>
 <p>Fully Sharded Data Parallel (FSDP) supports several sharding strategies. Under <code>FULL_SHARD</code>, parameters, gradients, and optimizer state are sharded across ranks outside their materialized use windows. Other strategies replicate or retain more state. Full sharding reduces per-GPU memory but introduces parameter all-gather and gradient reduce-scatter around layer execution.</p>
-<p>In a full-shard path, most model state remains partitioned across ranks. Before a layer runs, FSDP gathers the parameter shards needed by that layer; afterward it may release or reshard them according to policy. The memory saving therefore adds scheduled communication and temporary full-parameter windows around layer execution.</p>
+<p>In a full-shard path, most model state remains partitioned across ranks. Before a layer runs, FSDP gathers the parameter shards needed by that layer. Afterward it may release or reshard them according to policy. The memory saving therefore adds scheduled communication and temporary full-parameter windows around layer execution.</p>
 <section id="sec-m4-c13-s06" class="level3" data-number="13.4.1">
 <h3 data-number="13.4.1" class="anchored" data-anchor-id="sec-m4-c13-s06"><span class="header-section-number">13.4.1</span> DeepSpeed and ZeRO implementations</h3>
-<p>Zero Redundancy Optimizer (ZeRO) names the staged sharding strategy, while DeepSpeed is a distributed-training framework that implements ZeRO-family state placement together with optimizer, pipeline, and runtime integrations. PyTorch FSDP is a separate framework with selectable sharding strategies; its <code>FULL_SHARD</code> mode partitions parameters, gradients, and optimizer state.</p>
-<p>Choose the framework after the required state placement and collective schedule are clear. Configuration names differ, but memory savings and communication costs follow the same parameters, gradients, optimizer state, all-gather, and reduce-scatter objects.</p>
+<p>Zero Redundancy Optimizer (ZeRO) names the staged sharding strategy, while DeepSpeed is a distributed-training framework that implements ZeRO-family state placement together with optimizer, pipeline, and runtime integrations. PyTorch FSDP is a separate framework with selectable sharding strategies. Its <code>FULL_SHARD</code> mode partitions parameters, gradients, and optimizer state.</p>
+<p>Framework selection follows the required state placement and collective schedule. Configuration names differ, but memory savings and communication costs follow the same parameters, gradients, optimizer state, all-gather, and reduce-scatter objects.</p>
 <p>PyTorch FSDP and DeepSpeed ZeRO Stage 3 are related full-sharding approaches with similar state-placement goals, but they are distinct APIs and implementations with different policies and scheduling behavior. The comparison below therefore follows the parameter, gradient, and optimizer-state lifecycle instead of treating the framework names as interchangeable.</p>
 <p>The ZeRO family names three progressively broader state-sharding choices:</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>ZeRO-1:</strong></span> Shards optimizer state while parameters and gradients remain replicated. With four ranks and an assumed 8-byte-per-parameter Adam-state budget, the optimizer-state portion falls from about 8 to about 2 bytes per parameter on each rank; other optimizers and precision layouts differ.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>ZeRO-1:</strong></span> Shards optimizer state while parameters and gradients remain replicated. With four ranks and an assumed 8-byte-per-parameter Adam-state budget, the optimizer-state portion falls from about 8 to about 2 bytes per parameter on each rank. Other optimizers and precision layouts differ.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>ZeRO-2:</strong></span> Also shards gradients. Reduce-scatter timing follows bucket readiness, hooks, overlap, and implementation policy rather than an unconditional immediate layer-by-layer rule.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>ZeRO-3:</strong></span> Also shards parameters outside their materialized use windows. Implementations may reshard or retain gathered parameters; temporary full parameters and communication buffers still consume memory.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>ZeRO-3:</strong></span> Also shards parameters outside their materialized use windows. Implementations may reshard or retain gathered parameters. Temporary full parameters and communication buffers still consume memory.</li>
 </ul>
 <p>The comparison below holds the data-parallel goal fixed and shows which model-state objects remain replicated or become sharded. The final column identifies the communication phase introduced by each broader sharding choice.</p>
 <div id="tbl-m4-c13-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -594,9 +597,10 @@ Table&nbsp;13.1: DDP, ZeRO, and FSDP state placement comparison.
 </section>
 <section id="sec-m4-c13-s07" class="level2" data-number="13.5">
 <h2 data-number="13.5" class="anchored" data-anchor-id="sec-m4-c13-s07"><span class="header-section-number">13.5</span> Model-parallel strategies</h2>
+<p>Model parallelism becomes necessary when replicated or state-sharded training cannot meet the memory, throughput, or model-size target on one GPU group. The selection question is which model object to split and how often ranks must exchange the resulting partial state. The following subsections first establish the execution layouts, then quantify activation memory, and finally locate the collectives created by a tensor-parallel linear layer.</p>
 <section id="sec-m4-c13-s08" class="level3" data-number="13.5.1">
 <h3 data-number="13.5.1" class="anchored" data-anchor-id="sec-m4-c13-s08"><span class="header-section-number">13.5.1</span> Model-parallel execution and Megatron-LM</h3>
-<p>Model parallelism splits one model execution across ranks. Tensor parallelism divides work inside a layer, pipeline parallelism assigns layer ranges to stages, and expert parallelism routes token representations to specific expert ranks. Megatron-LM implements several such layouts; the performance question is where each layout forces ranks to exchange partial results.</p>
+<p>Model parallelism splits one model execution across ranks. Tensor parallelism divides work inside a layer, pipeline parallelism assigns layer ranges to stages, and expert parallelism routes token representations to specific expert ranks. Megatron-LM implements several such layouts. The performance question is where each layout forces ranks to exchange partial results.</p>
 <p>Two common forward-path partitions show where collective communication appears:</p>
 <ul>
 <li>MLP Block Sharding: The first linear projection (Gate &amp; Up projections) is sharded column-parallel: W = [W₁ | W₂]. Each GPU computes its local multiplication Yᵢ = XWᵢ without communication. The second down-projection is sharded row-parallel: V = [V₁ᵀ | V₂ᵀ]ᵀ. Each GPU computes YᵢVᵢ, and a single All-Reduce combines the partial sums: Z = Y₁V₁ + Y₂V₂.</li>
@@ -665,7 +669,7 @@ Figure&nbsp;13.3: Pipeline parallelism
 </figcaption>
 </figure>
 </div>
-<p>During fill, later stages wait for their first input; during drain, earlier stages finish before the last micro-batch leaves the pipeline. These empty intervals form the pipeline bubble. Figure 13.4 shows the occupied and idle intervals for a GPipe schedule.</p>
+<p>During fill, later stages wait for their first input. During drain, earlier stages finish before the last micro-batch leaves the pipeline. These empty intervals form the pipeline bubble. Figure 13.4 shows the occupied and idle intervals for a GPipe schedule.</p>
 <div id="fig-m4-c13-f04" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A pipeline has idle time during fill and drain. At the beginning, later stages wait for work; at the end, earlier stages have already finished. This idle region is the pipeline bubble. More micro-batches improve stage utilization, but they increase activation lifetime and scheduling complexity.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c13-f04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -678,7 +682,7 @@ Figure&nbsp;13.4: GPipe micro-batch schedule and pipeline bubble
 </div>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Reading the pipeline schedule</strong></p>
-<p>Figure 13.4 is a schematic GPipe schedule, not a measured timing trace. Pipeline stages appear on the vertical axis and schedule time on the horizontal axis. Labeled blocks show forward and backward work for each micro-batch; empty regions show fill, drain, or waiting time. Under the balanced-stage assumptions of Equation 13.1, increasing the number of micro-batches reduces the first-order fill/drain fraction. The activation-memory effect is schedule-dependent: with a fixed micro-batch size, additional in-flight work can extend activation lifetimes, while with a fixed global batch, increasing the micro-batch count usually reduces each micro-batch’s size. Check peak memory for the actual schedule and retention policy.</p>
+<p>Figure 13.4 is a schematic GPipe schedule, not a measured timing trace. Pipeline stages appear on the vertical axis and schedule time on the horizontal axis. Labeled blocks show forward and backward work for each micro-batch. Empty regions show fill, drain, or waiting time. Under the balanced-stage assumptions of Equation 13.1, increasing the number of micro-batches reduces the first-order fill/drain fraction. The activation-memory effect is schedule-dependent: with a fixed micro-batch size, additional in-flight work can extend activation lifetimes, while with a fixed global batch, increasing the micro-batch count usually reduces each micro-batch’s size. Check peak memory for the actual schedule and retention policy.</p>
 </div>
 <p>With M equal-duration micro-batches and balanced stages, the first-order bubble fraction is:</p>
 <p><span id="eq-m4-c13-e01"><span class="math display">\[
@@ -705,7 +709,7 @@ Figure&nbsp;13.4: GPipe micro-batch schedule and pipeline bubble
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>All-to-all pressure:</strong></span> Each rank may send different token slices to many other ranks and receive different slices back, which can dominate sparse-model performance.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Communication condition:</strong></span> Sparse compute reduces arithmetic only when router balance, token dispatch, and all-to-all topology keep communication from becoming the bottleneck.</li>
 </ul>
-<p>One expert-parallel layer follows a concrete state path: the router assigns one or more expert destinations to each token; each rank packs token representations by destination; an all-to-all dispatch moves those slices to the expert-owning ranks; local experts compute their outputs; a second all-to-all returns the results; and the runtime restores original token order before the next model operation. Imbalanced destinations make the busiest expert or rank determine the step time.</p>
+<p>One expert-parallel layer follows a concrete state path: the router assigns one or more expert destinations to each token. Each rank packs token representations by destination. An all-to-all dispatch moves those slices to the expert-owning ranks. Local experts compute their outputs. A second all-to-all returns the results. The runtime restores original token order before the next model operation. Imbalanced destinations make the busiest expert or rank determine the step time.</p>
 <div id="tbl-m4-c13-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c13-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -733,36 +737,43 @@ Table&nbsp;13.3: Distributed parallelism comparison.
 <tr class="odd">
 <td>DDP</td>
 <td>Data batch</td>
-<td>No per-rank model-state saving</td>
+<td>Replicates parameters, gradients, and optimizer state</td>
 <td>Gradient all-reduce</td>
 <td>Model fits per GPU</td>
 </tr>
 <tr class="even">
-<td>FSDP</td>
+<td>FSDP FULL_SHARD</td>
 <td>Parameters, gradients, optimizer state</td>
-<td>Large per-rank state reduction</td>
-<td>All-gather and reduce-scatter</td>
+<td>Shards parameters, gradients, and optimizer state</td>
+<td>Parameter all-gather and gradient reduce-scatter</td>
 <td>Model state exceeds one GPU</td>
 </tr>
 <tr class="odd">
-<td>Tensor parallelism</td>
-<td>Layer tensors</td>
-<td>Medium</td>
-<td>Frequent collectives</td>
-<td>Large layers on fast fabric</td>
+<td>FSDP SHARD_GRAD_OP</td>
+<td>Gradients and optimizer state</td>
+<td>Replicates parameters; shards gradients and optimizer state</td>
+<td>Gradient reduce-scatter</td>
+<td>Parameters fit per GPU; gradient or optimizer state needs sharding</td>
 </tr>
 <tr class="even">
+<td>Tensor parallelism</td>
+<td>Layer tensors</td>
+<td>Shards layer parameters; each rank keeps local activations and optimizer state</td>
+<td>Frequent layer collectives such as all-reduce and all-gather</td>
+<td>Large layers on fast fabric</td>
+</tr>
+<tr class="odd">
 <td>Pipeline parallelism</td>
 <td>Layer sequence</td>
-<td>High</td>
+<td>Keeps one contiguous parameter stage plus activations for active micro-batches</td>
 <td>Activation transfer between stages</td>
 <td>Deep models across devices</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>Expert parallelism</td>
 <td>Experts and token routes</td>
-<td>Model-dependent</td>
-<td>All-to-all</td>
+<td>Stores local expert parameters and optimizer state</td>
+<td>All-to-all token routing</td>
 <td>Mixture-of-Experts models</td>
 </tr>
 </tbody>
@@ -774,23 +785,23 @@ Table&nbsp;13.3: Distributed parallelism comparison.
 <section id="sec-m4-c13-s09" class="level3" data-number="13.5.2">
 <h3 data-number="13.5.2" class="anchored" data-anchor-id="sec-m4-c13-s09"><span class="header-section-number">13.5.2</span> Activation-memory derivation for GPT-style training</h3>
 <p>Large-model training often hits the activation wall before the parameter wall. Parameters are static with respect to batch size and sequence length, but saved activations grow with both. In GPT-style transformers, attention score tensors can also scale quadratically with sequence length if the implementation materializes them.</p>
-<p>Estimate saved activation storage by counting two common tensor shapes. Let <span class="math inline">\(B\)</span> be local micro-batch size, <span class="math inline">\(T\)</span> sequence length, <span class="math inline">\(d\)</span> hidden width, <span class="math inline">\(H\)</span> attention-head count, <span class="math inline">\(L\)</span> local transformer layers, and <span class="math inline">\(s\)</span> bytes per stored element.</p>
+<p>Saved activation storage follows from two common tensor shapes. Let <span class="math inline">\(B\)</span> be local micro-batch size, <span class="math inline">\(T\)</span> sequence length, <span class="math inline">\(d\)</span> hidden width, <span class="math inline">\(H\)</span> attention-head count, <span class="math inline">\(L\)</span> local transformer layers, and <span class="math inline">\(s\)</span> bytes per stored element.</p>
 <ul>
 <li>A hidden-sized tensor has <span class="math inline">\(BTd\)</span> elements and occupies <span class="math inline">\(BTds\)</span> bytes per layer.</li>
 <li>A materialized dense attention matrix has <span class="math inline">\(BHT^2\)</span> elements and occupies <span class="math inline">\(BHT^2s\)</span> bytes per layer.</li>
 </ul>
 <p>If each layer saves <span class="math inline">\(n_{\text{hidden}}\)</span> hidden-sized tensors and <span class="math inline">\(n_{\text{score}}\)</span> attention-matrix-sized tensors, their combined payload is approximately</p>
 <p><span class="math display">\[ A \approx Ls\left(n_{\text{hidden}}BTd+n_{\text{score}}BHT^2\right). \]</span></p>
-<p>For an illustrative calculation, assume <span class="math inline">\(n_{\text{hidden}}=4\)</span>, <span class="math inline">\(n_{\text{score}}=1\)</span>, <span class="math inline">\(B=1\)</span>, <span class="math inline">\(T=2048\)</span>, <span class="math inline">\(d=4096\)</span>, <span class="math inline">\(H=32\)</span>, <span class="math inline">\(L=10\)</span>, and <span class="math inline">\(s=2\)</span> bytes. This gives</p>
-<p><span class="math display">\[ A \approx 10\cdot2\left(4\cdot2048\cdot4096+32\cdot2048^2\right) =3{,}355{,}443{,}200\ \text{bytes}=3.125\ \text{GiB}. \]</span></p>
-<p>These are assumed tensor counts, not measurements of a particular model. Actual counts depend on the layer implementation, backward algorithm, recomputation policy, and fused kernels. The estimate excludes weights, gradients, optimizer state, temporary workspaces, and allocator overhead; measure peak allocation before using it as a device-memory budget.</p>
+<p>For an illustrative calculation, assume <span class="math inline">\(n_{\text{hidden}}=16\)</span>, <span class="math inline">\(n_{\text{score}}=1\)</span>, <span class="math inline">\(B=1\)</span>, <span class="math inline">\(T=2048\)</span>, <span class="math inline">\(d=4096\)</span>, <span class="math inline">\(H=32\)</span>, <span class="math inline">\(L=10\)</span>, and <span class="math inline">\(s=2\)</span> bytes. This uses the same coarse hidden-tensor count as Chapter 7 so the two estimates can be compared.</p>
+<p><span class="math display">\[ A \approx 10\cdot2\left(16\cdot2048\cdot4096+32\cdot2048^2\right) =5{,}368{,}709{,}120\ \text{bytes}=5\ \text{GiB}. \]</span></p>
+<p>These are assumed tensor counts, not measurements of a particular model. Actual counts depend on the layer implementation, backward algorithm, recomputation policy, and fused kernels. The estimate excludes weights, gradients, optimizer state, temporary workspaces, and allocator overhead. Measure peak allocation before using it as a device-memory budget.</p>
 <p>Several techniques change the saved tensors. Activation checkpointing discards selected forward intermediates and recomputes them during backward. FlashAttention-style kernels avoid materializing the full attention matrix. Sequence parallelism partitions activation work around tensor-parallel regions, with gathers and reduce-scatters where needed. Context parallelism partitions attention’s sequence dimension and exchanges key/value data or partial results inside attention. The exact per-rank saving depends on which tensors each implementation keeps or reconstructs.</p>
 <p>This derivation explains why FSDP or tensor parallelism alone can leave training memory limited by activations. FSDP shards model state, while activations remain tied to local micro-batch and layer execution unless activation checkpointing, sequence parallelism, FlashAttention, or smaller micro-batches reduce them.</p>
 </section>
 <section id="sec-m4-c13-s10" class="level3" data-number="13.5.3">
 <h3 data-number="13.5.3" class="anchored" data-anchor-id="sec-m4-c13-s10"><span class="header-section-number">13.5.3</span> Column-wise and row-wise tensor-parallel communication</h3>
 <p>Column-wise and row-wise tensor parallelism describe where a linear layer is split and where the ranks must communicate. The distinction matters because splitting output channels and splitting input channels place collective operations at different points in the transformer block.</p>
-<p>Read the tensor-parallel figure top to bottom: column-parallel work first, then row-parallel work and the collective it needs. The placement of the collective is the point of the diagram.</p>
+<p>The tensor-parallel figure orders column-parallel work before row-parallel work and its required collective. The placement of that collective is the point of the diagram.</p>
 <p>Megatron-LM-style tensor parallelism chooses where communication occurs by pairing column-parallel and row-parallel projections inside transformer blocks. A column-parallel linear layer splits output channels. Each rank computes its own output slice from the full input, so the forward edge can avoid an immediate all-reduce. The backward pass accumulates gradients for each local weight shard and may need to combine input gradients depending on how the following layer is arranged.</p>
 <p>A row-parallel linear layer splits input channels. Each rank computes a partial output from its input slice and weight shard, then the partial outputs must be summed. That summation is an all-reduce in the forward path, and the placement of that all-reduce is why tensor parallelism is usually kept inside fast NVLink or NVSwitch domains.</p>
 <p>The placement intuition is: keep attention heads or MLP intermediate channels local as long as possible, then reduce only when the full hidden vector is needed by a residual connection, normalization, or the next block boundary. This reduces communication frequency compared with naively synchronizing after every projection.</p>
@@ -801,14 +812,14 @@ Table&nbsp;13.3: Distributed parallelism comparison.
 <p>Distributed inference uses the same links, backends, and collective libraries as distributed training, while the user-facing metric changes. The goal includes latency, Time To First Token (TTFT), Time Per Output Token (TPOT), tail behavior, serving capacity, and tokens per second.</p>
 <section id="sec-m4-c13-s12" class="level3" data-number="13.6.1">
 <h3 data-number="13.6.1" class="anchored" data-anchor-id="sec-m4-c13-s12"><span class="header-section-number">13.6.1</span> Distributed serving frameworks</h3>
-<p>A distributed serving framework combines request routing and cache ownership with replica, tensor-parallel, or pipeline-parallel worker groups. vLLM and SGLang can coordinate multi-GPU serving groups; TensorRT-LLM and related deployment stacks can execute compiled sharded engines on supported configurations. The framework choice follows the placement strategy and topology rather than defining them.</p>
+<p>A distributed serving framework combines request routing and cache ownership with replica, tensor-parallel, or pipeline-parallel worker groups. vLLM and SGLang can coordinate multi-GPU serving groups. TensorRT-LLM and related deployment stacks can execute compiled sharded engines on supported configurations. The framework choice follows the placement strategy and topology rather than defining them.</p>
 <p>The critical ownership questions are which worker group holds the model shard, which group owns each request’s KV cache, which collectives lie on every decode step, and whether routing preserves that locality across replicas.</p>
 <p>A serving design combines three decisions: how each model is split within a worker group, how requests are routed among groups, and where each request’s KV cache remains. Together they determine whether communication occurs at admission, during prefill, inside every layer, or for every generated token.</p>
 <p>A common serving strategy keeps frequent collectives inside a node and scales across nodes by replicating serving groups. This avoids making every token depend on a slow cross-node path. When the model is too large for one node, the system must balance model sharding, cache locality, batch scheduling, and network cost.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Tensor-parallel serving:</strong></span> Splits layer math across GPUs. It helps when one layer is too large or too slow for one GPU, but it may put collectives in the per-layer or per-token path, so fast intra-node links matter.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Pipeline-parallel serving:</strong></span> Assigns different layer ranges to different devices. It can fit deeper models, but stage imbalance, micro-batch scheduling, and activation transfer can increase tail latency.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Replica groups:</strong></span> Run multiple complete serving instances and route requests among them. This is often simpler than cross-node sharding when the model fits per group, and it can preserve low Time Per Output Token (TPOT).</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Replica groups:</strong></span> Multiple complete serving instances route requests among them. This is often simpler than cross-node sharding when the model fits per group, and it can preserve low Time Per Output Token (TPOT).</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Router and cache locality:</strong></span> The router should avoid moving an active request away from the devices holding its KV cache unless the benefit outweighs the transfer cost.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Cross-node sharding:</strong></span> A capacity or throughput option when one node is insufficient or another placement goal justifies it. It carries higher decode-latency risk when each token depends on cross-node communication with little independent work to hide the cost.</li>
 </ul>
@@ -870,11 +881,11 @@ Table&nbsp;13.4: Training versus inference tensor parallelism.
 <p>KV-cache locality is the serving-design property that keeps an active request near the GPU group holding its key-value cache blocks. It matters because decode repeatedly reads old KV blocks and appends new ones. Moving an active request away from its cache can add a large transfer or force recomputation.</p>
 <p>The common pattern is sticky placement: once a request has built substantial KV state on a serving group, the router prefers keeping later decode steps on that group unless the load-balancing benefit outweighs transfer or recomputation cost. This is a serving-scheduler property, not an attention-kernel or hardware-cache optimization.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Sticky placement:</strong></span> Keep a request assigned to the worker group that owns its current KV blocks.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Locality-aware routing:</strong></span> Route new requests by considering both load and whether useful prefix or cache state already exists on a worker.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cache migration:</strong></span> Move KV blocks between worker groups. It can recover balance, but it pays peer, host, or network transfer cost.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Replica-group scaling:</strong></span> Scale throughput by running multiple complete serving groups when the model fits per group, avoiding cross-node per-token traffic.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cross-node sharding:</strong></span> Place one serving group across nodes when capacity, throughput, or another deployment constraint justifies it and the added communication fits the latency target.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Sticky placement:</strong></span> An active request remains on the worker group that owns its current KV blocks.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Locality-aware routing:</strong></span> New-request routing considers both load and whether useful prefix or cache state already exists on a worker.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cache migration:</strong></span> KV blocks move between worker groups only when the balance benefit outweighs their peer, host, or network transfer cost.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Replica-group scaling:</strong></span> Multiple complete serving groups scale throughput when the model fits per group, avoiding cross-node per-token traffic.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Cross-node sharding:</strong></span> One serving group spans nodes only when capacity, throughput, or another deployment constraint justifies it and the added communication fits the latency target.</li>
 </ul>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>KV-cache locality scenario</strong></p>
@@ -884,7 +895,7 @@ Table&nbsp;13.4: Training versus inference tensor parallelism.
 <p><strong>Evidence:</strong> Watch TPOT, cache-migration counters, prefix-cache hit rate, per-worker queue depth, and tail latency rather than only average GPU utilization.</p>
 </div>
 <p>The measured hot path determines the placement. Replicated groups can scale request throughput without adding per-token cross-node collectives when the model fits per group. A sharded group can solve capacity or parallel-compute limits, but its per-layer or per-token communication must be included in TTFT, TPOT, throughput, and tail-latency measurements.</p>
-<p>Choose the strategy by naming the object that must be split, estimating the resulting payload and communication frequency, and placing that traffic on an appropriate topology. More GPUs help only when the new communication and synchronization path is cheaper than the local capacity or execution limit it removes.</p>
+<p>The strategy follows from the object that must be split, the resulting payload and communication frequency, and a topology appropriate for that traffic. More GPUs help only when the new communication and synchronization path is cheaper than the local capacity or execution limit it removes.</p>
 <p>This completes the path from one-device execution to distributed training and serving. Appendix A collects the formulas, software controls, compatibility checks, practice questions, and source map needed to apply the same reasoning during implementation and review.</p>
 
 

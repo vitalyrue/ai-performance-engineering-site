@@ -364,10 +364,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>A repeatable lab workflow turns the earlier performance models into measured evidence. Each compact example tests a bottleneck hypothesis rather than presenting standalone syntax.</p>
 <p>The workflow moves from experimental controls to broad profiling and roofline classification, then to kernel, compiler, decode, cache, and speculative-decoding probes. Each experiment records what changed, verifies the result, and interprets the measurement at the layer that produced it.</p>
 <p>GPU execution is asynchronous with respect to Python, so a host timer can stop before the queued GPU work finishes unless the benchmark synchronizes or uses correctly placed CUDA events.</p>
-<div id="fig-m4-c11-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A correct benchmark path records setup, warms up, synchronizes, measures, changes one factor, and verifies. A warning path shows that unsynchronized host timing can produce a false result.">
+<div id="fig-m4-c11-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A correct benchmark path records setup, warms up, synchronizes, measures, changes one factor, and verifies. A warning path shows that unsynchronized host timing can produce a false result. Navigation key lists chapter 11 section map: 11.1 - Controlled benchmark workflow; 11.2 - Performance probes and checks.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c11-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m4-c11-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="A correct benchmark path records setup, warms up, synchronizes, measures, changes one factor, and verifies. A warning path shows that unsynchronized host timing can produce a false result.">
+<img src="../assets/fig-m4-c11-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="A correct benchmark path records setup, warms up, synchronizes, measures, changes one factor, and verifies. A warning path shows that unsynchronized host timing can produce a false result. Navigation key lists chapter 11 section map: 11.1 - Controlled benchmark workflow; 11.2 - Performance probes and checks.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c11-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup, times completed GPU work, and verifies the result.
@@ -377,20 +377,23 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <p>The main path records the environment and workload, warms up compilation and allocation, synchronizes the timed region, changes one factor, and checks both correctness and the measured metric. The warning path shows why unsynchronized timing can produce a false speedup and a bad engineering decision.</p>
 <section id="sec-m4-c11-s01" class="level2" data-number="11.1">
 <h2 data-number="11.1" class="anchored" data-anchor-id="sec-m4-c11-s01"><span class="header-section-number">11.1</span> Controlled benchmark workflow</h2>
-<p>Before comparing two implementations, hold the workload, tensor shapes, software versions, and timing boundary constant. Warm the framework separately so compilation and allocation do not enter the steady-state measurement.</p>
+<p>A valid comparison holds the workload, tensor shapes, software versions, and timing boundary constant. Framework warmup occurs separately so compilation and allocation do not enter the steady-state measurement.</p>
 <section id="sec-m4-c11-s02" class="level3" data-number="11.1.1">
 <h3 data-number="11.1.1" class="anchored" data-anchor-id="sec-m4-c11-s02"><span class="header-section-number">11.1.1</span> Lab workflow and benchmark hygiene</h3>
 <p>A lab pass is one complete measurement cycle: define a bottleneck hypothesis, run controlled code, check correctness, collect evidence, and write an engineering conclusion. Benchmark hygiene is the discipline that keeps this cycle from measuring startup cost, shape drift, stale caches, or incorrect output instead of the intended performance question.</p>
-<p>Run each lab pass in one fixed sequence:</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Procedure: Lab pass</strong></p>
+<p>A lab pass follows one fixed sequence:</p>
 <ol type="1">
-<li>State the bottleneck hypothesis.</li>
-<li>Record the hardware, software, launch settings, and workload shapes.</li>
-<li>Complete compilation, autotuning, allocation, and cache warmup outside the timed samples.</li>
-<li>Hold shapes fixed unless shape variation is the factor being tested.</li>
-<li>Check outputs, cache updates, gradients, or rank participation.</li>
-<li>Measure completed work with the timing method that matches the question.</li>
-<li>Connect the evidence to one bottleneck class before changing one factor.</li>
+<li><strong>Bottleneck hypothesis:</strong> The record states the suspected limiting resource.</li>
+<li><strong>Environment and workload:</strong> The record includes hardware, software, launch settings, and workload shapes.</li>
+<li><strong>Warmup boundary:</strong> Compilation, autotuning, allocation, and cache warmup finish outside the timed samples.</li>
+<li><strong>Shape policy:</strong> Shapes remain fixed unless shape variation is the factor under test.</li>
+<li><strong>Correctness evidence:</strong> Outputs, cache updates, gradients, or rank participation remain valid.</li>
+<li><strong>Timing method:</strong> Completed work is measured with the method that matches the question.</li>
+<li><strong>Interpretation:</strong> Evidence identifies one bottleneck class before a single factor changes.</li>
 </ol>
+</div>
 </section>
 <section id="sec-m4-c11-s03" class="level3" data-number="11.1.2">
 <h3 data-number="11.1.2" class="anchored" data-anchor-id="sec-m4-c11-s03"><span class="header-section-number">11.1.2</span> Environment and version logging</h3>
@@ -401,9 +404,9 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Framework identity:</strong></span> Python, PyTorch, Triton kernel-language/compiler, Transformers, serving engine, and distributed framework versions.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Execution mode:</strong></span> Whether the run used eager execution, <code>torch.compile</code>, CUDA Graphs, quantization, custom kernels, or a serving-engine backend.</li>
 </ul>
-<p>Record Python, PyTorch, CUDA runtime, NVIDIA driver, GPU model, Triton kernel-language/compiler version, attention backend, serving engine version, and distributed launch configuration. Kernel availability, compiler behavior, quantized paths, and NCCL topology choices all depend on these versions. The following starter logger records common fields and makes missing optional packages explicit; extend it with model, driver, topology, container, and benchmark-specific settings used by the experiment.</p>
+<p>The experiment record includes Python, PyTorch, CUDA runtime, NVIDIA driver, GPU model, Triton kernel-language/compiler version, attention backend, serving engine version, and distributed launch configuration. Kernel availability, compiler behavior, quantized paths, and NCCL topology choices all depend on these versions. The following starter logger records common fields and makes missing optional packages explicit. The experiment-specific record also includes model, driver, topology, container, and benchmark settings.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
-<p><strong>Code example:</strong> Code example</p>
+<p><strong>Code example:</strong> Environment and version logger</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c11-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c11-c01-1"><a href="#lst-m4-c11-c01-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> importlib.metadata</span>
 <span id="lst-m4-c11-c01-2"><a href="#lst-m4-c11-c01-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
@@ -442,7 +445,7 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <span id="lst-m4-c11-c01-35"><a href="#lst-m4-c11-c01-35" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> (<span class="pp">FileNotFoundError</span>, subprocess.CalledProcessError, <span class="pp">IndexError</span>):</span>
 <span id="lst-m4-c11-c01-36"><a href="#lst-m4-c11-c01-36" aria-hidden="true" tabindex="-1"></a>    driver <span class="op">=</span> <span class="st">"unavailable"</span></span>
 <span id="lst-m4-c11-c01-37"><a href="#lst-m4-c11-c01-37" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"NVIDIA driver: </span><span class="sc">{</span>driver<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The logger distinguishes the CUDA runtime bundled or reported by PyTorch from the installed NVIDIA driver. Package versions establish which compiler, attention, serving, and distributed paths were available; environment variables record device visibility and rank placement. A final experiment record should also include model revision, input-shape distribution, precision, compiler mode, cache settings, launch command, and the profiler or timing method.</p>
+<p>The logger distinguishes the CUDA runtime bundled or reported by PyTorch from the installed NVIDIA driver. Package versions establish which compiler, attention, serving, and distributed paths were available. Environment variables record device visibility and rank placement. A final experiment record should also include model revision, input-shape distribution, precision, compiler mode, cache settings, launch command, and the profiler or timing method.</p>
 </section>
 <section id="sec-m4-c11-s04" class="level3" data-number="11.1.3">
 <h3 data-number="11.1.3" class="anchored" data-anchor-id="sec-m4-c11-s04"><span class="header-section-number">11.1.3</span> Warmup policy and shape control</h3>
@@ -460,13 +463,13 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <h3 data-number="11.1.4" class="anchored" data-anchor-id="sec-m4-c11-s05"><span class="header-section-number">11.1.4</span> Correctness checks</h3>
 <p>A correctness check verifies that the optimized path still computes the intended result. Performance numbers are not useful if a kernel silently drops work, a decode loop corrupts the cache, or a distributed job leaves some ranks out of the computation.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Custom kernel:</strong></span> Compare against a PyTorch reference within the expected floating-point tolerance.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode path:</strong></span> Confirm generated shapes, appended tokens, and key-value cache updates.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Distributed job:</strong></span> Verify all ranks participate, gradients update, and cleanup runs even after an exception.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Custom kernel:</strong></span> A PyTorch reference supplies the expected floating-point tolerance.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode path:</strong></span> Generated shapes, appended tokens, and key-value cache updates remain valid.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Distributed job:</strong></span> All ranks participate, gradients update, and cleanup runs even after an exception.</li>
 </ul>
-<p>Use <code>torch.allclose</code> for a simple floating-point comparison when an optimized tensor output should match an eager reference:</p>
+<p><code>torch.allclose</code> provides a simple floating-point comparison when an optimized tensor output should match an eager reference. This abbreviated snippet expects <code>optimized_output</code> and <code>eager_reference</code> to be same-shaped tensors. Its input is that tensor pair, and its result is assertion success or failure. The correctness condition is whether absolute and relative differences fall within <code>1e-3</code>:</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
-<p><strong>Code example:</strong> Code example</p>
+<p><strong>Code example:</strong> Floating-point correctness check</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c11-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c11-c02-1"><a href="#lst-m4-c11-c02-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
 <span id="lst-m4-c11-c02-2"><a href="#lst-m4-c11-c02-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -481,15 +484,15 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <p>A benchmark harness is the wrapper code that prepares inputs, runs warmup, measures the intended region, checks correctness, and reports results. Its job is to make the measurement reproducible and to keep setup or teardown work out of the timing window.</p>
 <p>A small harness should separate responsibilities instead of hiding them inside one timing block:</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Setup:</strong></span> Allocate inputs, construct the model or engine, and choose the device.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Warmup:</strong></span> Run enough iterations to initialize kernels, compilation paths, caches, and allocator state.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measurement:</strong></span> Time only the region that answers the bottleneck question.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Synchronization:</strong></span> Use <code>torch.cuda.synchronize()</code> before and after measured CUDA work when wall-clock timing is required.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Reporting:</strong></span> For serving experiments, report both latency and throughput because a scheduler can improve one while harming the other.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Setup:</strong></span> Inputs, the model or engine, and the device are constructed before the measured region.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Warmup:</strong></span> Unmeasured iterations initialize kernels, compilation paths, caches, and allocator state.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Measurement:</strong></span> The timed region answers the bottleneck question and excludes setup.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Synchronization:</strong></span> <code>torch.cuda.synchronize()</code> brackets measured CUDA work when wall-clock timing is required.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Reporting:</strong></span> Serving experiments report both latency and throughput because a scheduler can improve one while harming the other.</li>
 </ul>
-<p>CUDA events measure elapsed work between two points on a CUDA stream. They exclude most host dispatch, Python scheduling, and request-queue time, so they are appropriate for device-stream timing rather than end-to-end latency:</p>
+<p>CUDA events measure elapsed work between two points on a CUDA stream. They exclude most host dispatch, Python scheduling, and request-queue time, so they are appropriate for device-stream timing rather than end-to-end latency. This abbreviated snippet expects <code>model</code>, <code>inputs</code>, <code>warmup_steps</code>, and <code>num_steps</code> to be bound. Its input is the model and data, and its output is printed elapsed time in milliseconds. A valid result requires synchronization before measurement and after the loop:</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
-<p><strong>Code example:</strong> Code example</p>
+<p><strong>Code example:</strong> CUDA event timing loop</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c11-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c11-c03-1"><a href="#lst-m4-c11-c03-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch</span>
 <span id="lst-m4-c11-c03-2"><a href="#lst-m4-c11-c03-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -510,18 +513,18 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <span id="lst-m4-c11-c03-17"><a href="#lst-m4-c11-c03-17" aria-hidden="true" tabindex="-1"></a>torch.cuda.synchronize()</span>
 <span id="lst-m4-c11-c03-18"><a href="#lst-m4-c11-c03-18" aria-hidden="true" tabindex="-1"></a>elapsed_ms <span class="op">=</span> start_event.elapsed_time(end_event)</span>
 <span id="lst-m4-c11-c03-19"><a href="#lst-m4-c11-c03-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Average step latency: </span><span class="sc">{</span>elapsed_ms <span class="op">/</span> num_steps<span class="sc">:.2f}</span><span class="ss"> ms"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Use the event result to compare completed GPU work on the measured stream. When the question is end-to-end latency, pair it with a synchronized wall-clock measurement that includes host dispatch, scheduling, copies, and any waits outside the stream interval.</p>
+<p>The event result compares completed GPU work on the measured stream. End-to-end latency also includes a synchronized wall-clock measurement of host dispatch, scheduling, copies, and waits outside the stream interval.</p>
 </section>
 <section id="sec-m4-c11-s07" class="level3" data-number="11.1.6">
 <h3 data-number="11.1.6" class="anchored" data-anchor-id="sec-m4-c11-s07"><span class="header-section-number">11.1.6</span> Profiler selection guide</h3>
-<p>Profiler selection is a layer-selection decision. Choose the tool that sees the layer where the hypothesis lives instead of collecting every trace format at once.</p>
+<p>Profiler selection is a layer-selection decision. The appropriate tool collects evidence at the layer where the hypothesis lives instead of collecting every trace format at once.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch Profiler:</strong></span> Use when the question is which framework operation, tensor shape, memory allocation, or phase is expensive.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Nsight Systems:</strong></span> Use when the question is timeline structure: CPU launch gaps, memory copies, CUDA synchronization, NVTX ranges, or collectives.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Nsight Compute:</strong></span> Use after one kernel is identified and the question becomes occupancy, memory transactions, instruction mix, or achieved bandwidth.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Perfetto:</strong></span> Use it for interactive inspection of exported Chrome traces. Use Nsight Systems for system-wide CUDA timelines and Nsight Compute for kernel-level hardware metrics.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>PyTorch Profiler:</strong></span> Answers which framework operation, tensor shape, memory allocation, or phase is expensive.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Nsight Systems:</strong></span> Answers timeline questions about CPU launch gaps, memory copies, CUDA synchronization, NVTX ranges, or collectives.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Nsight Compute:</strong></span> Applies after one kernel is identified and the question becomes occupancy, memory transactions, instruction mix, or achieved bandwidth.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Perfetto:</strong></span> Supports interactive inspection of exported Chrome traces. Nsight Systems provides system-wide CUDA timelines and Nsight Compute provides kernel-level hardware metrics.</li>
 </ul>
-<p>When inspecting a trace, look for CPU-side tokenization, API work, GPU idle gaps, many tiny kernels, memory copies, synchronization points, and the separation between long prefill regions and repeated decode steps.</p>
+<p>A trace reveals CPU-side tokenization, API work, GPU idle gaps, many tiny kernels, memory copies, synchronization points, and the separation between long prefill regions and repeated decode steps.</p>
 </section>
 <section id="sec-m4-c11-s08" class="level3" data-number="11.1.7">
 <h3 data-number="11.1.7" class="anchored" data-anchor-id="sec-m4-c11-s08"><span class="header-section-number">11.1.7</span> Interpretation template</h3>
@@ -534,26 +537,29 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Other cause checked:</strong></span> The other plausible cause considered and the evidence that points elsewhere.</li>
 </ul>
 <p>This keeps profiler tables from becoming isolated numbers. A good result note states what happened, what should change next, and what evidence would disprove that next step.</p>
-<p>The template should be filled immediately after the run while the trace, command line, and environment log are still available. Otherwise the result becomes difficult to compare with the next experiment.</p>
+<p>The template is completed immediately after the run while the trace, command line, and environment log are still available. Otherwise the result becomes difficult to compare with the next experiment.</p>
 </section>
 <section id="sec-m4-c11-s09" class="level3" data-number="11.1.8">
 <h3 data-number="11.1.8" class="anchored" data-anchor-id="sec-m4-c11-s09"><span class="header-section-number">11.1.8</span> Reliable measurement</h3>
-<p>Reliable GPU measurement matches the timing method to the question being asked. The following conditions keep Python timing, asynchronous CUDA execution, first-run compilation, shape variation, and scheduler effects from changing the measured quantity.</p>
+<p>Reliable GPU measurement matches the timing method to the question being asked. The following checklist keeps Python timing, asynchronous CUDA execution, first-run compilation, shape variation, and scheduler effects from changing the measured quantity.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Checklist: Reliable measurement</strong></p>
 <ul>
-<li>Synchronize around wall-clock GPU timing when the metric is device execution time.</li>
-<li>Measure first-run compilation or autotuning separately from steady-state latency.</li>
-<li>Freeze tensor shapes when comparing one change, or report shape variation as an independent factor.</li>
-<li>Use sizes from the expected workload that expose the target memory pressure or communication overhead.</li>
-<li>Report the serving-latency distribution, including tail latency, when the service target depends on it.</li>
-<li>Run multiple repeated samples to collect statistics rather than trusting a single trial.</li>
-<li>Confirm copy, communication, and compute overlap from a timeline and stream dependencies.</li>
+<li>Wall-clock GPU timing is synchronized when the metric is device execution time.</li>
+<li>First-run compilation or autotuning is reported separately from steady-state latency.</li>
+<li>Tensor shapes remain fixed when one change is compared, or shape variation is reported as an independent factor.</li>
+<li>Expected workload sizes expose the target memory pressure or communication overhead.</li>
+<li>The serving-latency distribution, including tail latency, is reported when the service target depends on it.</li>
+<li>Multiple repeated samples provide statistics rather than a single trial.</li>
+<li>Timeline and stream dependencies establish copy, communication, and compute overlap.</li>
 </ul>
+</div>
 <p>The repair is usually simple: synchronize around wall-clock GPU timing, separate warmup from steady-state measurement, freeze or deliberately vary shapes, and report the latency distribution that matches the service target.</p>
 </section>
 <section id="sec-m4-c11-s10" class="level3" data-number="11.1.9">
 <h3 data-number="11.1.9" class="anchored" data-anchor-id="sec-m4-c11-s10"><span class="header-section-number">11.1.9</span> Runtime setup and launch configuration</h3>
-<p>Runtime setup is the set of process-level choices that change how the benchmark executes. The environment log records what system produced a result; runtime setup controls which devices are visible, how memory allocation behaves, which distributed launcher creates ranks, and which diagnostics are enabled.</p>
-<p>Set these controls deliberately before timing begins. A benchmark launched with different visible GPUs, allocator policy, NCCL interface, or distributed rank mapping is a different experiment even if the Python model code is identical.</p>
+<p>Runtime setup is the set of process-level choices that change how the benchmark executes. The environment log records what system produced a result. Runtime setup controls which devices are visible, how memory allocation behaves, which distributed launcher creates ranks, and which diagnostics are enabled.</p>
+<p>These controls are set before timing begins. A benchmark launched with different visible GPUs, allocator policy, NCCL interface, or distributed rank mapping is a different experiment even if the Python model code is identical.</p>
 <p><code>torchrun</code> is the usual launch tool for PyTorch distributed jobs. It creates one or more processes and sets rank-related environment variables such as <code>RANK</code>, <code>WORLD_SIZE</code>, and <code>LOCAL_RANK</code>. For diagnosis, <code>NCCL_DEBUG=INFO</code> can expose selected transports and topology decisions.</p>
 <ul>
 <li><code>CUDA_VISIBLE_DEVICES</code> controls which GPUs the process can see and how they are enumerated.</li>
@@ -569,11 +575,11 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <h3 data-number="11.1.10" class="anchored" data-anchor-id="sec-m4-c11-s11"><span class="header-section-number">11.1.10</span> Recurring experiment patterns</h3>
 <p>Several experiment shapes recur across performance work. They differ in the measured object, but they share the same discipline: establish a baseline, change one mechanism, verify the output, and explain the result using evidence from the appropriate software and hardware layer.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Roofline exercise pattern:</strong></span> Count FLOPs, estimate HBM bytes, measure steady-state time, compute arithmetic intensity, compare against bandwidth and compute ceilings, then explain any contradiction.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode optimization pattern:</strong></span> Separate prefill from repeated decode, validate KV-cache updates, measure per-token latency, then test whether the next bottleneck is memory bandwidth, launch overhead, or scheduler gaps.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Compile and CUDA Graph pattern:</strong></span> Run warmup, identify graph breaks, stabilize shapes and memory addresses, capture only steady GPU work, replay, and compare against eager execution without including compile time.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Speculative workshop pattern:</strong></span> Track draft tokens, target verification, accepted/rejected spans, acceptance rate, gamma, c, and wall time together. Do not report acceptance without wall-clock evidence.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Interpretation discipline:</strong></span> Treat working code as evidence only after its assumptions, timing boundary, and correctness check are explicit. The point is to explain why each measurement step exists.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Roofline exercise pattern:</strong></span> The exercise counts FLOPs, estimates HBM bytes, measures steady-state time, computes arithmetic intensity, compares bandwidth and compute ceilings, and explains any contradiction.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Decode optimization pattern:</strong></span> The pattern separates prefill from repeated decode, validates KV-cache updates, measures per-token latency, and tests whether the next bottleneck is memory bandwidth, launch overhead, or scheduler gaps.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Compile and CUDA Graph pattern:</strong></span> The pattern warms up, identifies graph breaks, stabilizes shapes and memory addresses, captures only steady GPU work, replays it, and compares it with eager execution without including compile time.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Speculative workshop pattern:</strong></span> The evidence set includes draft tokens, target verification, accepted/rejected spans, acceptance rate, gamma, c, and wall time together. Acceptance is not interpretable without wall-clock evidence.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Interpretation discipline:</strong></span> Working code becomes evidence only after its assumptions, timing boundary, and correctness check are explicit. The point is to explain why each measurement step exists.</li>
 </ul>
 <p>A good lab write-up therefore ends with an engineering conclusion: which resource bounded the run, what evidence supports that conclusion, what change should move the bound, and which tempting change is unlikely to help.</p>
 </section>
@@ -581,11 +587,14 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <section id="sec-m4-c11-s12" class="level2" data-number="11.2">
 <h2 data-number="11.2" class="anchored" data-anchor-id="sec-m4-c11-s12"><span class="header-section-number">11.2</span> Performance probes and checks</h2>
 <p>Each code template provides a self-contained pattern designed to isolate a specific runtime behavior or measurement workflow. These recipes demonstrate concrete kernel invocations, profiling hooks, and memory accounting patterns before production validation is added.</p>
-<p>Use the templates as controlled probes. Before adapting one, identify the bottleneck question it answers, the input shapes it assumes, and the correctness check that proves the optimized path still computes the intended result.</p>
+<p>The templates act as controlled probes. Their use begins with the bottleneck question they answer, the input shapes they assume, and the correctness check that proves the optimized path still computes the intended result.</p>
 <section id="sec-m4-c11-s13" class="level3" data-number="11.2.1">
 <h3 data-number="11.2.1" class="anchored" data-anchor-id="sec-m4-c11-s13"><span class="header-section-number">11.2.1</span> PyTorch profiling template</h3>
-<p>Profile PyTorch code before changing it so the hot operations are known. PyTorch’s native profiler uses a context manager to trace host CPU thread execution, CUDA API dispatch, and GPU kernel execution timelines.</p>
-<p><strong>Example: PyTorch profiling template.</strong> This profile records several steady-state iterations after an explicit wait and warmup schedule. The aggregate table identifies expensive framework operations; the trace supplies the timing relationships needed to distinguish kernel time from launch gaps, copies, and synchronization.</p>
+<p>The first PyTorch profiling pass establishes the hot operations before a change is made. PyTorch’s native profiler uses a context manager to trace host CPU thread execution, CUDA API dispatch, and GPU kernel execution timelines.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: PyTorch profiling template</strong></p>
+<p>This profile records several steady-state iterations after an explicit wait and warmup schedule. The aggregate table identifies expensive framework operations. The trace supplies the timing relationships needed to distinguish kernel time from launch gaps, copies, and synchronization.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> PyTorch profiling template</p>
 </div>
@@ -611,20 +620,26 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <span id="lst-m4-c11-c04-20"><a href="#lst-m4-c11-c04-20" aria-hidden="true" tabindex="-1"></a>        fn(<span class="op">*</span>args)</span>
 <span id="lst-m4-c11-c04-21"><a href="#lst-m4-c11-c04-21" aria-hidden="true" tabindex="-1"></a>        prof.step()</span>
 <span id="lst-m4-c11-c04-22"><a href="#lst-m4-c11-c04-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(prof.key_averages().table(sort_by<span class="op">=</span><span class="st">"cuda_time_total"</span>, row_limit<span class="op">=</span><span class="dv">20</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The table ranks framework operations within the selected profiling window. A large CUDA total points to where device time accumulates, while the timeline shows whether that time comes from long kernels, repeated short launches, copies, synchronization, or idle gaps. Memory coalescing cannot be diagnosed from a CPU-to-GPU gap; it requires kernel-level memory-transaction evidence.</p>
+<p>The table ranks framework operations within the selected profiling window. A large CUDA total points to where device time accumulates, while the timeline shows whether that time comes from long kernels, repeated short launches, copies, synchronization, or idle gaps. Memory coalescing cannot be diagnosed from a CPU-to-GPU gap. It requires kernel-level memory-transaction evidence.</p>
 <p>While the PyTorch Profiler is excellent for operator-level breakdowns, Nsight Systems and Perfetto provide a system-level timeline view. Nsight Systems captures CPU schedule states, GPU kernel execution timelines, memory copies, and distributed NCCL synchronization events, while Perfetto is the standard visual viewer for interactive inspection.</p>
 </section>
 <section id="sec-m4-c11-s14" class="level3" data-number="11.2.2">
 <h3 data-number="11.2.2" class="anchored" data-anchor-id="sec-m4-c11-s14"><span class="header-section-number">11.2.2</span> Timeline tracing</h3>
-<p>Operator totals identify expensive framework calls, but they do not show whether delay occurs in host scheduling, CUDA submission, memory copies, device kernels, or communication. A system timeline preserves that ordering; the two workflows below capture it through Nsight Systems or export it for Perfetto.</p>
-<p><strong>Example: Nsight Systems capture.</strong> This command records a system-level timeline around the real training or serving entry point. The output report correlates operating-system scheduling, CUDA API calls, library calls, kernels, memory copies, and NVTX ranges.</p>
+<p>Operator totals identify expensive framework calls, but they do not show whether delay occurs in host scheduling, CUDA submission, memory copies, device kernels, or communication. A system timeline preserves that ordering. The two workflows below capture it through Nsight Systems or export it for Perfetto.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: Nsight Systems capture</strong></p>
+<p>This command records a system-level timeline around the real training or serving entry point. The output report correlates operating-system scheduling, CUDA API calls, library calls, kernels, memory copies, and NVTX ranges.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> Nsight Systems capture</p>
 </div>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c11-c05"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="lst-m4-c11-c05-1"><a href="#lst-m4-c11-c05-1" aria-hidden="true" tabindex="-1"></a><span class="ex">nsys</span> profile <span class="at">--trace</span><span class="op">=</span>cuda,nvtx,osrt,cublas,cudnn <span class="dt">\</span></span>
 <span id="lst-m4-c11-c05-2"><a href="#lst-m4-c11-c05-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--sample</span><span class="op">=</span>none <span class="dt">\</span></span>
 <span id="lst-m4-c11-c05-3"><a href="#lst-m4-c11-c05-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-o</span> run_trace python train_or_serve.py</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p><strong>Example: PyTorch trace export for Perfetto.</strong> This second path exports a Chrome-trace JSON from a complete PyTorch Profiler schedule. Perfetto can then inspect the CPU and CUDA lanes in a browser without changing the measurement boundary used by the profiler.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: PyTorch trace export for Perfetto</strong></p>
+<p>This second path exports a Chrome-trace JSON from a complete PyTorch Profiler schedule. Perfetto can then inspect the CPU and CUDA lanes in a browser without changing the measurement boundary used by the profiler.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> PyTorch trace export for Perfetto</p>
 </div>
@@ -641,11 +656,14 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <span id="lst-m4-c11-c06-11"><a href="#lst-m4-c11-c06-11" aria-hidden="true" tabindex="-1"></a>        prof.step()</span>
 <span id="lst-m4-c11-c06-12"><a href="#lst-m4-c11-c06-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Open trace.json in https://ui.perfetto.dev.</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Empty GPU intervals show that no GPU work was executing, but the timeline must identify why. Possible causes include CPU dispatch, compilation, input starvation, a synchronization dependency, communication, memory allocation, or intentional waiting. The surrounding CPU, CUDA API, copy, and collective lanes provide the distinguishing evidence.</p>
-<p>Arithmetic intensity places the measured kernel under either the bandwidth ceiling or the compute ceiling. That placement identifies the first bottleneck hypothesis; achieved bandwidth, occupancy, launch timing, and memory-transaction counters are still needed before choosing an optimization.</p>
+<p>Arithmetic intensity places the measured kernel under either the bandwidth ceiling or the compute ceiling. That placement identifies the first bottleneck hypothesis. Achieved bandwidth, occupancy, launch timing, and memory-transaction counters are still needed before choosing an optimization.</p>
 </section>
 <section id="sec-m4-c11-s15" class="level3" data-number="11.2.3">
 <h3 data-number="11.2.3" class="anchored" data-anchor-id="sec-m4-c11-s15"><span class="header-section-number">11.2.3</span> Roofline calculation template</h3>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: 11.2.3 Roofline calculation template</strong></p>
 <p>This Python example turns a measured kernel into a roofline point. It includes sample numbers so the output can be interpreted immediately.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> 11.2.3 Roofline calculation template</p>
 </div>
@@ -672,7 +690,10 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 </section>
 <section id="sec-m4-c11-s16" class="level3" data-number="11.2.4">
 <h3 data-number="11.2.4" class="anchored" data-anchor-id="sec-m4-c11-s16"><span class="header-section-number">11.2.4</span> Triton GEMV kernel</h3>
-<p>This Triton matrix-vector multiplication probe shows program IDs, tile offsets, masked loads, reductions, and stores. Inputs are converted to FP32 before multiplying and accumulating. A wider FP64 PyTorch calculation supplies the reference, then the result is compared in the output’s FP32 dtype. That check is outside the timed region. The example tolerances allow reduction-order differences for these inputs; a different value range may need a separate error analysis. Check correctness before comparing tile-size timings.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: 11.2.4 Triton GEMV kernel</strong></p>
+<p>This Triton matrix-vector multiplication probe shows program IDs, tile offsets, masked loads, reductions, and stores. Inputs are converted to FP32 before multiplying and accumulating. A wider FP64 PyTorch calculation supplies the reference, then the result is compared in the output’s FP32 dtype. That check is outside the timed region. The example tolerances allow reduction-order differences for these inputs. A different value range may need a separate error analysis. Correctness checks precede tile-size timing comparison.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> 11.2.4 Triton GEMV kernel</p>
 </div>
@@ -714,12 +735,15 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <p><strong>offsets and mask:</strong> The tile-local column indices and boundary guard. They define which elements of A[row, :] and x are read in each loop chunk.</p>
 <p><strong>acc:</strong> The running dot-product accumulator for y[row], kept in registers or fast local storage before the final store.</p>
 </div>
-<p>This kernel is a controlled row-wise baseline, not a claim that custom Triton always beats the selected library or compiler path. Use Nsight Compute to inspect memory transactions, achieved bandwidth, occupancy, and register pressure for the fastest correct configuration, then compare it with the production operator on the same shape and dtype.</p>
+<p>This kernel is a controlled row-wise baseline, not a claim that custom Triton always beats the selected library or compiler path. Nsight Compute exposes memory transactions, achieved bandwidth, occupancy, and register pressure for the fastest correct configuration. That configuration is compared with the production operator on the same shape and dtype.</p>
 <p>A naive attention implementation materializes score and probability tensors whose element count grows with the square of sequence length. FlashAttention-style kernels tile the computation and maintain the softmax statistics online, avoiding those full intermediates in HBM. The benefit depends on the supported backend, shape, dtype, mask, and hardware, so the experiment must confirm the selected path, compare outputs, and measure both time and peak allocated memory.</p>
 </section>
 <section id="sec-m4-c11-s17" class="level3" data-number="11.2.5">
 <h3 data-number="11.2.5" class="anchored" data-anchor-id="sec-m4-c11-s17"><span class="header-section-number">11.2.5</span> Attention backend comparison</h3>
-<p>The naive path materializes B x H x S x S score and probability tensors. The optimized call requests the FlashAttention backend; the check below compares outputs, event time, and additional allocated memory for one forward-only shape. Run it only on a CUDA configuration that supports the requested backend; otherwise record the fallback or unsupported result instead of attributing it to FlashAttention.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: 11.2.5 Attention backend comparison</strong></p>
+<p>The naive path materializes B x H x S x S score and probability tensors. The optimized call requests the FlashAttention backend. The check below compares outputs, event time, and additional allocated memory for one forward-only shape. This comparison applies only on a CUDA configuration that supports the requested backend. The evidence records a fallback or unsupported result rather than attributing it to FlashAttention.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> 11.2.5 Attention backend comparison</p>
 </div>
@@ -774,16 +798,19 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <p><strong>Definition - Code-to-object mapping</strong></p>
 <p><strong>q, k, v:</strong> Query, key, and value tensors with shape B by H by S by D.</p>
 <p><strong>attn_weights:</strong> The explicit B by H by S by S score tensor in the naive implementation. This is the object FlashAttention avoids materializing in HBM.</p>
-<p><strong>attn_probs:</strong> The normalized score tensor after softmax. In the naive path it is another large intermediate; in the tiled path its effect is computed online.</p>
+<p><strong>attn_probs:</strong> The normalized score tensor after softmax. In the naive path it is another large intermediate. In the tiled path its effect is computed online.</p>
 <p><strong>F.scaled_dot_product_attention:</strong> The PyTorch API call that may dispatch to a FlashAttention-style backend when dtype, device, mask, and shape constraints are compatible.</p>
 </div>
-<p>The explicit score matrix alone contains B times H times S squared elements, but the measured peak also depends on allocator reuse, outputs, temporary workspaces, and backend implementation. Repeat the experiment over representative sequence lengths and report unsupported shapes or fallbacks; do not generalize one successful configuration to every attention workload.</p>
+<p>The explicit score matrix alone contains B times H times S squared elements, but the measured peak also depends on allocator reuse, outputs, temporary workspaces, and backend implementation. Evidence across representative sequence lengths includes unsupported shapes or fallbacks. One successful configuration does not establish behavior for every attention workload.</p>
 <p>A healthy <code>torch.compile</code> region keeps data-dependent decisions in tensor operations that the compiler can trace. This example establishes that normal form first, then contrasts a host-side scalar branch that forces eager fallback.</p>
 <p>The small branch isolates one boundary. In larger serving or training code, the same boundary appears as logging, shape-dependent Python decisions, sampling logic placed inside the model step, or scalar diagnostics mixed into the hot tensor path.</p>
 </section>
 <section id="sec-m4-c11-s18" class="level3" data-number="11.2.6">
 <h3 data-number="11.2.6" class="anchored" data-anchor-id="sec-m4-c11-s18"><span class="header-section-number">11.2.6</span> Inspecting a torch.compile boundary</h3>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: 11.2.6 Inspecting a torch.compile boundary</strong></p>
 <p>This example contrasts a tensor-valued selection with a Python branch driven by a CUDA scalar. Both functions are compiled and executed so graph-break diagnostics can report the behavior of the installed PyTorch configuration.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> 11.2.6 Inspecting a torch.compile boundary</p>
 </div>
@@ -803,12 +830,15 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <span id="lst-m4-c11-c10-14"><a href="#lst-m4-c11-c10-14" aria-hidden="true" tabindex="-1"></a></span>
 <span id="lst-m4-c11-c10-15"><a href="#lst-m4-c11-c10-15" aria-hidden="true" tabindex="-1"></a>compiled_host_branch <span class="op">=</span> torch.<span class="bu">compile</span>(host_branch)</span>
 <span id="lst-m4-c11-c10-16"><a href="#lst-m4-c11-c10-16" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> compiled_host_branch(x)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Run the code with <code>TORCH_LOGS='graph_breaks,recompiles'</code> or the current PyTorch diagnostic interface. The result to record is not an assumed break count but the observed captured regions, fallbacks, recompilations, and steady-state time for the installed version and input shapes.</p>
+<p>The diagnostic run uses <code>TORCH_LOGS='graph_breaks,recompiles'</code> or the current PyTorch diagnostic interface. Its record contains observed captured regions, fallbacks, recompilations, and steady-state time for the installed version and input shapes, rather than an assumed break count.</p>
 <p>For small-batch inference workloads, CPU dispatch and kernel launch overhead can occupy a meaningful share of execution time. CUDA Graphs record a stable sequence of GPU operations and submit it through one graph replay, reducing repeated host launch work without fusing or accelerating the recorded kernels themselves.</p>
 </section>
 <section id="sec-m4-c11-s19" class="level3" data-number="11.2.7">
 <h3 data-number="11.2.7" class="anchored" data-anchor-id="sec-m4-c11-s19"><span class="header-section-number">11.2.7</span> CUDA Graph warmup and replay</h3>
-<p>This inference-mode pattern warms the module on a side stream, synchronizes before capture, records stable-address work, and explains the lifetime of the captured output buffer. Use it only after profiling shows launch overhead and the shapes and addresses can remain stable.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: 11.2.7 CUDA Graph warmup and replay</strong></p>
+<p>This inference-mode pattern warms the module on a side stream, synchronizes before capture, records stable-address work, and explains the lifetime of the captured output buffer. It applies after profiling shows launch overhead and the shapes and addresses can remain stable.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> 11.2.7 CUDA Graph warmup and replay</p>
 </div>
@@ -837,12 +867,15 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <span id="lst-m4-c11-c11-23"><a href="#lst-m4-c11-c11-23" aria-hidden="true" tabindex="-1"></a>    static_in.copy_(x)</span>
 <span id="lst-m4-c11-c11-24"><a href="#lst-m4-c11-c11-24" aria-hidden="true" tabindex="-1"></a>    graph.replay()</span>
 <span id="lst-m4-c11-c11-25"><a href="#lst-m4-c11-c11-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> static_out.clone() <span class="cf">if</span> keep_snapshot <span class="cf">else</span> static_out</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Capture safety is workload-specific: lazy initialization, unsupported operations, dynamic allocations, changing shapes, or cross-stream dependencies can make a sequence unsafe. Compare replay with a warmed eager or compiled baseline, and keep compilation time separate from steady-state replay time.</p>
-<p>Autoregressive decode generates tokens sequentially. Without a key-value cache, a simple implementation can rerun the full growing prefix; with a cache, later calls compute projections for the new token while attention still reads stored keys and values from the preceding context. The following probe exposes that state transition and returns the generated tokens so its behavior can be checked.</p>
+<p>Capture safety is workload-specific: lazy initialization, unsupported operations, dynamic allocations, changing shapes, or cross-stream dependencies can make a sequence unsafe. Replay is compared with a warmed eager or compiled baseline, and compilation time remains separate from steady-state replay time.</p>
+<p>Autoregressive decode generates tokens sequentially. Without a key-value cache, a simple implementation can rerun the full growing prefix. With a cache, later calls compute projections for the new token while attention still reads stored keys and values from the preceding context. The following probe exposes that state transition and returns the generated tokens so its behavior can be checked.</p>
 </section>
 <section id="sec-m4-c11-s20" class="level3" data-number="11.2.8">
 <h3 data-number="11.2.8" class="anchored" data-anchor-id="sec-m4-c11-s20"><span class="header-section-number">11.2.8</span> Cached decode state</h3>
-<p>This PyTorch pattern shows how cache reuse changes the model-call inputs. The first call processes the prompt and creates the cache; later calls pass one newly selected token plus the accumulated cache. It demonstrates state flow, not a complete serving scheduler or sampler.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: 11.2.8 Cached decode state</strong></p>
+<p>This PyTorch pattern shows how cache reuse changes the model-call inputs. The first call processes the prompt and creates the cache. Later calls pass one newly selected token plus the accumulated cache. It demonstrates state flow, not a complete serving scheduler or sampler.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> 11.2.8 Cached decode state</p>
 </div>
@@ -876,7 +909,10 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 </section>
 <section id="sec-m4-c11-s21" class="level3" data-number="11.2.9">
 <h3 data-number="11.2.9" class="anchored" data-anchor-id="sec-m4-c11-s21"><span class="header-section-number">11.2.9</span> Key-value cache lower-bound calculator</h3>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: 11.2.9 Key-value cache lower-bound calculator</strong></p>
 <p>This Python calculator estimates raw packed KV storage from batch size, stored sequence length, layer count, key-value heads, head dimension, and bits per element. It reports binary GiB and deliberately keeps storage-format overhead outside the formula.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> 11.2.9 Key-value cache lower-bound calculator</p>
 </div>
@@ -903,7 +939,7 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <p><strong>layers:</strong> L, the number of transformer layers that keep KV state.</p>
 <p><strong>kv_heads and head_dim:</strong> The key-value head count and per-head dimension in the KV-cache formula.</p>
 <p><strong>bits_per_element:</strong> The nominal packed payload width of each cached scalar. It is not a complete quantized-storage model.</p>
-<p><strong>gib:</strong> The raw KV-cache payload converted to GiB; it excludes block metadata, scales, padding, fragmentation, and temporary workspaces.</p>
+<p><strong>gib:</strong> The raw KV-cache payload converted to GiB. It excludes block metadata, scales, padding, fragmentation, and temporary workspaces.</p>
 </div>
 <p>This memory estimate is a lower bound, representing only the raw token data. In practice, serving engines allocate additional padding for page tables, intermediate workspaces, and allocator fragmentation.</p>
 <p>A correct speculative step must do more than count accepted draft tokens. The verification step has three branches:</p>
@@ -916,7 +952,10 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 </section>
 <section id="sec-m4-c11-s22" class="level3" data-number="11.2.10">
 <h3 data-number="11.2.10" class="anchored" data-anchor-id="sec-m4-c11-s22"><span class="header-section-number">11.2.10</span> Distribution-correct speculative step</h3>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: 11.2.10 Distribution-correct speculative step</strong></p>
 <p>This pedagogical implementation drafts k tokens, verifies them in one target-model pass, applies the standard acceptance rule, and commits either a residual-sampled correction or one additional target token. It deliberately recomputes model state and uses host-visible decisions, so it is a correctness reference rather than a production speed implementation.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> 11.2.10 Distribution-correct speculative step</p>
 </div>
@@ -995,12 +1034,15 @@ Figure&nbsp;11.1: A useful performance experiment records setup, isolates warmup
 <p><strong>committed:</strong> The prompt plus the accepted prefix and either a residual correction or an extra target-sampled token.</p>
 <p><strong>wall_ms:</strong> Synchronized wall time for this unoptimized reference step. Compare it with a target-only reference on the same prompts before claiming speedup.</p>
 </div>
-<p>This reference establishes the output rule but intentionally omits KV-cache reuse, rollback, batching, and device-side acceptance. The actual speedup depends on acceptance rate, draft cost, target verification efficiency, and those implementation costs; compare it with target-only decoding on the same prompts and output settings.</p>
+<p>This reference establishes the output rule but intentionally omits KV-cache reuse, rollback, batching, and device-side acceptance. The actual speedup depends on acceptance rate, draft cost, target verification efficiency, and those implementation costs. Compare it with target-only decoding on the same prompts and output settings.</p>
 <p>A production speculative decoder tries to vectorize the expensive verification work. Instead of calling the target model once per draft token, it verifies the whole proposed suffix for each active sequence in one larger target-model pass, then computes the accepted prefix length from a vector of acceptance decisions.</p>
 </section>
 <section id="sec-m4-c11-s23" class="level3" data-number="11.2.11">
 <h3 data-number="11.2.11" class="anchored" data-anchor-id="sec-m4-c11-s23"><span class="header-section-number">11.2.11</span> Vectorized speculative verification</h3>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: 11.2.11 Vectorized speculative verification</strong></p>
 <p>This pseudocode emphasizes the batched verification object. A production sampler also implements residual sampling, KV-cache rollback, per-request stopping rules, and scheduler integration.</p>
+</div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example:</strong> 11.2.11 Vectorized speculative verification</p>
 </div>

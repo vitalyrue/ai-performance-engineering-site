@@ -335,13 +335,13 @@ window.Quarto = {
 
 
 <p>The earlier chapters established how one GPU receives work, moves tensor data, and exposes compute, memory, and launch limits. Training applies those mechanisms to a repeated parameter-update step whose live state includes activations, gradients, optimizer buffers, and the parameters being changed.</p>
-<p>Two precision questions must remain separate. Training precision controls forward, backward, accumulation, and optimizer updates while the model is learning. Deployment quantization changes how a trained model stores or executes selected tensors during inference; quantization-aware training is a bridge because it trains against simulated deployment error.</p>
+<p>Two precision questions must remain separate. Training precision controls forward, backward, accumulation, and optimizer updates while the model is learning. Deployment quantization changes how a trained model stores or executes selected tensors during inference. Quantization-aware training is a bridge because it trains against simulated deployment error.</p>
 <p>Step time gives the total duration of one comparable update, but it does not locate the delay. A CPU/GPU profile or timeline shows whether the critical path contains input preparation, transfer, forward work, backward work, optimizer work, communication, or an uncovered gap. The tensors live during those phases set the memory limit, and the numeric formats used for forward, backward, accumulation, and the optimizer affect both traffic and numerical stability. After training, quantization changes a different path: how the fixed model is stored and executed during inference.</p>
 <p>A training step reads parameters and input data, saves selected activations for backward propagation, produces gradients, and updates parameters with optimizer state.</p>
-<div id="fig-m4-c07-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A training step connects input and parameters to forward activations and loss, backward gradients, optimizer state, and updated parameters, alongside mixed-precision choices and accuracy checks.">
+<div id="fig-m4-c07-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A training step connects input and parameters to forward activations and loss, backward gradients, optimizer state, and updated parameters, alongside mixed-precision choices and accuracy checks. Navigation key lists chapter 7 section map: 7.1 - Training step time and throughput; 7.2 - Training state and memory; 7.3 - Feeding data and applying updates; 7.4 - Precision formats and PyTorch backend controls; 7.5 - Deployment quantization; 7.6 - Quantization methods and libraries; 7.7 - Calibration and deployment.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c07-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m4-c07-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="A training step connects input and parameters to forward activations and loss, backward gradients, optimizer state, and updated parameters, alongside mixed-precision choices and accuracy checks.">
+<img src="../assets/fig-m4-c07-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="A training step connects input and parameters to forward activations and loss, backward gradients, optimizer state, and updated parameters, alongside mixed-precision choices and accuracy checks. Navigation key lists chapter 7 section map: 7.1 - Training step time and throughput; 7.2 - Training state and memory; 7.3 - Feeding data and applying updates; 7.4 - Precision formats and PyTorch backend controls; 7.5 - Deployment quantization; 7.6 - Quantization methods and libraries; 7.7 - Calibration and deployment.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c07-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;7.1: Training performance depends on the phase, live state, and numerical format used by each operation.
@@ -355,9 +355,9 @@ Figure&nbsp;7.1: Training performance depends on the phase, live state, and nume
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Training step:</strong></span> One repeated cycle that consumes a batch, computes a loss, propagates gradients, and updates model parameters.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Step time:</strong></span> Elapsed time from the start of one training step to the start of the next comparable step after warmup. It includes data delivery, GPU work, optimizer work, and any communication that remains exposed.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Global batch:</strong></span> All examples consumed before one optimizer update. On one GPU it is the local micro-batch times gradient-accumulation steps; across ranks it also includes the number of data-parallel replicas.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Global batch:</strong></span> All examples consumed before one optimizer update. On one GPU it is the local micro-batch times gradient-accumulation steps. Across ranks it also includes the number of data-parallel replicas.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Training throughput:</strong></span> Useful training tokens or examples completed per second. It must be reported with global batch, sequence length, precision, and the quality or convergence condition.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Exposed tail:</strong></span> Work that remains after useful overlapping work has finished. For a single GPU it can be an input, optimizer, or synchronization delay; in distributed training it often includes unfinished communication.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Exposed tail:</strong></span> Work that remains after useful overlapping work has finished. For a single GPU it can be an input, optimizer, or synchronization delay. In distributed training it often includes unfinished communication.</li>
 </ul>
 <p><span id="eq-m4-c07-e01"><span class="math display">\[
 \text{training step time} \approx \text{data pipeline} + \text{input transfer} + \text{forward} + \text{backward} + \text{optimizer} + \text{exposed communication}
@@ -418,13 +418,13 @@ Table&nbsp;7.1: Training-step symptoms and first measurements.
 </section>
 <section id="sec-m4-c07-s02" class="level2" data-number="7.2">
 <h2 data-number="7.2" class="anchored" data-anchor-id="sec-m4-c07-s02"><span class="header-section-number">7.2</span> Training state and memory</h2>
-<p>Training usually keeps more live state than a weight-only inference baseline because a step holds gradients, optimizer buffers, and saved activations in addition to parameters. A serving process can still exceed that baseline when long-lived KV cache, request state, and workspaces consume substantial memory.</p>
+<p>Training usually keeps more live state than a weight-only inference baseline because a step holds gradients, optimizer buffers, and saved activations alongside parameters. A serving process can still exceed that baseline when long-lived KV cache, request state, and workspaces consume substantial memory.</p>
 <p><strong>State held during training</strong></p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Parameters:</strong></span> Learned values read during forward and updated by the optimizer; they persist across steps.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Parameters:</strong></span> Learned values read during forward and updated by the optimizer. They persist across steps.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradients:</strong></span> Derivatives produced during backward and consumed by the optimizer. Their values are step-specific. Their storage may be retained and zeroed, or released and recreated when gradients are set to <code>None</code>, such as with <code>zero_grad(set_to_none=True)</code>.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Optimizer state:</strong></span> Persistent update buffers such as Adam’s first and second moments.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Saved activations:</strong></span> Forward intermediates kept only until backward has used them; their size grows with micro-batch and sequence length.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Saved activations:</strong></span> Forward intermediates kept only until backward has used them. Their size grows with micro-batch and sequence length.</li>
 </ul>
 <p><strong>Techniques that reduce different parts of that state</strong></p>
 <ul>
@@ -432,16 +432,16 @@ Table&nbsp;7.1: Training-step symptoms and first measurements.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Low-Rank Adaptation (LoRA):</strong></span> Freezes the base parameters and trains small adapter matrices, reducing trainable parameters, gradients, and optimizer state but not the required activations.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Quantized Low-Rank Adaptation (QLoRA):</strong></span> Also stores the frozen base model in a quantized form, provided compatible dequantization kernels are available.</li>
 </ul>
-<p>LoRA and QLoRA change which parameter tensors receive gradients; activation checkpointing changes which forward tensors remain live. They solve different parts of the memory budget and can be combined when both trainable state and saved activations are limiting the step.</p>
-<p>The first-order activation estimate separates linear saved tensors from a quadratic attention term. The coefficient 16 summarizes several projection, feed-forward, normalization, and activation tensors in this GPT-style approximation. The attention-storage coefficient records whether score-like tensors are materialized by a specific implementation:</p>
+<p>LoRA and QLoRA change which parameter tensors receive gradients. Activation checkpointing changes which forward tensors remain live. They solve different parts of the memory budget and can be combined when both trainable state and saved activations are limiting the step.</p>
+<p>The first-order activation estimate separates linear saved tensors from a quadratic attention term. Let <code>n_hidden</code> count the retained hidden-sized tensors and <code>n_score</code> count the retained attention-score-like tensors in one layer. Those counts depend on the layer implementation, backward algorithm, and recomputation policy:</p>
 <p><span id="eq-m4-c07-e02"><span class="math display">\[
-\text{activation elements per layer} \approx 16 B T d + k_{\text{attn}} B h T^2
+\text{activation elements per layer} \approx n_{\text{hidden}} B T d + n_{\text{score}} B H T^2
 \tag{7.2}\]</span></span></p>
 <p><span id="eq-m4-c07-e03"><span class="math display">\[
-\text{activation bytes} \approx b L (16 B T d + k_{\text{attn}} B h T^2)
+\text{activation bytes} \approx s L (n_{\text{hidden}} B T d + n_{\text{score}} B H T^2)
 \tag{7.3}\]</span></span></p>
-<p>Here B is the micro-batch size, T the sequence length, d the hidden dimension, h the attention-head count, b the bytes stored per element, L the layer count, and k_attn the implementation-dependent count of retained attention-score-like tensors. The formula exposes scaling; measure the actual retained tensors to determine the runtime’s peak memory.</p>
-<p>For a GPT-2 Large-style example, set <code>k_attn = 1</code> and use 36 layers, hidden dimension 1,280, 20 heads, sequence length 1,024, batch one, and two-byte activation storage. The linear and quadratic terms are then each about 21 million elements. Together they require about 84 MB decimal per layer and about 3.0 GB decimal across 36 layers in this first-order model. Increasing the batch to 32 raises the same estimate to about 96 GB decimal before optimizer state, workspaces, and allocator headroom.</p>
+<p>Here B is the micro-batch size, T the sequence length, d the hidden dimension, H the attention-head count, s the bytes stored per element, L the layer count, <code>n_hidden</code> the retained hidden-sized tensor count, and <code>n_score</code> the retained attention-score-like tensor count. The formula exposes scaling. Measure the actual retained tensors to determine the runtime’s peak memory.</p>
+<p>For a GPT-2 Large-style coarse estimate, set <code>n_hidden = 16</code>, <code>n_score = 1</code>, and use 36 layers, hidden dimension 1,280, 20 heads, sequence length 1,024, batch one, and two-byte activation storage. The linear and quadratic terms are then each about 21 million elements. Together they require about 84 MB decimal per layer and about 3.0 GB decimal across 36 layers in this first-order model. Increasing the batch to 32 raises the same estimate to about 96 GB decimal before optimizer state, workspaces, and allocator headroom.</p>
 <p>The following choices reduce different live objects. They should be selected from the memory account, not treated as interchangeable capacity fixes.</p>
 <div id="tbl-m4-c07-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
@@ -493,13 +493,13 @@ Table&nbsp;7.2: Training memory levers by the state object they reduce.
 </div>
 </figure>
 </div>
-<p>Activation memory and model-state memory are separate constraints. A sharding strategy can make a model fit while activations still exceed capacity; checkpointing can lower activations while optimizer buffers remain the limiting state. A useful memory report names the largest live object at peak, not only total allocated bytes.</p>
+<p>Activation memory and model-state memory are separate constraints. A sharding strategy can make a model fit while activations still exceed capacity. Checkpointing can lower activations while optimizer buffers remain the limiting state. A useful memory report names the largest live object at peak, not only total allocated bytes.</p>
 </section>
 <section id="sec-m4-c07-s03" class="level2" data-number="7.3">
 <h2 data-number="7.3" class="anchored" data-anchor-id="sec-m4-c07-s03"><span class="header-section-number">7.3</span> Feeding data and applying updates</h2>
 <p>Training-step speed depends on the complete path: the host prepares the next batch, copies move it to the GPU, forward and backward kernels execute, and the optimizer reads gradients and persistent state before the next step begins.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Data pipeline:</strong></span> The CPU- and storage-side path that reads examples, tokenizes or transforms them, assembles batches, and makes them available for GPU transfer.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Data pipeline:</strong></span> The CPU-side and storage-side path that reads examples, tokenizes or transforms them, assembles batches, and makes them available for GPU transfer.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Micro-batch:</strong></span> The examples processed by one forward/backward pass before optional gradient accumulation. Its tensor dimensions determine activation memory and kernel shape.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Gradient accumulation:</strong></span> Runs several micro-batches, adds their gradients, and performs one optimizer update afterward. It raises the effective global batch while keeping per-micro-batch activation memory lower.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Fused optimizer:</strong></span> An optimizer implementation that combines update operations so parameters, gradients, and moment buffers are read and written with fewer launches or less intermediate traffic.</li>
@@ -510,10 +510,10 @@ Table&nbsp;7.2: Training memory levers by the state object they reduce.
 <p>This throughput measure assumes fixed-length sequences or padding to a constant shape. It is meaningful only after warmup and alongside the global batch, sequence length, precision, and convergence behavior. A change that also changes optimizer update frequency, the loss curve, or model quality creates a different training setup and must be evaluated separately.</p>
 <p>Follow the training step in execution order and check each stage before tuning the next one:</p>
 <ol type="1">
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Prepare the batch:</strong></span> CPU workers, storage reads, tokenization, and collation should make the next batch ready before the current GPU step finishes.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Transfer to the GPU:</strong></span> Pinned host buffers, copy streams, and dependencies should permit overlap without serializing the step.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Run forward and backward:</strong></span> Use profiler evidence to separate compute throughput, HBM traffic, launch overhead, activation memory, and gradient work.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Update the parameters:</strong></span> Measure parameter, gradient, and optimizer-moment traffic separately from backward, and use fused update kernels where the runtime supports them.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Batch preparation:</strong></span> CPU workers, storage reads, tokenization, and collation make the next batch ready before the current GPU step finishes.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>GPU transfer:</strong></span> Pinned host buffers, copy streams, and dependencies permit overlap without serializing the step.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Forward and backward evidence:</strong></span> Profiler evidence separates compute throughput, HBM traffic, launch overhead, activation memory, and gradient work.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Parameter-update evidence:</strong></span> Parameter, gradient, and optimizer-moment traffic are measured separately from backward. Supported runtimes can use fused update kernels.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Apply gradient accumulation:</strong></span> Preserve the intended effective batch while tracking gradient lifetime, memory use, update frequency, and synchronization.</li>
 </ol>
 <p>These are single-worker training controls. Once the full step is understood locally, Chapters 12 and 13 add the communication and state-placement costs of scaling the same step across GPUs and nodes.</p>
@@ -522,7 +522,7 @@ Table&nbsp;7.2: Training memory levers by the state object they reduce.
 <h2 data-number="7.4" class="anchored" data-anchor-id="sec-m4-c07-s04"><span class="header-section-number">7.4</span> Precision formats and PyTorch backend controls</h2>
 <p>A numeric format determines how values use their available bits. In training, the format must preserve a stable update while reducing memory traffic and using efficient matrix hardware. In deployment, the same format choice can instead target model footprint or inference bandwidth.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>FP32:</strong></span> 32-bit floating point. It is broadly supported and useful for numerically sensitive accumulation or reference results. The same tensor uses twice the storage of FP16/BF16; operation speed depends on the GPU, TensorFloat-32 policy, dimensions, and selected library kernel.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>FP32:</strong></span> 32-bit floating point. It is broadly supported and useful for numerically sensitive accumulation or reference results. The same tensor uses twice the storage of FP16/BF16. Operation speed depends on the GPU, TensorFloat-32 policy, dimensions, and selected library kernel.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>TF32:</strong></span> TensorFloat-32, an NVIDIA tensor-core mode for many FP32 matrix operations. It keeps FP32-like exponent range but uses a reduced mantissa, so it can be much faster than strict FP32 while being less precise.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>FP16:</strong></span> 16-bit floating point with smaller range than FP32. It is common for training and inference on tensor cores, but training may require loss scaling or mixed-precision practices to avoid overflow/underflow problems.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>BF16:</strong></span> 16-bit Brain Floating Point. It has FP32-like exponent range with fewer mantissa bits, which often makes training more stable than FP16 while still reducing memory traffic relative to FP32.</li>
@@ -530,7 +530,7 @@ Table&nbsp;7.2: Training memory levers by the state object they reduce.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>FP4 and block-scaled FP4:</strong></span> 4-bit floating formats often paired with one scale for a small block of values. Block scaling can preserve local dynamic range, but it adds scale loads, packing constraints, and hardware-specific kernel requirements.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>INT8:</strong></span> 8-bit integer representation commonly used for quantized inference weights and sometimes activations. It requires a mapping between integer codes and approximate real values, plus kernels that efficiently consume the representation.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>INT4:</strong></span> 4-bit integer representation often used for weight-only inference compression. Quality and speed depend strongly on grouping, scales, dequantization cost, and kernel support.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Ternary weights:</strong></span> A specialized low-bit design whose weights take three values, such as negative, zero, and positive. It requires a model representation and kernel path designed for ternary values; an ordinary FP16 checkpoint needs conversion plus compatible kernels.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Ternary weights:</strong></span> A specialized low-bit design whose weights take three values, such as negative, zero, and positive. It requires a model representation and kernel path designed for ternary values. An ordinary FP16 checkpoint needs conversion plus compatible kernels.</li>
 </ul>
 <p>PyTorch precision settings permit framework-owned backend choices for supported operations. The selected path still depends on the PyTorch version, GPU, dimensions, dtype, and operation-specific eligibility.</p>
 <div id="tbl-m4-c07-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -602,7 +602,7 @@ Table&nbsp;7.3: PyTorch precision controls and the conditions that determine the
 <p><span id="eq-m4-c07-e05"><span class="math display">\[
 \text{scaled loss} = S \times \text{loss}; \quad \text{unscaled gradient} = \frac{\text{scaled gradient}}{S}
 \tag{7.5}\]</span></span></p>
-<p>Here S is a positive loss scale. Scaling keeps small FP16 gradients representable during backward propagation; unscaling restores their intended magnitude before the optimizer updates the FP32 master weights. A finite-value check detects overflow before an invalid update is applied.</p>
+<p>Here S is a positive loss scale. Scaling keeps small FP16 gradients representable during backward propagation. Unscaling restores their intended magnitude before the optimizer updates the FP32 master weights. A finite-value check detects overflow before an invalid update is applied.</p>
 <p>FP8 is a family, not one format. The two common FP8 encodings trade exponent range against mantissa precision, and practical systems add scaling metadata so tensors with wider dynamic range can still be represented.</p>
 <div id="tbl-m4-c07-t04" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
@@ -649,7 +649,7 @@ Table&nbsp;7.4: FP8 format and scaling choices.
 </div>
 </figure>
 </div>
-<p>The same block-scaling idea appears in emerging FP4 paths. One implementation family can use a coarse power-of-two scale for each small block, while another uses a finer floating scale; the local trade-off is scale precision against scale storage and conversion cost. These formats are platform- and kernel-specific. Treat a reported FP4 throughput gain as a measured result for a named model, accelerator, and runtime path, not as a universal property of four-bit storage.</p>
+<p>The same block-scaling idea appears in emerging FP4 paths. One implementation family can use a coarse power-of-two scale for each small block, while another uses a finer floating scale. The local trade-off is scale precision against scale storage and conversion cost. These formats are platform-specific and kernel-specific. Treat a reported FP4 throughput gain as a measured result for a named model, accelerator, and runtime path, not as a universal property of four-bit storage.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Performance condition</strong></p>
 <p>A smaller representation improves latency or throughput only when the runtime avoids moving the original wider values and uses an efficient hardware path for the selected format.</p>
@@ -740,7 +740,7 @@ Table&nbsp;7.5: Quantization methods as performance techniques.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Implementation support:</strong></span> The concrete combination of packed layout, scale granularity, dequantization strategy, matrix kernel, GPU architecture, and runtime version that turns a small checkpoint into a fast execution path.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Measurement boundary:</strong></span> Checkpoint size demonstrates storage compression. End-to-end latency, throughput, peak memory, and quality demonstrate whether the implementation helps the workload.</li>
 </ul>
-<p>Use a library name as an implementation example rather than as the definition of quantization. GPTQ, AWQ, FP8, INT8, and INT4 describe methods or formats; bitsandbytes and torchao provide selected software paths for them.</p>
+<p>Library names serve as implementation examples rather than definitions of quantization. GPTQ, AWQ, FP8, INT8, and INT4 describe methods or formats. Bitsandbytes and torchao provide selected software paths for them.</p>
 </section>
 </section>
 <section id="sec-m4-c07-s08" class="level2" data-number="7.7">
@@ -752,7 +752,7 @@ Table&nbsp;7.5: Quantization methods as performance techniques.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Clipping range:</strong></span> A selected numeric range that limits outliers before quantization. Aggressive clipping can improve average reconstruction but harm rare important values.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-channel or per-group quantization:</strong></span> Uses separate scales for smaller tensor groups. This usually improves quality relative to one global scale, but increases metadata and kernel complexity.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Weight-only calibration:</strong></span> Focuses on parameter tensors and workload-derived activations used by methods such as GPTQ or AWQ.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Activation and KV-cache calibration:</strong></span> Targets runtime tensors whose distributions depend on prompts, sequence length, layer, and model behavior. Mistakes here can produce quality loss that a simple file-size check will not reveal.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Activation and KV-cache calibration:</strong></span> Targets runtime tensors whose distributions depend on prompts, sequence length, layer, and model behavior. Mistakes here can produce quality loss that a simple file-size check does not reveal.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Kernel support:</strong></span> The runtime must have kernels that consume the quantized representation efficiently. Otherwise it may dequantize to FP16/BF16 early and lose most of the expected speedup.</li>
 </ul>
 <p>Two deployment paths differ in when low-precision behavior enters the model lifecycle:</p>
@@ -761,11 +761,11 @@ Table&nbsp;7.5: Quantization methods as performance techniques.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Quantization-Aware Training (QAT):</strong></span> Trains with fake quantization and dequantization operations in the forward pass, so model updates see an approximation of the error introduced by the deployed representation.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Straight-Through Estimator (STE):</strong></span> A backward-pass approximation used for a rounding-like fake-quantization operation. It substitutes a usable derivative estimate so gradient-based optimization can continue.</li>
 </ul>
-<p>During QAT, the forward pass applies <span class="math inline">\(\operatorname{fake\_quant}(x)\)</span>, a simulation of the chosen deployment quantization. Rounding has zero derivative between its jumps and is not differentiable at the jumps, so its true derivative cannot provide the usual learning signal. A clipped STE instead passes the incoming gradient through inside a chosen representable interval and blocks it outside. For the affine mapping above, use <span class="math inline">\(x_{\min}=s(q_{\min}-z)\)</span> and <span class="math inline">\(x_{\max}=s(q_{\max}-z)\)</span>. The following is a backward approximation, not the true derivative of quantization; implementations may differ at the clipping boundaries:</p>
+<p>During QAT, the forward pass applies <span class="math inline">\(\operatorname{fake\_quant}(x)\)</span>, a simulation of the chosen deployment quantization. Rounding has zero derivative between its jumps and is not differentiable at the jumps, so its true derivative cannot provide the usual learning signal. A clipped STE instead passes the incoming gradient through inside a chosen representable interval and blocks it outside. For the affine mapping above, use <span class="math inline">\(x_{\min}=s(q_{\min}-z)\)</span> and <span class="math inline">\(x_{\max}=s(q_{\max}-z)\)</span>. The following is a backward approximation, not the true derivative of quantization. Implementations may differ at the clipping boundaries:</p>
 <p><span id="eq-m4-c07-e08"><span class="math display">\[
 \text{STE backward rule: } \frac{\partial \text{fake-quant}(x)}{\partial x} = 1 \text{ if } x \in [x_{min}, x_{max}] \text{ else } 0
 \tag{7.8}\]</span></span></p>
-<p>Here ∂ fake_quant(x) / ∂x means the rate of change assigned to the fake-quantization operator with respect to its input x. The equality defines the surrogate gradient used by backward propagation; it does not claim that the true derivative of rounding is one.</p>
+<p>Here ∂ fake_quant(x) / ∂x means the rate of change assigned to the fake-quantization operator with respect to its input x. The equality defines the surrogate gradient used by backward propagation. It does not claim that the true derivative of rounding is one.</p>
 <p>PTQ uses a short offline calibration step and may lose quality at low bit widths. QAT spends training compute to adapt the model to the deployed representation. Compare quality on requests drawn from the expected workload, then measure whether the selected engine uses the packed format in its hot kernels.</p>
 <p>Group size is the local granularity of a quantization scale. It is one of the clearest examples of a performance-quality trade-off: the smaller the group, the better the scale can fit local values, but the more scale metadata and indexing work the kernel must carry.</p>
 <p>During training, measure update stability and convergence. During deployment, check task quality and confirm that the hot kernels read the compact representation instead of expanding it early.</p>

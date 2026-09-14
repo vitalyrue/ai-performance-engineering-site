@@ -336,13 +336,13 @@ window.Quarto = {
 
 
 <p>The training chapter followed a workload that changes model parameters. Inference starts from fixed parameters and repeatedly applies them to a request, but it still creates live software and memory objects: token IDs, temporary activations, logits, sampler state, request metadata, and a key-value cache that grows with the context.</p>
-<p>One request has two different GPU phases. Prefill processes many prompt positions and creates the initial cache; decode adds one token per active sequence and rereads weights plus historical cache state. Their shapes, reuse, and user-visible latency metrics differ, so neither phase should be assigned a bottleneck before it is measured.</p>
+<p>One request has two different GPU phases. Prefill processes many prompt positions and creates the initial cache. Decode adds one token per active sequence and rereads weights plus historical cache state. Their shapes, reuse, and user-visible latency metrics differ, so neither phase should be assigned a bottleneck before it is measured.</p>
 <p>The tokenizer, checkpoint, model, and inference-mode interfaces define the single-request baseline. Prefill and decode then establish the service metrics needed to size static parameters, batch-dependent state, and KV-cache capacity. That byte budget determines which cache layouts and allocation policies are practical in Chapter 9.</p>
 <p>Serving begins before the first GPU kernel: a request waits for admission, is tokenized, runs prompt prefill, and then enters a repeated one-token decode loop.</p>
-<div id="fig-m4-c08-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="An inference request moves from admission and tokenization through prefill, first token, and repeated decode. Each decode step reads prior KV state, appends new key and value entries, samples a token, and contributes to latency and capacity metrics.">
+<div id="fig-m4-c08-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="An inference request moves from admission and tokenization through prefill, first token, and repeated decode. Each decode step reads prior KV state, appends new key and value entries, samples a token, and contributes to latency and capacity metrics. Navigation key lists chapter 8 section map: 8.1 - Inference software objects; 8.2 - Prefill versus decode; 8.3 - Serving metrics; 8.4 - Model weight size; 8.5 - Dynamic inference memory; 8.6 - Key-value cache sizing.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c08-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m4-c08-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="An inference request moves from admission and tokenization through prefill, first token, and repeated decode. Each decode step reads prior KV state, appends new key and value entries, samples a token, and contributes to latency and capacity metrics.">
+<img src="../assets/fig-m4-c08-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="An inference request moves from admission and tokenization through prefill, first token, and repeated decode. Each decode step reads prior KV state, appends new key and value entries, samples a token, and contributes to latency and capacity metrics. Navigation key lists chapter 8 section map: 8.1 - Inference software objects; 8.2 - Prefill versus decode; 8.3 - Serving metrics; 8.4 - Model weight size; 8.5 - Dynamic inference memory; 8.6 - Key-value cache sizing.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c08-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;8.1: An inference request passes through admission, prefill, and repeated decode while memory state grows.
@@ -366,7 +366,7 @@ Figure&nbsp;8.1: An inference request passes through admission, prefill, and rep
 </section>
 <section id="sec-m4-c08-s03" class="level3" data-number="8.1.2">
 <h3 data-number="8.1.2" class="anchored" data-anchor-id="sec-m4-c08-s03"><span class="header-section-number">8.1.2</span> Model and checkpoint interfaces</h3>
-<p>A model interface creates the architecture and connects it to checkpoint tensors. Checkpoint loading determines storage format and startup behavior; execution performance is later determined by placement, dtype, compiled or library kernels, and the serving runtime.</p>
+<p>A model interface creates the architecture and connects it to checkpoint tensors. Checkpoint loading determines storage format and startup behavior. Execution performance is later determined by placement, dtype, compiled or library kernels, and the serving runtime.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong><code>AutoModelForCausalLM</code>:</strong></span> A Hugging Face Transformers factory for autoregressive language-model architectures and checkpoints. It is useful for experiments, correctness checks, and baseline generation loops.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong><code>safetensors</code>:</strong></span> A tensor serialization format designed for safe, direct metadata inspection and efficient checkpoint loading. It owns storage and loading, not batching or kernel selection.</li>
@@ -383,7 +383,7 @@ Figure&nbsp;8.1: An inference request passes through admission, prefill, and rep
 <li><span class="definition-term" data-custom-style="Definition Term"><strong><code>model.eval()</code>:</strong></span> Changes module behavior such as dropout and batch-normalization statistics for evaluation or inference.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong><code>torch.no_grad()</code>:</strong></span> Disables gradient recording for enclosed operations, reducing autograd work and activation retention.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong><code>torch.inference_mode()</code>:</strong></span> A stricter inference context that also disables view tracking and version-counter updates for tensors created inside it.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Combined use:</strong></span> Inference normally uses <code>model.eval()</code> with an appropriate gradient-disabling context. One controls module semantics; the other controls autograd bookkeeping.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Combined use:</strong></span> Inference normally uses <code>model.eval()</code> with an appropriate gradient-disabling context. One controls module semantics. The other controls autograd bookkeeping.</li>
 </ul>
 <p>These preparation paths meet when the application passes the token IDs to the loaded model. Evaluation mode controls module behavior, and an inference context disables gradient bookkeeping during the generation loop. Chapter 10 introduces a serving engine when many requests must share admission control, batching, KV-cache blocks, and operational metrics.</p>
 </section>
@@ -468,7 +468,7 @@ Table&nbsp;8.2: Prefill and decode arithmetic-intensity interpretation.
 <td>Prefill</td>
 <td>Many prompt tokens reuse weights and attention tiles</td>
 <td>Higher arithmetic intensity; tensor-core utilization is easier to recover</td>
-<td>Long prompts mainly increase TTFT and temporary activation/workspace pressure</td>
+<td>Long prompts increase TTFT and temporary activation/workspace pressure. They also create persistent KV-cache entries that affect admission and concurrency.</td>
 </tr>
 <tr class="even">
 <td>Decode</td>
@@ -493,37 +493,37 @@ Table&nbsp;8.2: Prefill and decode arithmetic-intensity interpretation.
 <p><strong>Decode:</strong> Each active sequence contributes one new query while the kernel reads the historical K/V state. The work is smaller per sequence and more dependent on HBM traffic, cache layout, launch overhead, and scheduler timing.</p>
 <p><strong>Optimization test:</strong> Measure FLOPs, bytes, and phase-specific latency separately. A prefill optimization can improve TTFT while doing little for TPOT, and a decode optimization can increase throughput while consuming more KV-cache capacity.</p>
 </div>
-<p>The phase split now gives the first measurement boundary. TTFT describes the path through admission and prefill to the first generated token; TPOT and inter-token latency describe the repeated decode path.</p>
+<p>The phase split now gives the first measurement boundary. TTFT describes the path through admission and prefill to the first generated token. TPOT and inter-token latency describe the repeated decode path.</p>
 </section>
 <section id="sec-m4-c08-s06" class="level2" data-number="8.3">
 <h2 data-number="8.3" class="anchored" data-anchor-id="sec-m4-c08-s06"><span class="header-section-number">8.3</span> Serving metrics</h2>
 <p>Inference metrics describe different stakeholders. A user notices the first token, the smoothness of streaming, and total completion time. An operator notices tokens per second, requests per second, GPU utilization, and cost. A product Service Level Agreement (SLA) turns these into promises such as ‘95% of requests under a latency threshold.’</p>
 <p><strong>One-request timestamp trace</strong></p>
 <ul>
-<li>Record request arrival, first-token emission, each later token emission, and completion.</li>
+<li>A request-timing record includes request arrival, first-token emission, each later token emission, and completion.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>TTFT:</strong></span> Arrival to first-token emission.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>ITL:</strong></span> Each gap between consecutive output-token emissions.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>TPOT in this chapter:</strong></span> Excludes the first token and is the mean of the <code>n - 1</code> decode intervals after first-token emission for a request with <code>n &gt; 1</code> output tokens. Other systems may aggregate TPOT differently; do not combine those conventions without relabeling or recomputing them.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>TPOT in this chapter:</strong></span> Excludes the first token and is the mean of the <code>n - 1</code> decode intervals after first-token emission for a request with <code>n &gt; 1</code> output tokens. Other systems may aggregate TPOT differently, so those conventions require relabeling or recomputation before comparison.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>End-to-end latency:</strong></span> Arrival to completion.</li>
 </ul>
 <p><strong>Workload and operator metrics</strong></p>
 <ul>
 <li>Report distributions of the chosen request-level measures, such as p50 and p95, without silently changing their aggregation convention.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Throughput:</strong></span> Tokens or requests completed per second; state prompt length, output length, and workload mix.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Throughput:</strong></span> Tokens or requests completed per second. State prompt length, output length, and workload mix.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>QPS, goodput, and cost:</strong></span> Must be tied to the SLA and quality target. Goodput counts only completed work that meets those targets.</li>
 </ul>
 <p><span id="eq-m4-c08-e01"><span class="math display">\[
 \text{E2E latency} \approx \text{TTFT} + (\text{number of output tokens} - 1) \times \text{TPOT}
 \tag{8.1}\]</span></span></p>
-<p>In this approximation, the first output token is already included in TTFT. A response with <code>n</code> output tokens therefore contains <code>n - 1</code> later decode intervals. TPOT is an average here; a production trace should also inspect the distribution of inter-token latency as batching, cache length, and scheduling change.</p>
+<p>In this approximation, the first output token is already included in TTFT. A response with <code>n</code> output tokens therefore contains <code>n - 1</code> later decode intervals. TPOT is an average here. A production trace should also inspect the distribution of inter-token latency as batching, cache length, and scheduling change.</p>
 <p>For example, if TTFT is 700 ms, the response has 20 output tokens, and average TPOT is 35 ms, then E2E latency is about 700 + 19 * 35 = 1365 ms. Long prompts mainly push TTFT because prefill must process many input tokens before streaming can begin. Long generations mainly push E2E latency through repeated decode steps. This is why the same optimization can improve one metric and harm another: larger batches can increase throughput and utilization while increasing queueing, TTFT, or ITL.</p>
 </section>
 <section id="sec-m4-c08-s07" class="level2" data-number="8.4">
 <h2 data-number="8.4" class="anchored" data-anchor-id="sec-m4-c08-s07"><span class="header-section-number">8.4</span> Model weight size</h2>
 <p>Parameter sizing estimates the static model-weight footprint. It answers a different question from KV-cache sizing: weights are loaded once per replica or shard, while KV cache grows with active serving state. The estimate is useful for deciding whether a model fits on one GPU, one node, or a distributed group.</p>
-<p>A transformer block is dominated by projection matrices. The formulas below are first-order approximations; exact counts depend on vocabulary size, tied embeddings, grouped-query attention, bias terms, feed-forward expansion ratio, and architecture-specific details.</p>
+<p>A transformer block is dominated by projection matrices. The formulas below are first-order approximations. Exact counts depend on vocabulary size, tied embeddings, grouped-query attention, bias terms, feed-forward expansion ratio, and architecture-specific details.</p>
 <ul>
-<li>Embeddings and language-model head: V * d parameters when the input embedding and output head share weights; an untied design contributes roughly 2 * V * d.</li>
+<li>Embeddings and language-model head: V * d parameters when the input embedding and output head share weights. An untied design contributes roughly 2 * V * d.</li>
 <li>Self-attention projection weights: about 4 * d^2 for standard full multi-head attention with d-by-d query, key, value, and output projections. Grouped-query and multi-query attention use smaller key/value projections.</li>
 <li>Multi-Layer Perceptron (MLP/FFN) Weights: 8 × d² parameters. This consists of the up-projection (d-by-4d) and down-projection (4d-by-d). For models using SwiGLU activations such as Llama, the gate and up projections use a hidden size near 8/3 × d, so three matrices contribute about 3 × (8/3 × d²) = 8 × d² parameters. Adding bias terms adds comparatively little.</li>
 </ul>
@@ -569,7 +569,7 @@ Table&nbsp;8.2: Prefill and decode arithmetic-intensity interpretation.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>D with subscript head:</strong></span> Head dimension for each key or value vector.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>bytes per element:</strong></span> Storage size for each cached element, such as 2 bytes for FP16/BF16 or fewer bytes for supported KV-cache quantization.</li>
 </ul>
-<p>For example, B = 16, S = 4096, L = 32, key-value heads = 8, head dimension = 128, and 2-byte elements use 8,589,934,592 bytes: about 8.59 GB decimal or exactly 8 GiB. This is dynamic serving state, not model weight memory. Treat the formula as a lower bound; fragmentation, padding, metadata, and workspaces add overhead.</p>
+<p>For example, B = 16, S = 4096, L = 32, key-value heads = 8, head dimension = 128, and 2-byte elements use 8,589,934,592 bytes: about 8.59 GB decimal or exactly 8 GiB. This is dynamic serving state, not model weight memory. Treat the formula as a lower bound. Fragmentation, padding, metadata, and workspaces add overhead.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Worked real-scale example: Llama 3.3 70B</strong></p>
 <p><strong>Example configuration:</strong> Use 80 transformer layers, 8 key-value heads, head dimension 128, one active sequence, 32,000 cached tokens, and BF16 storage at 2 bytes per element.</p>
@@ -577,7 +577,7 @@ Table&nbsp;8.2: Prefill and decode arithmetic-intensity interpretation.
 <p><strong>Calculated size:</strong> That is about 9.77 GiB for one sequence before block-table metadata, allocator fragmentation, scales, workspaces, and other live tensors. If 32K means 32,768 tokens rather than 32,000, the same calculation is exactly 10.00 GiB.</p>
 <p><strong>Serving consequence:</strong> A single long-context request can consume a material fraction of an 80-GB GPU even when the model weights are already resident. Concurrency planning must budget KV cache separately from weights.</p>
 </div>
-<p>Multi-head attention variants change the key-value head count in that formula. Query heads decide how many independent query projections are used for the current token. Key-value heads decide how many historical key and value streams must be stored and reread. GQA and MQA reduce cache memory because several query heads share fewer key-value heads.</p>
+<p>Multi-head attention variants change the key-value head count in that formula. Query heads decide how many independent query projections are used for the current token. Key-value heads decide how many historical key and value streams must be stored and reread. GQA and MQA reduce cache memory because several query heads share fewer key-value heads. The table holds layer count, head dimension, retained tokens, batch size, and cache dtype fixed, so it isolates the effect of the query-to-KV head ratio.</p>
 <div id="tbl-m4-c08-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c08-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
