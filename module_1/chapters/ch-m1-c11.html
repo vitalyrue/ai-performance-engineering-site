@@ -341,7 +341,7 @@ window.Quarto = {
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../appendices/ch-m1-appb.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Linked concept dictionary</span></span></a>
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Concept dictionary</span></span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -677,9 +677,7 @@ Table&nbsp;11.3: Memory types differ by representation and lifecycle.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Capture:</strong></span> The process of identifying candidate information from the conversation and associating it with a source.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Promotion:</strong></span> The decision process that determines whether captured information is valuable enough to store durably.</li>
 </ul>
-<p>A memory system manages state through capture, promotion, retrieval, correction, and deletion. If an application simply appends all history, irrelevant material crowds the context window.</p>
-<p>Capture logic instead extracts only candidate facts, and promotion logic filters them. If a user says, “My billing address is now in Boston,” capture isolates the address. Promotion evaluates it as a persistent account fact and stores it in a database.</p>
-<p>Correction, expiration, and deletion determine what happens when this fact loses value. Quality depends on restraint. Recall metrics measure whether prior information helps. Injection metrics measure how often stale memory enters context. Together, these tests compare the memory’s value with the cost of controlling it.</p>
+<p>The table distinguishes four kinds of memory before the next sections examine them. Section 11.4 compares live working state with dated event records. Sections 11.5 and 11.6 then explain how selected facts and reusable procedures are saved, retrieved, corrected, and deleted. This order prevents every past message from being treated as equally durable or equally useful.</p>
 </section>
 <section id="sec-m1-c11-s04" class="level2" data-number="11.4">
 <h2 data-number="11.4" class="anchored" data-anchor-id="sec-m1-c11-s04"><span class="header-section-number">11.4</span> Working and episodic memory</h2>
@@ -739,18 +737,13 @@ Figure&nbsp;11.8: A durable fact is promoted from an episode through validation 
 <p><span id="eq-m1-c11-e01"><span class="math display">\[
 S(m,q)=w_r\mathrm{relevance}(m,q)+w_f\mathrm{freshness}(m)+w_s\mathrm{reliability}(m)
 \tag{11.1}\]</span></span></p>
-<p>Here, <span class="math inline">\(m\)</span> is an eligible record and <span class="math inline">\(q\)</span> is the request. The component functions return calibrated relevance, freshness, and reliability scores. Product weights <span class="math inline">\(w_r\)</span>, <span class="math inline">\(w_f\)</span>, and <span class="math inline">\(w_s\)</span> balance these scores to rank candidates without overriding access rules.</p>
-<p>For the practical example only, each component uses a 0–1 scoring scale, and the weights express the product’s chosen trade-off. These numbers are ranking inputs, not probabilities. Another design can use a different scale or weights that do not sum to one, provided the resulting decisions are calibrated.</p>
+<p>Here, <span class="math inline">\(m\)</span> is an eligible record and <span class="math inline">\(q\)</span> is the request. The component functions return relevance, freshness, and reliability scores. Product weights <span class="math inline">\(w_r\)</span>, <span class="math inline">\(w_f\)</span>, and <span class="math inline">\(w_s\)</span> balance these scores to rank candidates without overriding access rules.</p>
+<p>Freshness needs an explicit clock. One simple policy stores <code>observed_at</code> and computes the record’s age when it is read. With a 30-day useful-life horizon, define freshness as the larger of zero and <code>1 - age_in_days / 30</code>. A record observed 6 days ago receives 0.8, while one at least 30 days old receives 0 and should normally be refreshed or excluded. An <code>expires_at</code> rule can remove a record before ranking. The 30-day horizon is only an example. It must reflect how quickly the underlying fact changes. Calibrate the resulting rank by comparing retrieval decisions with reviewed cases, rather than treating the score as a probability.</p>
+<p>For the practical example only, each component uses a 0 to 1 scoring scale, and the weights express the product’s chosen trade-off. These numbers are ranking inputs, not probabilities. Another design can use a different scale or weights that do not sum to one, provided the resulting decisions are calibrated.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example calculation: Rank a governed memory candidate</strong></p>
 <p>Use weights 0.5 for relevance, 0.3 for freshness, and 0.2 for source reliability. One eligible record scores 0.8, 0.6, and 1.0 on those components.</p>
-<ol type="1">
-<li>Relevance contributes 0.5 x 0.8 = 0.40.</li>
-<li>Freshness contributes 0.3 x 0.6 = 0.18.</li>
-<li>Source reliability contributes 0.2 x 1.0 = 0.20.</li>
-<li>The combined score is 0.40 + 0.18 + 0.20 = 0.78.</li>
-</ol>
-<p><strong>Result:</strong> The record’s governed retrieval score is 0.78.</p>
+<p><strong>1.</strong> Relevance contributes 0.5 × 0.8 = 0.40. <strong>2.</strong> Freshness contributes 0.3 × 0.6 = 0.18. <strong>3.</strong> Source reliability contributes 0.2 × 1.0 = 0.20. <strong>4.</strong> The combined score is 0.40 + 0.18 + 0.20 = 0.78. <strong>Result:</strong> The record’s governed retrieval score is 0.78.</p>
 <p><strong>Interpretation:</strong> The number is valid only after calibration against retrieval decisions. A deleted, unauthorized, or wrong-subject record remains ineligible even if its similarity is high.</p>
 </div>
 <p><strong>A semantic fact record carries lifecycle metadata.</strong></p>
@@ -797,6 +790,9 @@ S(m,q)=w_r\mathrm{relevance}(m,q)+w_f\mathrm{freshness}(m)+w_s\mathrm{reliabilit
 <span id="lst-m1-c11-c03-16"><a href="#lst-m1-c11-c03-16" aria-hidden="true" tabindex="-1"></a>    cache.invalidate(memory_id)</span>
 <span id="lst-m1-c11-c03-17"><a href="#lst-m1-c11-c03-17" aria-hidden="true" tabindex="-1"></a>    deletion_audit.record_without_value(subject, memory_id)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Promotion requires a source record, observation time, consent for the data category, validation, scope classification, and a retention result. Deletion reaches the primary record, vector or lexical indexes, and caches. The audit keeps proof that deletion occurred without retaining the deleted value itself.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Tombstone:</strong></span> A small record stating that an item was deleted or replaced, without retaining the removed value. Replicas and indexes use it to avoid restoring an old copy during synchronization.</li>
+</ul>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Correction rule</strong></p>
 <p>When a new fact conflicts with an active fact, do not silently append both. Resolve identity and scope, preserve provenance, supersede or reject the old value, and make the corrected state visible to the user when appropriate.</p>
