@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -351,13 +351,13 @@ Figure&nbsp;1.1: Recorded answer tokens supply the SFT training targets.
 <p>The following methods answer different training questions.</p>
 <ul>
 <li><p><strong>Pre-training:</strong> Next-token likelihood builds language, world regularities, and broad skills, but does not provide task-specific evidence of helpfulness.</p></li>
-<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>SFT:</strong></span> Each training record supplies a prompt and a target completion. Several records can demonstrate different acceptable answers to the same prompt. SFT trains to increase the likelihood of the supplied answers but has no chosen-versus-rejected label to rank them.</p></li>
+<li><p><span class="definition-term" data-custom-style="Definition Term"><strong>SFT:</strong></span> One target completion for each prompt makes its instruction format, tone, and demonstrated skills more likely, but treats that one sample as the only target.</p></li>
 <li><p><strong>Preference optimization:</strong> A chosen-versus-rejected pair identifies relative quality and alignment, but the quality signal is only as good as the comparison or reward behind it.</p></li>
 <li><p><strong>RL for reasoning and agents:</strong> A learned, human, or verifier reward can shape multi-step behavior toward an outcome, but reward design can distort the behavior it reinforces.</p></li>
 </ul>
 <p>The available evidence determines which method fits the task.</p>
 <ul>
-<li><p><strong>Demonstrations:</strong> Use SFT when trusted example answers show the required behavior without a need to rank alternatives.</p></li>
+<li><p><strong>Demonstrations:</strong> Use SFT when one clear answer is enough to show the required behavior.</p></li>
 <li><p><strong>Comparisons:</strong> Add preference evidence when the important distinction is which of two acceptable-looking answers is better.</p></li>
 <li><p><strong>Online rewards:</strong> Use online rewards when the current policy must generate new attempts and a scorer can evaluate them reliably.</p></li>
 </ul>
@@ -438,7 +438,7 @@ p = 0.5, \ln p = -0.693, -\ln p = 0.693
 <p><strong>Mechanism:</strong> Each factor is the probability of the recorded next token given the prompt and earlier recorded answer tokens. The product chains all <span class="math inline">\(T\)</span> decisions. <strong>Interpretation:</strong> Calculate the probability of producing that exact token sequence. Longer answers usually have smaller raw products. Summed log-probabilities represent the same product stably. They do not by themselves make whole-answer comparisons fair across lengths. <strong>Scale:</strong> The product is a probability. Applying the natural logarithm produces a log score reported in nats.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Example: token probabilities become one answer score</strong></p>
-<p>A fixed three-token answer, including its stop token, receives next-token probabilities 0.50, 0.40, and 0.20 under one policy.</p>
+<p>A fixed three-token answer receives next-token probabilities 0.50, 0.40, and 0.20 under one policy.</p>
 <p><strong>Inputs and measurement</strong></p>
 <p>Teacher forcing runs the recorded answer through the model, applies softmax at each position, and gathers the probability of each recorded token ID.</p>
 <p><strong>Calculation</strong></p>
@@ -460,7 +460,7 @@ p = 0.5, \ln p = -0.693, -\ln p = 0.693
 <h2 data-number="1.3" class="anchored" data-anchor-id="sec-m5-c01-s03"><span class="header-section-number">1.3</span> Training on demonstrated answers</h2>
 <p>The policy calculation can score any fixed answer token by token. SFT now needs to turn a trusted recorded answer into a loss while preventing prompt text and role markers from becoming training targets. Prepare the recorded conversation first, identify the assistant response positions, and then calculate the loss only on those positions.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Response-only masking</strong></span> prepares token targets: The conversation supplies context, but normally only assistant response tokens are training targets. The chat template converts role-structured messages into the exact text and special tokens seen by the model.<a href="#fn6" class="footnote-ref" id="fnref6" role="doc-noteref"><sup>6</sup></a> Response-only masking then sets prompt and role-marker positions to −100 so PyTorch cross-entropy ignores them.<a href="#fn7" class="footnote-ref" id="fnref7" role="doc-noteref"><sup>7</sup></a> If every token is left as a target, the model is trained to reproduce the user prompt and template markers instead of learning only the demonstrated answer.</li>
+<li><strong>Response-only masking prepares token targets:</strong> The conversation supplies context, but normally only assistant response tokens are training targets. The chat template converts role-structured messages into the exact text and special tokens seen by the model.<a href="#fn6" class="footnote-ref" id="fnref6" role="doc-noteref"><sup>6</sup></a> Response-only masking then sets prompt and role-marker positions to −100 so PyTorch cross-entropy ignores them.<a href="#fn7" class="footnote-ref" id="fnref7" role="doc-noteref"><sup>7</sup></a> If every token is left as a target, the model is trained to reproduce the user prompt and template markers instead of learning only the demonstrated answer.</li>
 </ul>
 <p>The training pipeline uses four software components to carry the demonstrated answer into the update.</p>
 <ul>
