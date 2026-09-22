@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -357,6 +357,63 @@ Figure&nbsp;5.1: Verifier checks and guarded interactions support tool-use train
 <li><p><strong>Learned reward model:</strong> A transformer predicts a preference score. It scales to fresh outputs, but a policy can exploit model errors. In Gao and colleagues’ synthetic proxy-versus-gold setup, further optimization of the proxy eventually reduced the gold-model score. That result demonstrates the risk under the tested setup, not a universal failure threshold.<a href="#fn4" class="footnote-ref" id="fnref4" role="doc-noteref"><sup>4</sup></a></p></li>
 <li><p><strong>Verifier (RLVR):</strong> Tests pass, JSON output validates, or an answer matches ground truth. This form of reward can score many attempts and is less subjective, but a policy can exploit an incomplete specification.</p></li>
 </ul>
+<p>The course lecture compares RLHF with RLVR on six properties. The comparison shows which kind of reward a project can obtain and what each kind leaves unchecked.</p>
+<div id="tbl-m5-c05-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m5-c05-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;5.1: RLHF and RLVR differ in reward source, cost, and main risk.
+</figcaption>
+<div aria-describedby="tbl-m5-c05-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Property</th>
+<th>RLHF</th>
+<th>RLVR</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Reward source</td>
+<td>A learned reward model predicts human preference.</td>
+<td>A program checks the output against a known result.</td>
+</tr>
+<tr class="even">
+<td>Labeling cost</td>
+<td>Human comparisons are needed to train the reward model.</td>
+<td>No per-answer labels, but the checks must be written, tested, and maintained.</td>
+</tr>
+<tr class="odd">
+<td>Reward quality</td>
+<td>Approximate. Exploitable wherever the reward model is wrong.</td>
+<td>Exact for the property tested. Silent about everything untested.</td>
+</tr>
+<tr class="even">
+<td>Suitable tasks</td>
+<td>Open-ended quality, safety, and style.</td>
+<td>Code, mathematics, structured output, and tool tasks with checkable end states.</td>
+</tr>
+<tr class="odd">
+<td>Scaling limit</td>
+<td>The labeling budget.</td>
+<td>Compute for sampling and executing attempts.</td>
+</tr>
+<tr class="even">
+<td>Main risk</td>
+<td>Exploitation of reward-model errors.</td>
+<td>Exploitation of weak tests and specification gaps.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Neither column removes the need for evaluation. RLVR replaces the cost of labels with the cost of writing reliable checks, and its exactness applies only to what those checks test.</p>
 <p>RLVR does not eliminate reward hacking. Tülu 3, for example, reports overoptimization in its own RLVR experiments as KL divergence from the initial model increased, with task-specific exceptions.<a href="#fn5" class="footnote-ref" id="fnref5" role="doc-noteref"><sup>5</sup></a></p>
 <ul>
 <li><p><strong>Weak test suite:</strong> A coding model can learn visible cases while failing hidden inputs.</p></li>
@@ -369,7 +426,7 @@ Figure&nbsp;5.1: Verifier checks and guarded interactions support tool-use train
 <div id="tbl-m5-c05-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m5-c05-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;5.1: Four verifier results become group advantages and clipped token contributions.
+Table&nbsp;5.2: Four verifier results become group advantages and clipped token contributions.
 </figcaption>
 <div aria-describedby="tbl-m5-c05-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <table class="caption-top table">
@@ -417,6 +474,24 @@ Table&nbsp;5.1: Four verifier results become group advantages and clipped token 
 </figure>
 </div>
 <p>The four displayed terms average to <span class="math inline">\((1.10-0.90+1.20-0.80)/4=0.15\)</span>. Group statistics turn binary scores into signed advantages. Policy ratios weight them. This trace covers one selected token per completion, not a full completion.</p>
+<p>For coding, the course lecture contrasts the two training signals. SFT imitates example code, so it raises the probability of common patterns, style, and format. RL optimizes whether generated code passes its tests, so it can raise task success and <code>pass@k</code> (Section 6.2) on problems whose solutions differ from any example. The two combine: SFT supplies a starting policy that already writes runnable code, which matters for the problem below.</p>
+<p>The mixed group above, with two passes and two failures, is the useful case. A binary test reward gives zero to every failing program. When a model rarely solves a task, most sampled attempts score zero. A group in which every attempt scores zero produces no GRPO advantage (Section 4.4.3). Training then spends generation and execution cost without learning from that group. The model must produce a success before a success can be reinforced. The lecture lists four mitigations, and each has a cost.</p>
+<ul>
+<li><strong>Warm start with SFT:</strong> Begin RL from a checkpoint that already solves some tasks, so successes appear in sampled groups. This requires suitable demonstrations.</li>
+<li><strong>Better prompts:</strong> State the required format, function signature, and constraints, so that failures come from the task rather than from misreading the request.</li>
+<li><strong>More completions per prompt:</strong> A larger group raises the chance of a mix of passing and failing attempts when passes are rare. Every extra attempt must still be generated and executed.</li>
+<li><strong>Reward shaping:</strong> Partial credit, such as the fraction of tests passed or a bonus for code that compiles, creates differences between failing attempts. Each added term is also a new target the policy can exploit. Section 5.3 works through a weighted example.</li>
+</ul>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: group size and the chance of a usable group</strong></p>
+<p>Suppose each sampled attempt at one coding task passes independently with probability 0.05. With binary rewards, a usable within-group comparison needs at least one pass and one failure. Both an all-fail group and an all-pass group have zero reward variation, so neither supplies a group-relative advantage.</p>
+<p><strong>Calculation</strong></p>
+<ol type="1">
+<li><strong>Group of 4:</strong> The chance of a mixed group is <span class="math inline">\(1-0.95^4-0.05^4\approx0.185\)</span>. The subtracted terms are the all-fail and all-pass cases.</li>
+<li><strong>Group of 16:</strong> The same calculation gives <span class="math inline">\(1-0.95^{16}-0.05^{16}\approx0.560\)</span>.</li>
+</ol>
+<p><strong>Conclusion:</strong> Quadrupling the group size roughly triples the chance of a mixed comparison for this task, at four times the generation and execution cost. DAPO’s group filtering (Section 4.4.3) discards both kinds of uniform group, but it cannot create successes. A task with a pass rate near zero needs a stronger starting policy, clearer prompts, or shaped reward before group-based RL can learn from it.</p>
+</div>
 </section>
 <section id="sec-m5-c05-s02" class="level2" data-number="5.2">
 <h2 data-number="5.2" class="anchored" data-anchor-id="sec-m5-c05-s02"><span class="header-section-number">5.2</span> Testing the verifier for loopholes</h2>
@@ -424,7 +499,7 @@ Table&nbsp;5.1: Four verifier results become group advantages and clipped token 
 <p>A verifier must state what it can observe and which requirements remain outside its checks. A coding verifier normally combines several checks, each closing a different loophole.</p>
 <ul>
 <li><p><strong>Outcome check:</strong> Hidden unit tests validate return values, reducing overfitting to visible examples or lucky guesses.</p></li>
-<li><p><strong>Constraint check:</strong> The execution environment enforces an explicit policy for network, filesystem, and process access. A sandbox is an isolated environment configured to restrict those operations. An import-name check alone does not provide isolation. NIST’s container-security guide recommends explicit isolation, network segmentation, and resource controls, but it does not certify any particular generated-code runner.<a href="#fn7" class="footnote-ref" id="fnref7" role="doc-noteref"><sup>7</sup></a></p></li>
+<li><p><strong>Constraint check:</strong> The execution environment enforces an explicit policy for network, filesystem, and process access. A <span class="definition-term" data-custom-style="Definition Term"><strong>sandbox</strong></span> is an isolated environment configured to restrict those operations. An import-name check alone does not provide isolation. NIST’s container-security guide recommends explicit isolation, network segmentation, and resource controls, but it does not certify any particular generated-code runner.<a href="#fn7" class="footnote-ref" id="fnref7" role="doc-noteref"><sup>7</sup></a></p></li>
 <li><p><strong>Resource limit:</strong> A timeout and memory cap constrain execution so the reward does not favor an impractically expensive solution.</p></li>
 <li><p><strong>Process check when needed:</strong> An intermediate tool action reaches a required checkpoint, giving denser credit when final-only reward is too weak.</p></li>
 </ul>
@@ -437,7 +512,7 @@ Table&nbsp;5.1: Four verifier results become group advantages and clipped token 
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Agentic RL:</strong></span> Reinforcement learning over a sequence of model actions and environment results. The application assembles the model’s input from the user request, available action history, tool outputs, and any stored memory it includes. The environment may also contain state that the model cannot observe, such as hidden tests or files it has not read. WebGPT provides an early concrete example: a model received the current browser state, issued a command, and trained with an episode-level reward in a restricted browsing environment.<a href="#fn8" class="footnote-ref" id="fnref8" role="doc-noteref"><sup>8</sup></a></li>
 </ul>
 <p>After each policy action, the environment returns a result that becomes part of the next model input. Because that result changes the next decision, training records the full sequence rather than only the final answer.</p>
-<p>The ordered record of these interactions is a <strong>trajectory</strong>. A final reward can train from a whole trajectory without a separate score for every action. Intermediate scores are optional: they can make useful progress easier to identify, but they can also reward a shortcut such as repeatedly passing an easy check. In either case, the application must enforce tool restrictions independently of the reward.</p>
+<p>The ordered record of these interactions is a <span class="definition-term" data-custom-style="Definition Term"><strong>trajectory</strong></span>. A final reward can train from a whole trajectory without a separate score for every action. Intermediate scores are optional: they can make useful progress easier to identify, but they can also reward a shortcut such as repeatedly passing an easy check. In either case, the application must enforce tool restrictions independently of the reward.</p>
 <div id="fig-m5-c05-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="An agent policy selects a tool action. The environment returns an observation to the policy and a result to a verifier. Verifier reward goes to a trainer, whose parameter update changes the policy.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m5-c05-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -450,7 +525,7 @@ Figure&nbsp;5.2: Observations guide actions. Rewards train the model.
 </div>
 <p>The same environment event has two different uses: its observation informs the next action, while a verifier can turn selected results into reward.</p>
 <p>Agentic rewards can combine final task success with partial credit for intermediate checkpoints, using the process-supervision idea introduced for reasoning in Chapter 4. Lightman and colleagues distinguish outcome supervision from feedback on intermediate reasoning steps and found a process-supervision advantage on their tested MATH setup. That finding does not establish that every intermediate tool checkpoint is useful.<a href="#fn9" class="footnote-ref" id="fnref9" role="doc-noteref"><sup>9</sup></a> The task defines which intermediate events receive partial credit. A coding environment can run tests, while an agent benchmark can validate a sequence of tool observations and actions. Execution restrictions still have to be enforced independently.</p>
-<p>Credit assignment needs the trajectory, not only its last string. Store each state, action, observation, and checkpoint result in order. A final success reward can be attached to the terminal transition, while partial checkpoint rewards can be attached when the agent discovers the failure, produces a valid patch, or recovers from an error. The record makes those calculations possible, but does not identify the cause of success by itself. PPO can estimate different advantages at successive states. A GRPO update using one score per complete trajectory assigns the same relative advantage to all of that trajectory’s generated tokens, including any unnecessary actions.<a href="#fn10" class="footnote-ref" id="fnref10" role="doc-noteref"><sup>10</sup></a></p>
+<p>Credit assignment needs the trajectory, not only its last string. Store each state, action, observation, and checkpoint result in order. A final success reward can be attached to the terminal transition, while partial checkpoint rewards can be attached when the agent discovers the failure, produces a valid patch, or recovers from an error. The record makes those calculations possible, but does not identify the cause of success by itself. PPO can estimate different advantages at successive states. Applying GRPO’s completion-level comparison to tool trajectories is an extension of the method. The cited reasoning study does not test tool trajectories. If each complete trajectory receives one score, every generated token in that trajectory receives the same relative advantage, including tokens in unnecessary actions.<a href="#fn10" class="footnote-ref" id="fnref10" role="doc-noteref"><sup>10</sup></a></p>
 <p>For coding tasks, the fraction of hidden unit tests passed can supply partial outcome reward, while format checks and blocked-import checks test separate requirements. A container or a hosted isolated runner may be selected to implement an execution boundary, but the implementation category alone is not evidence that filesystem, network, process, time, and memory controls are configured completely.<a href="#fn11" class="footnote-ref" id="fnref11" role="doc-noteref"><sup>11</sup></a> A tool call produces an observation that conditions the next action. End-task success can provide the final reward, while checked subgoals can add partial rewards when sparse feedback makes credit assignment too difficult.</p>
 <p>Begin with a binary correctness baseline and add components only when a concrete failure needs them. A value such as <span class="math inline">\(-0.1\)</span> for malformed output is an illustrative design choice, not a generally recommended penalty. First test whether simple correctness checks can be gamed. Only then add style or process terms whose effects can be measured separately.</p>
 <p>Agentic RL changes each part of the ordinary LLM rollout.</p>
@@ -479,7 +554,7 @@ Figure&nbsp;5.2: Observations guide actions. Rewards train the model.
 <div id="tbl-m5-c05-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m5-c05-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;5.2: Generated action tokens are selected for policy loss. Context and padding are not.
+Table&nbsp;5.3: Generated action tokens are selected for policy loss. Context and padding are not.
 </figcaption>
 <div aria-describedby="tbl-m5-c05-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <table class="caption-top table">
