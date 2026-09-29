@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-86c662592f1883cd840c12347739e1ce.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-9e6c75b63f330ca6992d1da0fbaf20d1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -318,8 +318,8 @@ window.Quarto = {
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../appendices/ch-m4-app-b.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Lists of Figures and Tables</span></span></a>
+  <a href="../appendices/ch-m4-app-c.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">References</span></a>
   </div>
 </li>
       </ul>
@@ -336,12 +336,15 @@ window.Quarto = {
   <ul>
   <li><a href="#sec-m4-c12-s01" id="toc-sec-m4-c12-s01" class="nav-link active" data-scroll-target="#sec-m4-c12-s01"><span class="header-section-number">12.1</span> Communication on the critical path</a></li>
   <li><a href="#sec-m4-c12-s02" id="toc-sec-m4-c12-s02" class="nav-link" data-scroll-target="#sec-m4-c12-s02"><span class="header-section-number">12.2</span> Topology and communication distance</a></li>
-  <li><a href="#sec-m4-c12-s03" id="toc-sec-m4-c12-s03" class="nav-link" data-scroll-target="#sec-m4-c12-s03"><span class="header-section-number">12.3</span> Communication cost model</a></li>
+  <li><a href="#sec-m4-c12-s03" id="toc-sec-m4-c12-s03" class="nav-link" data-scroll-target="#sec-m4-c12-s03"><span class="header-section-number">12.3</span> Rank skew and waiting</a></li>
   <li><a href="#sec-m4-c12-s04" id="toc-sec-m4-c12-s04" class="nav-link" data-scroll-target="#sec-m4-c12-s04"><span class="header-section-number">12.4</span> Physical communication paths</a></li>
   <li><a href="#sec-m4-c12-s05" id="toc-sec-m4-c12-s05" class="nav-link" data-scroll-target="#sec-m4-c12-s05"><span class="header-section-number">12.5</span> Point-to-point and collective communication</a></li>
   <li><a href="#sec-m4-c12-s06" id="toc-sec-m4-c12-s06" class="nav-link" data-scroll-target="#sec-m4-c12-s06"><span class="header-section-number">12.6</span> Collective primitives</a></li>
   <li><a href="#sec-m4-c12-s07" id="toc-sec-m4-c12-s07" class="nav-link" data-scroll-target="#sec-m4-c12-s07"><span class="header-section-number">12.7</span> Collective algorithms</a></li>
-  <li><a href="#sec-m4-c12-s08" id="toc-sec-m4-c12-s08" class="nav-link" data-scroll-target="#sec-m4-c12-s08"><span class="header-section-number">12.8</span> Framework and communication backends</a></li>
+  <li><a href="#sec-m4-c12-s08" id="toc-sec-m4-c12-s08" class="nav-link" data-scroll-target="#sec-m4-c12-s08"><span class="header-section-number">12.8</span> Framework and communication backends</a>
+  <ul class="collapse">
+  <li><a href="#sec-m4-c12-s13" id="toc-sec-m4-c12-s13" class="nav-link" data-scroll-target="#sec-m4-c12-s13"><span class="header-section-number">12.8.1</span> Launching ranks and selecting transports</a></li>
+  </ul></li>
   <li><a href="#sec-m4-c12-s09" id="toc-sec-m4-c12-s09" class="nav-link" data-scroll-target="#sec-m4-c12-s09"><span class="header-section-number">12.9</span> Communication and computation overlap</a></li>
   <li><a href="#sec-m4-c12-s10" id="toc-sec-m4-c12-s10" class="nav-link" data-scroll-target="#sec-m4-c12-s10"><span class="header-section-number">12.10</span> Profiling communication</a></li>
   <li><a href="#sec-m4-c12-s11" id="toc-sec-m4-c12-s11" class="nav-link" data-scroll-target="#sec-m4-c12-s11"><span class="header-section-number">12.11</span> Topology-aware design</a></li>
@@ -375,18 +378,14 @@ window.Quarto = {
 <p>Explain why GPU communication enters the critical path, how topology and collective algorithms shape its cost, and how to measure it.</p>
 </div>
 <p>Communication is where a single-GPU workload becomes a distributed system. The performance question is no longer only one kernel or one memory hierarchy. It is how tensors move and synchronize across processes, devices, nodes, and network fabrics.</p>
+<p><a href="ch-m4-c02.html#sec-m4-c02-s05">Section 2.5</a> introduced processes and ranks, and <a href="#sec-m4-c12-s13">Section 12.8.1</a> shows how a launcher creates them. A <span class="definition-term" data-custom-style="Definition Term"><strong>process group</strong></span> is a named set of ranks that issue compatible communication operations through one selected backend.</p>
 <p>The dependency begins with an object another worker process needs: a gradient bucket, parameter shard, activation, expert-routed token block, or serving state. Distributed runtimes assign each participating process an integer rank inside a process group. Payload size, frequency, destination, and readiness time determine whether startup latency, sustained bandwidth, topology distance, or waiting between ranks dominates the transfer.</p>
 <p>Communication analysis starts with the bytes that must move and the physical path they cross. Point-to-point operations and collectives define the data relationship. Schedules, backend libraries, and transports implement it. Overlap and profiling then show how much of the communication remains on the critical path.</p>
-<ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Process:</strong></span> An operating-system program instance. GPU jobs commonly use one process per GPU, although other mappings are possible.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Rank:</strong></span> The integer identity of one process inside a distributed group.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Process group:</strong></span> A named set of ranks that issue compatible communication operations through one selected backend.</li>
-</ul>
 <p>When ranks depend on remote tensors, communication time includes waiting, software coordination, transfer over the available fabric, and synchronization before dependent work can continue.</p>
-<div id="fig-m4-c12-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Ranks waiting for communication connect through a physical fabric and NCCL. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all use distinct data-flow drawings, followed by compute and communication overlap. Navigation key lists chapter 12 section map: 12.1 - Communication on the critical path; 12.2 - Topology and communication distance; 12.3 - Communication cost model; 12.4 - Physical communication paths; 12.5 - Point-to-point and collective communication; 12.6 - Collective primitives; 12.7 - Collective algorithms; 12.8 - Framework and communication backends; 12.9 - Communication and computation overlap; 12.10 - Profiling communication; 12.11 - Topology-aware design; 12.12 - Communication design checks.">
+<div id="fig-m4-c12-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Ranks waiting for communication connect through a physical fabric and NCCL. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all use distinct data-flow drawings, followed by compute and communication overlap. Section labels identify chapter 12 section map: 12.1 - Communication on the critical path; 12.2 - Topology and communication distance; 12.3 - Rank skew and waiting; 12.4 - Physical communication paths; 12.5 - Point-to-point and collective communication; 12.6 - Collective primitives; 12.7 - Collective algorithms; 12.8 - Framework and communication backends; 12.9 - Communication and computation overlap; 12.10 - Profiling communication; 12.11 - Topology-aware design; 12.12 - Communication design checks.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m4-c12-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m4-c12-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="Ranks waiting for communication connect through a physical fabric and NCCL. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all use distinct data-flow drawings, followed by compute and communication overlap. Navigation key lists chapter 12 section map: 12.1 - Communication on the critical path; 12.2 - Topology and communication distance; 12.3 - Communication cost model; 12.4 - Physical communication paths; 12.5 - Point-to-point and collective communication; 12.6 - Collective primitives; 12.7 - Collective algorithms; 12.8 - Framework and communication backends; 12.9 - Communication and computation overlap; 12.10 - Profiling communication; 12.11 - Topology-aware design; 12.12 - Communication design checks.">
+<img src="../assets/fig-m4-c12-f01.png" class="img-fluid figure-img" style="width:6.25in" alt="Ranks waiting for communication connect through a physical fabric and NCCL. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all use distinct data-flow drawings, followed by compute and communication overlap. Section labels identify chapter 12 section map: 12.1 - Communication on the critical path; 12.2 - Topology and communication distance; 12.3 - Rank skew and waiting; 12.4 - Physical communication paths; 12.5 - Point-to-point and collective communication; 12.6 - Collective primitives; 12.7 - Collective algorithms; 12.8 - Framework and communication backends; 12.9 - Communication and computation overlap; 12.10 - Profiling communication; 12.11 - Topology-aware design; 12.12 - Communication design checks.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c12-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;12.1: GPU communication combines software coordination, collective data relationships, and physical transport.
@@ -394,6 +393,7 @@ Figure&nbsp;12.1: GPU communication combines software coordination, collective d
 </figure>
 </div>
 <p>The figure separates the framework process group, NVIDIA Collective Communications Library (NCCL), and physical fabric. Broadcast, reduce, all-reduce, all-gather, reduce-scatter, and all-to-all are drawn as different data relationships rather than as one repeated mesh. The overlap panel shows that communication can share time with independent compute only when dependencies and resources permit it.</p>
+<p>The levers this chapter develops, in the vocabulary of <a href="ch-m4-c01.html#sec-m4-c01-s10">Section 1.6.1</a>, are scale out, because dividing dependent work across devices adds communication, and keep the hardware busy, because overlap can hide part of that communication time.</p>
 <section id="sec-m4-c12-s01" class="level2" data-number="12.1">
 <h2 data-number="12.1" class="anchored" data-anchor-id="sec-m4-c12-s01"><span class="header-section-number">12.1</span> Communication on the critical path</h2>
 <p>Single-GPU computation can often be overlapped, fused, compiled, or quantized. Communication is harder because it couples ranks. If one rank reaches a collective late, other ranks may wait. If a tensor-parallel layer needs partial results from peers every token, the interconnect becomes part of the critical path. Communication cost includes bandwidth, latency, topology, synchronization, and software overhead.</p>
@@ -405,9 +405,9 @@ Figure&nbsp;12.1: GPU communication combines software coordination, collective d
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Topology effect:</strong></span> The same collective can be fast or slow depending on whether it stays within NVLink/NVSwitch or crosses node boundaries through NICs and switches.</li>
 </ul>
 <p><span id="eq-m4-c12-e01"><span class="math display">\[
-\text{communication time} \approx \text{latency} + \frac{\text{bytes transferred}}{\text{effective bandwidth}}
+\text{transfer service time} \approx \text{latency} + \frac{\text{bytes transferred}}{\text{effective bandwidth}}
 \tag{12.1}\]</span></span></p>
-<p>Latency is the startup cost for the operation. Bytes transferred is the payload size. Effective bandwidth is lower than theoretical link bandwidth because algorithms, topology, contention, protocol overhead, and synchronization reduce usable throughput. For example, moving 1 GB over an effective 100 GB/s path with 20 microseconds of startup cost takes roughly 10.02 ms. The approximation omits overlap, algorithmic chunking, rank skew, network contention, and topology-dependent routing.</p>
+<p>Latency is the startup cost for the operation. Bytes transferred is the payload size. This two-term form is often called the latency-bandwidth, or alpha-beta, model: alpha is the startup latency and beta the time per byte. Effective bandwidth is lower than theoretical link bandwidth because algorithms, topology, contention, protocol overhead, and synchronization reduce usable throughput. For example, moving 1 GB over an effective 100 GB/s path with 20 microseconds of startup cost takes roughly 10.02 ms. The approximation omits overlap, algorithmic chunking, rank skew, network contention, and topology-dependent routing.</p>
 <p>Message size changes which term dominates. A small collective can be slow because every rank pays startup and synchronization cost. A very large collective can use the fabric efficiently but spend most of its time moving bytes. Middle sizes are often the hardest to reason about because protocol choice, chunking, queueing, and overlap determine whether latency or bandwidth is exposed.</p>
 <div id="tbl-m4-c12-t01" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
@@ -459,35 +459,43 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <section id="sec-m4-c12-s02" class="level2" data-number="12.2">
 <h2 data-number="12.2" class="anchored" data-anchor-id="sec-m4-c12-s02"><span class="header-section-number">12.2</span> Topology and communication distance</h2>
 <p>Scalable clusters use switched hierarchy: endpoints connect to local switches, and the fabric routes traffic through switch layers rather than requiring every device pair to have a dedicated cable.</p>
-<p>Large clusters often use hierarchical switch designs such as leaf-spine topologies. Leaf switches connect servers in a rack or local group. Spine switches connect leaf groups. This provides scalable bisection bandwidth, while every extra hop adds latency and every shared link can become congested.</p>
+<p>Large clusters often use hierarchical switch designs such as leaf-spine topologies. Leaf switches connect servers in a rack or local group. Spine switches connect leaf groups. The relevant capacity is the bandwidth available when many endpoints communicate across those groups at once.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Bisection bandwidth:</strong></span> The minimum aggregate bandwidth across a division of the network’s endpoints into two equal-sized groups, taking the minimum over all such divisions.<a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a> The direction convention matters: the example below counts traffic in one direction, without adding the reverse direction’s capacity.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: Concurrent traffic across a network division</strong></p>
+<p>Suppose endpoints A and B are on one side and C and D on the other. A sends to C at 50 GB/s while B sends to D at 50 GB/s. The simultaneous demand across this division is 50 + 50 = 100 GB/s. If the paths share a 60 GB/s upstream limit, their combined rate cannot exceed 60 GB/s, even if each endpoint has a 100 GB/s link. An equal allocation would give each transfer 30 GB/s, although actual sharing depends on routing and scheduling.</p>
+<p><strong>Conclusion:</strong> One fast endpoint link does not establish sufficient capacity across the division. A leaf-spine design can add parallel paths as the cluster grows, but its achieved capacity depends on uplink provision and concurrent traffic. <a href="#sec-m4-c12-s11">Section 12.11</a> connects this constraint to placement and <span class="definition-term" data-custom-style="Definition Term"><strong>oversubscription</strong></span> (upstream links with less capacity than the endpoints attached below them).</p>
+</div>
+<p>Every extra switch hop adds latency, and shared links can become congested even in a scalable switched design.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Scale-up</strong></span> communication stays inside a tightly coupled accelerator domain with fast GPU-to-GPU paths. That domain is often one server, but rack-scale NVLink systems can join GPUs across more than one compute tray or node. Scale-out communication crosses the cluster network through network interface cards (NICs) and fabrics such as InfiniBand, RDMA over Converged Ethernet (RoCE), or Ethernet. Frequent latency-sensitive traffic such as tensor-parallel collectives should remain inside the fastest available scale-up domain whenever possible.</p>
 <p>A direct full mesh is the contrasting limit: every device connects to every other device. Port and cable demand grows rapidly with device count, which is why large systems use switched hierarchy instead.</p>
-<p>Scale-up communication stays inside a tightly coupled accelerator domain with fast GPU-to-GPU paths. That domain is often one server, but rack-scale NVLink systems can join GPUs across more than one compute tray or node. Scale-out communication crosses the cluster network through network interface cards (NICs) and fabrics such as InfiniBand, RDMA over Converged Ethernet (RoCE), or Ethernet. Frequent latency-sensitive traffic such as tensor-parallel collectives should remain inside the fastest available scale-up domain whenever possible.</p>
 <p><span id="eq-m4-c12-e02"><span class="math display">\[
 \text{full-mesh links} = \frac{N(N - 1)}{2}
 \tag{12.2}\]</span></span></p>
 <p>A full mesh among N endpoints needs N(N - 1)/2 undirected links, so direct wiring grows quadratically. Leaf-spine and related Clos fabrics replace those dedicated pairwise links with shared switch paths. A host-to-host path can be counted by switches or by physical links. State the convention before describing a path as a particular number of hops.</p>
 </section>
 <section id="sec-m4-c12-s03" class="level2" data-number="12.3">
-<h2 data-number="12.3" class="anchored" data-anchor-id="sec-m4-c12-s03"><span class="header-section-number">12.3</span> Communication cost model</h2>
-<p>Diagnose communication with four linked questions: how much startup delay each operation pays, what byte rate the selected path sustains, which topology the payload crosses, and how long ranks wait for one another. These effects interact: a longer path changes latency and bandwidth, and rank skew can expose otherwise fast transfers on the critical path.</p>
+<h2 data-number="12.3" class="anchored" data-anchor-id="sec-m4-c12-s03"><span class="header-section-number">12.3</span> Rank skew and waiting</h2>
+<p>An apparently slow collective can include time spent waiting for another rank before useful transfer finishes. Four quantities help explain the interval: operation startup, the byte rate of the selected path, the topology crossed, and differences in rank readiness. <span class="definition-term" data-custom-style="Definition Term"><strong>Rank skew:</strong></span> A difference in when participating ranks become ready for the same operation. Section 12.1 estimates startup plus transfer service once the required inputs are ready. Its equation does not estimate the preceding wait for a late rank.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: Rank waiting and transfer service</strong></p>
+<p>Assume two GPU timelines have been aligned to a common time origin. Rank 0 has its input ready and reaches the collective at 2 ms. Rank 1 reaches it at 5 ms. For this illustrative serialized schedule, no useful transfer occurs until 5 ms, and the result becomes available to both ranks at 7 ms. Dependent computation can then start at 7 ms.</p>
+<p>Rank 0’s observed entry-to-result interval is 7 - 2 = 5 ms: 3 ms waiting plus 2 ms of collective service. Rank 1 observes 7 - 5 = 2 ms. If startup is 0.02 ms and the modeled per-rank payload is 0.198 GB over an effective 100 GB/s path, the estimate is 0.02 + 1000 x 0.198 / 100 = 2 ms. It models the service interval here, not rank 0’s full 5 ms.</p>
+<p><strong>Conclusion:</strong> Removing the readiness gap shortens rank 0’s observed collective interval without increasing network bandwidth. These are assumed trace values, not measurements. Real chunked collectives can make partial progress before every rank arrives, so waiting and transfer need not form two separate additive intervals. A local CUDA event pair also does not establish a shared clock across GPUs. Aligned rank traces and dependencies are needed to attribute the delay.</p>
+</div>
 <p>Optimizations target different ingredients. Larger buckets can improve bandwidth efficiency but may reduce overlap. Topology-aware rank placement can keep frequent collectives on fast links. Reducing message count can help latency-bound paths. Removing rank imbalance can shorten apparent collective time without changing the network.</p>
 <p>Once the trace separates startup, transfer, and rank waiting, map the slow interval to the actual GPU-to-GPU or GPU-to-NIC path. The fabric and device placement determine which changes can improve it.</p>
 </section>
 <section id="sec-m4-c12-s04" class="level2" data-number="12.4">
 <h2 data-number="12.4" class="anchored" data-anchor-id="sec-m4-c12-s04"><span class="header-section-number">12.4</span> Physical communication paths</h2>
 <p>Communication fabrics should be described by scope. Some links move bytes inside a server. Some connect servers. Some are general-purpose and some are designed for high-performance GPU communication.</p>
+<p><a href="ch-m4-c02.html#sec-m4-c02-s06">Section 2.6</a> defines PCIe, NVLink, NVSwitch, InfiniBand, RoCE, and Ethernet. Two of their properties matter once traffic is collective. The pairwise bandwidth of NVLink depends on the GPU model and on whether the selected GPUs are joined directly or through NVSwitch. RoCE performance depends strongly on network configuration, congestion control, and near-lossless behavior, and standard Ethernet paths are often a poor fit for frequent latency-sensitive collectives unless engineered for that workload.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>PCIe:</strong></span> General host/device expansion bus connecting CPUs, GPUs, NICs, and other devices. It is ubiquitous but usually slower than NVLink for GPU peer traffic.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>NVLink:</strong></span> High-bandwidth GPU-to-GPU link available on supported systems and topologies. Pairwise bandwidth depends on the installed GPU model and the physical or switched connection between the selected GPUs.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>NVSwitch:</strong></span> A switch fabric that connects many NVLink-capable GPUs inside a server or platform. It improves intra-node connectivity, but the exact topology still matters.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>InfiniBand:</strong></span> High-performance cluster fabric commonly used for multi-node training and GPU collectives through RDMA-capable networking.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>RoCE:</strong></span> RDMA over Converged Ethernet. It can support high-performance cluster communication, but performance depends strongly on network configuration, congestion control, and lossless or near-lossless behavior.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Ethernet:</strong></span> General-purpose network fabric. It is flexible and common, but standard Ethernet paths are often a poor fit for frequent latency-sensitive GPU collectives unless engineered specifically for that workload.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>GPUDirect RDMA:</strong></span> Lets a compatible NIC directly access GPU memory over PCIe instead of staging the payload through host memory. The CPU still prepares and submits the communication. Direct access removes a copy path, not all CPU coordination, and it requires compatible GPU, NIC, driver, PCIe topology, and IOMMU settings. An unsupported or poorly connected path can fall back to host staging or perform badly.</li>
+<li><strong>GPUDirect RDMA:</strong> Lets a compatible NIC directly access GPU memory over PCIe instead of staging the payload through host memory, following the <a href="https://docs.nvidia.com/cuda/gpudirect-rdma/">NVIDIA GPUDirect RDMA Documentation</a><a href="#fn2" class="footnote-ref" id="fnref2" role="doc-noteref"><sup>2</sup></a>. The CPU still prepares and submits the communication. Direct access removes a copy path, not all CPU coordination, and it requires compatible GPU, NIC, driver, PCIe topology, and IOMMU settings. An unsupported or poorly connected path can fall back to host staging or perform badly.</li>
 </ul>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Fabric caveat</strong></p>
-<p>A fabric name is only the starting point for a performance estimate. Effective bandwidth depends on topology, routing, contention, message size, collective algorithm, and whether the software stack actually uses the intended path.</p>
+<p>A fabric name is only the starting point for a performance estimate. Effective bandwidth depends on topology, routing, contention, message size, collective algorithm (the schedule that implements a collective, <a href="#sec-m4-c12-s07">Section 12.7</a>), and whether the software stack actually uses the intended path.</p>
 </div>
 <p>The critical distinction is local versus remote path. Frequent per-layer traffic is most viable inside a fast GPU fabric. Cross-node traffic additionally traverses a GPU-to-NIC path, a network interface, switches, and the destination path. Product names and peak bandwidth figures are generation-specific, so verify the installed topology and achieved transfer rate rather than copying a nominal number.</p>
 </section>
@@ -498,47 +506,92 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Point-to-point communication:</strong></span> One rank sends data to another rank. It is common in pipeline stages, custom protocols, explicit activation transfers, and control paths where the communication pattern is irregular.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Collective communication:</strong></span> A group of ranks participates in one operation with a defined group-level result, such as all-reduce, all-gather, or all-to-all.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Ordering requirement:</strong></span> Ranks must call compatible collectives in compatible order. Mismatched ordering can hang or corrupt the distributed program.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Engineering trade-off:</strong></span> Point-to-point communication can be flexible but harder to reason about globally. Collectives are structured and optimized, but they create synchronization points.</li>
+<li><strong>Point-to-point versus collective trade-off:</strong> Point-to-point communication can be flexible but harder to reason about globally. Collectives are structured and optimized, but they create synchronization points.</li>
 </ul>
 <p>The semantics define who participates and which ranks receive results. They do not prescribe a central coordinator or physical traffic path. The next section names the common group transformations before their ring, tree, or hierarchical implementations are considered.</p>
 </section>
 <section id="sec-m4-c12-s06" class="level2" data-number="12.6">
 <h2 data-number="12.6" class="anchored" data-anchor-id="sec-m4-c12-s06"><span class="header-section-number">12.6</span> Collective primitives</h2>
-<p>A collective operation is a group communication primitive used by strategies such as DDP, FSDP, tensor parallelism, and expert parallelism to move their required tensors.</p>
+<p>A collective operation is a group communication primitive used by strategies such as Distributed Data Parallel (DDP) for gradient synchronization, Fully Sharded Data Parallel (FSDP) for sharded model state, tensor parallelism for layer-internal slices, and expert parallelism for routed token state.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Broadcast:</strong></span> One source rank sends the same tensor to every other rank. It copies a source value and is commonly used to initialize or synchronize parameters.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Reduce:</strong></span> Many ranks contribute tensors that are combined on one destination rank. The destination receives the aggregate. Custom aggregation paths use this ownership pattern.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Reduce:</strong></span> Many ranks contribute tensors that are combined on one destination rank. Use Reduce when only one rank needs the combined result. Use all-reduce when every rank needs it.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>All-reduce:</strong></span> All ranks contribute tensors, the tensors are reduced, and every rank receives the reduced result. DDP uses it for gradient synchronization and pays both reduction and redistribution traffic.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>All-gather:</strong></span> Each rank starts with a shard, and all ranks receive the full collection of shards. Materializing sharded parameters or activations creates a full temporary result on every participant.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Reduce-scatter:</strong></span> Ranks reduce tensors and each rank receives one shard of the reduced result. FSDP and sharded optimizer paths use its combined reduction and partitioning behavior.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>All-to-all:</strong></span> Every rank sends a different slice to every other rank and receives different slices back. Expert-parallel token routing uses this latency-sensitive and topology-sensitive exchange.</li>
 </ul>
+<p>The following array trace uses NCCL’s equal-count collective contracts and rank-ordered layouts.<a href="#fn3" class="footnote-ref" id="fnref3" role="doc-noteref"><sup>3</sup></a></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: Reduction, collection, and slice exchange</strong></p>
+<p>Three ranks use float32 arrays, compatible calls in the same order, and SUM where a reduction is required. Each six-element input has three consecutive two-element chunks, numbered 0, 1, and 2:</p>
+<div id="tbl-m4-c12-t03" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c12-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;12.2: Input held by each rank before the all-reduce.
+</figcaption>
+<div aria-describedby="tbl-m4-c12-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Rank</th>
+<th>Input, shape [6]</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>[1, 2, 3, 4, 5, 6]</td>
+</tr>
+<tr class="even">
+<td>1</td>
+<td>[10, 20, 30, 40, 50, 60]</td>
+</tr>
+<tr class="odd">
+<td>2</td>
+<td>[100, 200, 300, 400, 500, 600]</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Elementwise SUM combines matching positions: the first output is 1 + 10 + 100 = 111, the second is 2 + 20 + 200 = 222, and the complete result is [111, 222, 333, 444, 555, 666]. All-reduce places that shape-[6] result on every rank.</p>
+<p>Reduce-scatter starts from the same three shape-[6] inputs. Rank 0 receives [111, 222], rank 1 [333, 444], and rank 2 [555, 666], each with shape [2]. All-gather applied to these shape-[2] shards concatenates them in rank order, giving the shape-[6] result on every rank. It does not add elements again. Each all-gather send count and reduce-scatter receive count is two elements here.</p>
+<p>Reduce with root 0 gives only rank 0 the six-element sum. Broadcast with root 0 instead copies rank 0’s original [1, 2, 3, 4, 5, 6] to everyone. For all-to-all on the original inputs, chunk index selects destination: rank 0 receives [1, 2, 10, 20, 100, 200], rank 1 [3, 4, 30, 40, 300, 400], and rank 2 [5, 6, 50, 60, 500, 600]. Each result has shape [6] and source-rank order, with no addition.</p>
+<p><strong>Conclusion:</strong> Reduction adds matching elements, gathering concatenates rank shards, and all-to-all rearranges destination slices. This example has equal counts and one dtype on all ranks. Uneven routing needs padding or an interface with explicit split sizes rather than assuming this contract covers it.</p>
+</div>
 <p>Expert-parallel all-to-all cost comes from routing token representations, not from the expert MLP arithmetic alone. A rough payload estimate is the number of routed token copies times hidden dimension times bytes per element, split across destination ranks. Top-k routing multiplies token traffic because one token may be sent to more than one expert.</p>
 <p>The payload estimate uses these five cost objects:</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Routed tokens:</strong></span> Tokens assigned from each rank to remote expert ranks. Router imbalance creates tail latency when one expert or rank receives too much work.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Top-k multiplier:</strong></span> The number of experts selected per token. Top-2 routing can roughly double routed activation traffic before outputs are combined.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Hidden dimension and dtype:</strong></span> The bytes carried by each token representation. FP16 or BF16 activations move twice the raw bytes of 8-bit activations before metadata or padding.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Topology distance:</strong></span> Whether routed tokens stay inside a node, rack, or cross-node fabric. All-to-all is sensitive to simultaneous peer paths and aggregate fabric behavior.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Combine path:</strong></span> The return path that restores original token order after expert execution. Dispatch cost is only half the story when the combine collective is also critical.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Top-k multiplier:</strong></span> The number of experts selected per token, where each <strong>expert</strong> is one of the feed-forward sub-networks of a mixture-of-experts layer (<a href="ch-m4-c13.html#sec-m4-c13-s08">Section 13.5.1</a>). Top-2 routing can roughly double routed activation traffic before outputs are combined.</li>
+<li><strong>Hidden dimension and dtype:</strong> The bytes carried by each token representation. FP16 or BF16 activations move twice the raw bytes of 8-bit activations before metadata or padding.</li>
+<li><strong>Topology distance:</strong> Whether routed tokens stay inside a node, rack, or cross-node fabric. All-to-all is sensitive to simultaneous peer paths and aggregate fabric behavior.</li>
+<li><strong>Combine path:</strong> The return path that restores original token order after expert execution. Dispatch cost is only half the story when the combine collective is also critical.</li>
 </ul>
 <p><span id="eq-m4-c12-e03"><span class="math display">\[
 \text{ring all-reduce bytes sent per rank} \approx \frac{2(N - 1)}{N} \times \text{tensor}_{\text{bytes}}
 \tag{12.3}\]</span></span></p>
-<p>Here N is the number of ranks and tensor_bytes is the size of the tensor being reduced. Under the standard ring model, each rank sends approximately this many payload bytes across reduce-scatter and all-gather and receives the same amount. With 8 ranks and a 1 GiB tensor, the per-rank sent payload is 1.75 GiB. A send-plus-receive accounting convention would report 3.5 GiB. State the convention before converting traffic to bandwidth. The approximation omits latency per chunk, topology, protocol overhead, and overlap with backward computation.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Worked calculation - ring all-reduce traffic</strong></p>
-<p><strong>Inputs:</strong> Use N = 8 ranks and tensor_bytes = 1 GiB for one all-reduce payload.</p>
-<p><strong>Substitution:</strong> 2 x (8 - 1) / 8 x 1 GiB = 1.75 GiB sent by each rank across reduce-scatter and all-gather. Each rank also receives about 1.75 GiB.</p>
-<p><strong>Meaning:</strong> The estimate uses a per-rank bytes-sent convention and describes payload traffic, not elapsed time. Link latency, chunking, topology, protocol overhead, rank skew, and overlap determine the measured duration.</p>
-<p><strong>Next measurement:</strong> Compare the estimate with NCCL traces and the actual interconnect path before changing bucket size or rank placement.</p>
+<p>Here N is the number of ranks and tensor_bytes is the size of the tensor being reduced. Under the standard ring model, each rank sends approximately this many payload bytes across reduce-scatter and all-gather and receives the same amount, following the <a href="https://raw.githubusercontent.com/NVIDIA/nccl-tests/c6eb15875f508076f3f26de4f7da3899701bc4db/doc/PERFORMANCE.md">NCCL Tests PERFORMANCE documentation</a><a href="#fn4" class="footnote-ref" id="fnref4" role="doc-noteref"><sup>4</sup></a>. With 8 ranks and a 1 GiB tensor, the per-rank sent payload is 1.75 GiB. A send-plus-receive accounting convention would report 3.5 GiB. State the convention before converting traffic to bandwidth. The approximation omits latency per chunk, topology, protocol overhead, and overlap with backward computation.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: Ring chunks and payload traffic</strong></p>
+<p>Use the same three arrays and two-element chunks above. The logical ring sends from rank 0 to 1, from 1 to 2, and from 2 to 0. In each round, all ranks send concurrently. This is one valid teaching schedule, not a claim about a particular NCCL run.</p>
+<ol type="1">
+<li><strong>Reduce-scatter, round 1:</strong> Rank 0 sends its chunk 2, [5, 6], to rank 1, which adds [50, 60] to obtain [55, 66]. Rank 1 sends chunk 0, [10, 20], to rank 2, which adds [100, 200] to obtain [110, 220]. Rank 2 sends chunk 1, [300, 400], to rank 0, which adds [3, 4] to obtain [303, 404].</li>
+<li><strong>Reduce-scatter, round 2:</strong> Each rank forwards the partial chunk it just received. Rank 0 sends [303, 404] to rank 1, which adds [30, 40] to obtain its final shard [333, 444]. Rank 1 sends [55, 66] to rank 2, which adds [500, 600] to obtain [555, 666]. Rank 2 sends [110, 220] to rank 0, which adds [1, 2] to obtain [111, 222]. Every final shard now includes all three contributions.</li>
+<li><strong>All-gather, round 1:</strong> Each rank sends its final shard to its successor without further addition. Rank 0 gains chunk 2, rank 1 gains chunk 0, and rank 2 gains chunk 1.</li>
+<li><strong>All-gather, round 2:</strong> Each forwards the newly received shard. Rank 0 gains chunk 1, rank 1 gains chunk 2, and rank 2 gains chunk 0. Placing the chunks in index order gives [111, 222, 333, 444, 555, 666] on every rank.</li>
+</ol>
+<p>Each float32 input occupies 6 x 4 = 24 bytes, and each chunk occupies 2 x 4 = 8 bytes. A rank sends two chunks per phase, or 16 bytes for reduce-scatter and 16 bytes for all-gather, totaling 32 bytes. It receives the same amount. For N equal chunks, each phase needs N - 1 rounds carrying tensor_bytes / N per rank per round. Two phases therefore send 2 x (N - 1) / N x tensor_bytes per rank. With N = 8 and a 1 GiB tensor, this is 1.75 GiB sent and 1.75 GiB received.</p>
+<p><strong>Conclusion:</strong> The two factors of (N - 1) / N come from reducing distributed chunks and then redistributing the completed shards. This is payload accounting, not elapsed time or proof of the selected runtime algorithm. Protocol bytes, latency, topology, rank skew, and overlap still require a trace.</p>
 </div>
-<p>A ring all-reduce commonly implements a reduce-scatter phase followed by an all-gather phase over chunked tensors. Merely drawing ranks in a circle does not demonstrate those phases. Verify the actual schedule or trace before using a ring-topology picture as algorithm evidence.</p>
+<p>A runtime may select a different ring chunk order, a tree, or a hierarchical algorithm while preserving the same all-reduce result. Its trace establishes the actual schedule.</p>
 <p>Collective names specify before-and-after tensor ownership. Their measured cost still depends on the backend’s chosen schedule, chunking, topology, rank readiness, and overlap.</p>
 </section>
 <section id="sec-m4-c12-s07" class="level2" data-number="12.7">
 <h2 data-number="12.7" class="anchored" data-anchor-id="sec-m4-c12-s07"><span class="header-section-number">12.7</span> Collective algorithms</h2>
-<p>A collective algorithm is the communication schedule used to implement a collective primitive. The same all-reduce request can therefore run as a ring, a tree, or a hierarchy depending on message size, topology, backend heuristics, and runtime settings.</p>
+<p>A collective algorithm is the communication schedule used to implement a collective primitive. The same all-reduce request can therefore run as a ring, a tree, or a hierarchy depending on message size, topology, backend heuristics, and runtime settings. The ring versus tree alternative is documented as independent of the requested reduction in the <a href="https://raw.githubusercontent.com/NVIDIA/nccl-tests/c6eb15875f508076f3f26de4f7da3899701bc4db/doc/PERFORMANCE.md">NCCL Tests PERFORMANCE documentation</a><a href="#fn5" class="footnote-ref" id="fnref5" role="doc-noteref"><sup>5</sup></a>, while hierarchical scheduling means local aggregation inside a fast domain followed by cross-domain exchange and local distribution.</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Ring collective:</strong></span> Streams chunks around ranks and can use bandwidth well for large tensors, especially when each link can stay busy.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Tree collective:</strong></span> Aggregates through a branching structure and can reduce latency for smaller messages or topologies where a ring would expose too many sequential hops.</li>
@@ -553,36 +606,50 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong><code>torch.distributed</code>:</strong></span> The PyTorch API for initializing process groups, assigning rank identities, and issuing point-to-point or collective operations.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Backend:</strong></span> The implementation selected by a process group to execute its communication operations, such as NCCL for many CUDA tensor collectives or Gloo for common CPU/control paths.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Strategy boundary:</strong></span> DDP, FSDP, tensor parallelism, pipeline parallelism, and expert parallelism decide which objects and operations are required. The API and backend execute those requests.</li>
+<li><strong>Strategy boundary:</strong> DDP, FSDP, tensor parallelism, pipeline parallelism, and expert parallelism decide which objects and operations are required. The API and backend execute those requests.</li>
 </ul>
-<p>Backends do not all occupy one interchangeable role. NCCL is commonly selected for CUDA tensor collectives on NVIDIA GPUs. Gloo is commonly used for CPU tensors and control-oriented paths. Message Passing Interface (MPI) implementations provide broader HPC process and communication facilities. Unified Communication X (UCX) exposes transport abstractions used by several distributed-runtime stacks. Compatibility depends on the framework build, tensor location, operation, platform, and deployment configuration.</p>
-<div class="publisher-clarification-note" data-custom-style="Clarification Note">
-<p><strong>Definition - NCCL</strong></p>
-<p>NVIDIA Collective Communications Library is the common GPU collective library for NVIDIA distributed training and inference. It implements collective operations and chooses algorithms over available paths such as PCIe, NVLink, NVSwitch, and network interfaces.</p>
-</div>
+<p>Backends do not all occupy one interchangeable role. NCCL is commonly selected for CUDA tensor collectives on NVIDIA GPUs, following the <a href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/index.html">NVIDIA Collective Communications Library Documentation</a><a href="#fn6" class="footnote-ref" id="fnref6" role="doc-noteref"><sup>6</sup></a> and the <a href="https://docs.pytorch.org/docs/2.14/distributed.html">torch.distributed documentation</a><a href="#fn7" class="footnote-ref" id="fnref7" role="doc-noteref"><sup>7</sup></a>. Gloo is commonly used for CPU tensors and control-oriented paths. Message Passing Interface (MPI) implementations provide broader HPC process and communication facilities. Unified Communication X (UCX) exposes transport abstractions used by several distributed-runtime stacks. Compatibility depends on the framework build, tensor location, operation, platform, and deployment configuration.</p>
+<p>NCCL (<a href="ch-m4-c03.html#sec-m4-c03-s03">Section 3.1.2</a>) implements the collective operations and chooses algorithms over the available paths, such as PCIe, NVLink, NVSwitch, and network interfaces.</p>
 <p>NCCL does not decide the training strategy. It implements communication operations requested by frameworks or distributed libraries. For example, DDP may need all-reduce for gradients, FSDP may need all-gather and reduce-scatter for sharded state, and expert parallelism may need all-to-all routing. NCCL tries to execute those operations efficiently on the hardware topology.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Process group:</strong></span> A set of ranks that participate in communication. PyTorch creates process groups and calls backend collectives through them.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Collective algorithm:</strong></span> The pattern NCCL uses to move chunks, such as ring, tree, or hierarchical variants. The selected algorithm depends on message size, rank count, and topology.</li>
+<li><strong>Process group:</strong> A set of ranks that participate in communication. PyTorch creates process groups and calls backend collectives through them.</li>
+<li><strong>Collective algorithm:</strong> The pattern NCCL uses to move chunks, such as ring, tree, or hierarchical variants. The selected algorithm depends on message size, rank count, and topology.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Transport:</strong></span> The path used underneath the collective, such as peer-to-peer GPU links, PCIe, shared memory, sockets, InfiniBand, or RoCE depending on the system.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>NCCL logs:</strong></span> <code>NCCL_DEBUG=INFO</code> and related settings expose backend decisions. Logs are diagnostic evidence, not proof of achieved performance by themselves.</li>
 </ul>
-<p>Communication controls are read by processes at initialization. <code>CUDA_VISIBLE_DEVICES</code> changes visible devices and local numbering. <code>NCCL_SOCKET_IFNAME</code> selects socket interfaces. <code>NCCL_IB_DISABLE</code> and <code>NCCL_P2P_DISABLE</code> are diagnostic path toggles. These controls can test routing hypotheses, but they do not choose the model’s sharding strategy or prove that the enabled path reaches peak throughput.</p>
+<p>The rank variables used to select local devices and the NCCL settings used to diagnose transports are listed in <a href="#sec-m4-c12-s13">Section 12.8.1</a>.</p>
 <p>A useful debugging question is: did the framework request the intended collective, did NCCL select the intended transport, and did the measured trace show that the collective was on the critical path?</p>
-<p>This ownership chain prevents a common diagnostic error: changing a framework strategy when the wrong network interface was selected, or changing a transport variable when the strategy itself communicates too often for the topology.</p>
+<p>Tracing these responsibilities helps distinguish two diagnostic errors: changing a framework strategy when the wrong network interface was selected, or changing a transport variable when the strategy itself communicates too often for the topology.</p>
+<section id="sec-m4-c12-s13" class="level3" data-number="12.8.1">
+<h3 data-number="12.8.1" class="anchored" data-anchor-id="sec-m4-c12-s13"><span class="header-section-number">12.8.1</span> Launching ranks and selecting transports</h3>
+<p>A training job with one process per GPU needs every process to know its identity before any collective can run. The <a href="ch-m4-c02.html#sec-m4-c02-s05">process, rank, and GPU setup in Section 2.5</a> supplies the mapping used here. Under the one-process-per-GPU assumption, a rank identifies a participating process. <code>RANK</code> is its identity across the whole job, <code>LOCAL_RANK</code> identifies it within its node, and <code>WORLD_SIZE</code> counts participating processes. A collective (<a href="#sec-m4-c12-s05">Section 12.5</a>) is called by all participating processes in a group.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Worked example: Reading a two-node launch</strong></p>
+<p>Assume two nodes, each with two GPUs visible in the same local order to its workers, and one worker process per GPU. On node A, the processes have (RANK, LOCAL_RANK) pairs (0, 0) and (1, 1). On node B they have (2, 0) and (3, 1). Every process has WORLD_SIZE = 4. The program binds each worker to the visible device indexed by its LOCAL_RANK. Rank 2 therefore uses node B’s local device 0, not a device numbered 2 on that node.</p>
+<p>The default four-process group can now run a collective: each rank supplies its tensor to the same operation in compatible order. A local rank is reused on different nodes, while a global rank is unique within the job. Comparing these logged pairs with the intended layout checks placement before interpreting communication timing.</p>
+</div>
+<p><code>torchrun</code> is the usual launch tool for PyTorch distributed jobs. It creates one or more processes and sets rank-related environment variables such as <code>RANK</code>, <code>WORLD_SIZE</code>, and <code>LOCAL_RANK</code>. For diagnosis, <code>NCCL_DEBUG=INFO</code> can expose selected transports and topology decisions, following the <a href="https://docs.pytorch.org/docs/2.14/distributed.html">torch.distributed documentation</a><a href="#fn8" class="footnote-ref" id="fnref8" role="doc-noteref"><sup>8</sup></a>. A process group selects the backend implementation, such as NCCL for CUDA tensor collectives or Gloo for CPU paths, while ranks must call compatible collectives in compatible order.</p>
+<ul>
+<li><code>NCCL_DEBUG=INFO</code> prints NCCL initialization and communication diagnostics.</li>
+<li><code>NCCL_SOCKET_IFNAME</code> selects the network interface for socket-based NCCL paths.</li>
+<li><code>NCCL_IB_DISABLE=1</code> disables NCCL’s InfiniBand/RoCE transport, allowing fallback to another available transport such as IP sockets.<a href="#fn9" class="footnote-ref" id="fnref9" role="doc-noteref"><sup>9</sup></a></li>
+<li><code>NCCL_P2P_DISABLE</code> can disable peer-to-peer GPU communication for diagnosis.</li>
+</ul>
+<p>For reproducible comparisons, set diagnostic environment variables before launching workers and use a fresh run for each configuration. Do not rely on changing an environment variable to reconfigure an existing communicator. These settings can test routing hypotheses, but they do not choose the model’s sharding strategy or prove that the enabled path reaches peak throughput.<a href="#fn10" class="footnote-ref" id="fnref10" role="doc-noteref"><sup>10</sup></a></p>
+</section>
 </section>
 <section id="sec-m4-c12-s09" class="level2" data-number="12.9">
 <h2 data-number="12.9" class="anchored" data-anchor-id="sec-m4-c12-s09"><span class="header-section-number">12.9</span> Communication and computation overlap</h2>
-<p>Communication/computation overlap means scheduling data movement so it occurs while independent useful computation is still running. It reduces step time only when the communication is no longer on the critical path.</p>
+<p>Communication/computation overlap means scheduling data movement so it occurs while independent useful computation is still running. It can reduce step time by shortening the communication interval that remains exposed, even when a tail still lies on the critical path. Resource contention can offset that gain, so the end-to-end time must be measured.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>DDP overlap:</strong></span> Buckets gradients and launches all-reduce as soon as a bucket is ready during backward propagation.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>FSDP overlap:</strong></span> Can prefetch or all-gather parameters near the layer that needs them.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Pipeline overlap:</strong></span> Runs micro-batches across stages so some stages compute while others transfer activations or gradients.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Tensor-parallel limits:</strong></span> Layer-internal collectives often have little independent work after them, so they are harder to hide than DDP gradient buckets.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Serving limits:</strong></span> Decode has a short per-token critical path, so communication in tensor-parallel serving can be visible even when training overlap looks good.</li>
+<li><strong>DDP overlap:</strong> Buckets gradients and launches all-reduce during backward propagation when a bucket is ready and earlier buckets in the required reduction order have been launched.</li>
+<li><strong>FSDP overlap:</strong> Can prefetch or all-gather parameters near the layer that needs them.</li>
+<li><strong>Pipeline overlap:</strong> Runs micro-batches across stages so some stages compute while others transfer activations or gradients.</li>
+<li><strong>Tensor-parallel limits:</strong> Layer-internal collectives often have little independent work after them, so they are harder to hide than DDP gradient buckets.</li>
+<li><strong>Serving limits:</strong> Decode has a short per-token critical path, so communication in tensor-parallel serving can be visible even when training overlap looks good.</li>
 </ul>
 <p>Overlap works only when there is independent computation available while communication runs. If the next layer or token needs the communicated result immediately, the communication remains exposed.</p>
-<p>Adjacent compute and collective blocks do not prove overlap. Aligned compute and communication lanes expose the end-to-end critical path: if a shorter collective would shorten the step, its remaining tail is exposed. Otherwise, independent computation has hidden it.</p>
+<p>Adjacent compute and collective blocks do not prove overlap. When compute and communication lanes are aligned, they expose the end-to-end critical path. If shortening the collective would shorten the step, its remaining tail is exposed. Otherwise, independent computation has hidden it.</p>
 </section>
 <section id="sec-m4-c12-s10" class="level2" data-number="12.10">
 <h2 data-number="12.10" class="anchored" data-anchor-id="sec-m4-c12-s10"><span class="header-section-number">12.10</span> Profiling communication</h2>
@@ -590,7 +657,7 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <p>When communication is suspected, a dedicated distributed harness separates the collective from model computation. The template below warms the operation, measures repeated all-reduces on every rank, reports the slowest rank’s mean time, and converts the ring traffic estimate into an effective per-rank payload rate.</p>
 <div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
 <p><strong>Worked example: NCCL collective timing probe</strong></p>
-<p>This distributed probe shows the objects involved in a simple all-reduce: process group, rank-assigned GPU, tensor payload, synchronization, and elapsed time. It is launched with <code>torchrun</code> across the intended number of GPUs. Each warmup and timed all-reduce starts from a known payload value. Finite values and the expected world-size sum are checked outside the recorded timing intervals.</p>
+<p>This distributed probe shows the objects involved in a simple all-reduce: process group, rank-assigned GPU, tensor payload, synchronization, and elapsed time. It requires a CUDA/NCCL-enabled PyTorch installation and at least two available GPUs, and is launched with <code>torchrun</code> across the intended number of GPUs. Its tensor payload is 512 MiB per rank before communication and checking buffers. Each warmup and timed all-reduce starts from a known payload value. The final result of each loop is checked for finite values and the expected world-size sum outside the recorded timing intervals.</p>
 </div>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example: NCCL collective timing probe</strong></p>
@@ -646,26 +713,26 @@ Table&nbsp;12.1: How message size changes latency and bandwidth cost.
 <p>Topology-aware distributed design means choosing a parallelism and serving architecture that matches how often tensors must move. A topology defines which transfers are cheap enough to place on the critical path.</p>
 <p>The central rule is communication frequency versus distance. The more often a tensor must move, the closer the communicating devices should be. Per-token and per-layer communication should stay inside the fastest scale-up domain whenever possible. Per-step communication can sometimes cross nodes when overlap and bandwidth are good. Background movement can use slower tiers if it does not block the hot path.</p>
 <ul>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Scale-up domain:</strong></span> A tightly connected GPU group such as one server, pod, or NVLink/NVSwitch island. It is the preferred place for frequent tensor-parallel or decode-critical communication.</li>
+<li><strong>Scale-up domain:</strong> A tightly connected GPU group such as one server, pod, or NVLink/NVSwitch island. It is the preferred place for frequent tensor-parallel or decode-critical communication.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Scale-out domain:</strong></span> Multiple nodes connected through NICs and switches. It provides capacity and aggregate throughput, but it usually adds latency, routing, and contention.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>GPU/NIC affinity:</strong></span> The locality relationship between a GPU and the network card used for cross-node traffic. Poor affinity can add PCIe hops, CPU-socket crossings, or host staging.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Bisection bandwidth:</strong></span> The aggregate bandwidth available when traffic crosses a cut through the topology. It matters when many ranks communicate at once. A fast single link is insufficient for concurrent traffic.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Oversubscription:</strong></span> A topology condition where the upstream fabric has less bandwidth than the sum of attached endpoints. It is common in cost-controlled networks and can hurt concurrent collectives.</li>
+<li><strong>Bisection bandwidth:</strong> The capacity across the equal-sized endpoint groups defined in <a href="#sec-m4-c12-s02">Section 12.2</a>. Concurrent transfers share this capacity, so a fast single link does not establish the aggregate rate.</li>
+<li><strong>Oversubscription:</strong> A topology condition where the upstream fabric has less bandwidth than the sum of attached endpoints. It is common in cost-controlled networks and can hurt concurrent collectives.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Placement policy:</strong></span> The scheduler or launch decision that maps ranks, serving groups, workers, or replicas onto physical GPUs and nodes.</li>
 </ul>
 <p>After those topology objects are named, communication frequency can be matched to distance:</p>
 <ul>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-token communication:</strong></span> Decode-time tensor parallelism, expert routing, logits exchange, or KV movement. It is the most latency-sensitive traffic and should usually stay inside a fast scale-up domain.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-layer communication:</strong></span> Tensor-parallel all-reduce, all-gather, or reduce-scatter inside transformer layers. It normally needs NVLink, NVSwitch, or an equivalent low-latency scale-up fabric.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-step communication:</strong></span> DDP gradient all-reduce and many Fully Sharded Data Parallel (FSDP) or Zero Redundancy Optimizer (ZeRO) communication phases. It can sometimes cross nodes because backward computation may overlap communication.</li>
-<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-request communication:</strong></span> Request routing, prefill/decode handoff, or pipeline activation movement. The acceptable distance depends on TTFT, TPOT, and tail-latency targets.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-layer communication:</strong></span> Tensor-parallel all-reduce, all-gather, or reduce-scatter inside transformer layers benefits from NVLink, NVSwitch, or an equivalent low-latency scale-up fabric. FSDP and fully sharded Zero Redundancy Optimizer (ZeRO) can also gather parameters around each wrapped unit’s use, rather than communicating only at the optimizer step. The gather frequency depends on how long the policy retains full parameters, as explained in <a href="ch-m4-c13.html#sec-m4-c13-s05">Section 13.4</a>.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-step communication:</strong></span> DDP synchronizes gradient buckets for an update, and ZeRO synchronizes the state required by its sharding stage. Backward computation can overlap some of this traffic. Gradient accumulation changes which micro-batches synchronize. Pipeline stages exchange activations, and backward activation gradients during training, for each micro-batch. Decode pipelines exchange activations on each token step.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Per-request communication:</strong></span> Request routing and prefill/decode handoff. The acceptable distance depends on time to first token (TTFT), time per output token (TPOT), and tail-latency targets.</li>
 <li><span class="definition-term" data-custom-style="Definition Term"><strong>Background communication:</strong></span> Checkpointing, model loading, cache spill/fill, and slow-tier movement. It can use slower paths when the work is amortized and kept off the hot path.</li>
 </ul>
-<p>The table applies those communication frequencies to complete placement and scheduling patterns. Each row states the intended topology fit and the failure that appears when the mapping is wrong.</p>
+<p>Table 12.3 applies those communication frequencies to complete placement and scheduling patterns. Each row states the intended topology fit and the failure that appears when the mapping is wrong.</p>
 <div id="tbl-m4-c12-t02" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c12-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;12.2: Distributed system design patterns for communication-heavy workloads.
+Table&nbsp;12.3: Distributed system design patterns for communication-heavy workloads.
 </figcaption>
 <div aria-describedby="tbl-m4-c12-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <table class="caption-top table">
@@ -687,7 +754,7 @@ Table&nbsp;12.2: Distributed system design patterns for communication-heavy work
 <tr class="odd">
 <td>Topology-aware placement</td>
 <td>Ranks with frequent exchange are placed near each other</td>
-<td>Use NVLink/NVSwitch or same rack for hot pairs</td>
+<td>Prefer NVLink/NVSwitch for frequent collectives; same-rack placement only helps when the measured network path meets the workload’s latency target</td>
 <td>Scheduler spreads hot ranks across slow paths</td>
 </tr>
 <tr class="even">
@@ -747,7 +814,7 @@ Table&nbsp;12.2: Distributed system design patterns for communication-heavy work
 <p><strong>Contention:</strong> What happens when multiple jobs, collectives, or serving replicas share the same fabric?</p>
 <p><strong>Metric:</strong> Is success judged by throughput, TTFT, TPOT, tail latency, utilization, memory capacity, or cost?</p>
 </div>
-<p>This pattern view prevents a common distributed-system error: choosing a parallelism strategy because it fits memory, then discovering that its communication frequency does not fit the topology. Memory capacity and communication distance have to be designed together.</p>
+<p>Comparing these patterns helps expose a common distributed-system error: choosing a parallelism strategy because it fits memory, then discovering that its communication frequency does not fit the topology. Memory capacity and communication distance have to be designed together.</p>
 </section>
 <section id="sec-m4-c12-s12" class="level2" data-number="12.12">
 <h2 data-number="12.12" class="anchored" data-anchor-id="sec-m4-c12-s12"><span class="header-section-number">12.12</span> Communication design checks</h2>
@@ -765,6 +832,21 @@ Table&nbsp;12.2: Distributed system design patterns for communication-heavy work
 <p>With the communication primitives and physical paths defined, Chapter 13 can compare distributed training and inference strategies by the tensors they exchange, the frequency of those exchanges, and the topology that carries them.</p>
 
 
+</section>
+<section id="footnotes" class="footnotes footnotes-end-of-document" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn1"><p>Bindel, D. (2015, October 6). <em>Distributed memory: Networks and models</em>. Cornell University, CS 5220 course notes, Network properties. <a href="https://www.cs.cornell.edu/~bindel/class/cs5220-f15/slides/2015-10-06-network.html">https://www.cs.cornell.edu/~bindel/class/cs5220-f15/slides/2015-10-06-network.html</a>. Supports the minimum-capacity equal-division definition. The four-endpoint rates in this chapter are assumed teaching inputs, not benchmark results.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>NVIDIA. (2026). <em>GPUDirect RDMA Documentation</em> (v13.4). <a href="https://docs.nvidia.com/cuda/gpudirect-rdma/">https://docs.nvidia.com/cuda/gpudirect-rdma/</a>. Supports direct data exchange between GPU and third-party PCIe peer such as a NIC, with address translation through the NVIDIA kernel driver, while CPU libraries prepare and submit transfers. Limit: peers must share a compatible PCIe root complex path, IOMMU must allow the mapping, and topology, BAR size, and platform support determine whether the direct path is available or falls back.<a href="#fnref2" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p>NVIDIA. (2026). <em>NVIDIA Collective Communications Library Documentation</em> (NCCL 2.32.3). <a href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/index.html">https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/index.html</a>. This current-documentation URL can change versions. Supports NCCL as the common GPU collective library implementing AllReduce, Broadcast, Reduce, AllGather, ReduceScatter, AlltoAll, Gather, Scatter, and point-to-point operations over paths including PCIe, NVLink, NVSwitch, and network interfaces. Limit: documents library behavior and configuration, not achieved bandwidth; algorithm choice depends on message size, rank count, topology, and settings such as NCCL_ALGO.<a href="#fnref3" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn4"><p>NVIDIA. (2024). <em>NCCL Tests PERFORMANCE Documentation</em>. Pinned commit c6eb15875f508076f3f26de4f7da3899701bc4db dated 2024-07-25 at <a href="https://raw.githubusercontent.com/NVIDIA/nccl-tests/c6eb15875f508076f3f26de4f7da3899701bc4db/doc/PERFORMANCE.md">https://raw.githubusercontent.com/NVIDIA/nccl-tests/c6eb15875f508076f3f26de4f7da3899701bc4db/doc/PERFORMANCE.md</a>, commit page at <a href="https://github.com/NVIDIA/nccl-tests/commit/c6eb15875f508076f3f26de4f7da3899701bc4db">https://github.com/NVIDIA/nccl-tests/commit/c6eb15875f508076f3f26de4f7da3899701bc4db</a>. Supports AllReduce bus-bandwidth correction factor 2 times (n minus 1) divided by n, and (n minus 1) divided by n for ReduceScatter and AllGather, with the AllReduce reduction described as independent of ring, tree, or other point-to-point algorithm. Limit: factor converts algorithm bandwidth to bus bandwidth and does not prove which schedule a runtime selects or what elapsed time a topology achieves.<a href="#fnref4" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn5"><p>NVIDIA. (2024). <em>NCCL Tests PERFORMANCE Documentation</em>. Pinned commit c6eb15875f508076f3f26de4f7da3899701bc4db dated 2024-07-25 at <a href="https://raw.githubusercontent.com/NVIDIA/nccl-tests/c6eb15875f508076f3f26de4f7da3899701bc4db/doc/PERFORMANCE.md">https://raw.githubusercontent.com/NVIDIA/nccl-tests/c6eb15875f508076f3f26de4f7da3899701bc4db/doc/PERFORMANCE.md</a>, commit page at <a href="https://github.com/NVIDIA/nccl-tests/commit/c6eb15875f508076f3f26de4f7da3899701bc4db">https://github.com/NVIDIA/nccl-tests/commit/c6eb15875f508076f3f26de4f7da3899701bc4db</a>. Supports AllReduce bus-bandwidth correction factor 2 times (n minus 1) divided by n, and (n minus 1) divided by n for ReduceScatter and AllGather, with the AllReduce reduction described as independent of ring, tree, or other point-to-point algorithm. Limit: factor converts algorithm bandwidth to bus bandwidth and does not prove which schedule a runtime selects or what elapsed time a topology achieves.<a href="#fnref5" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn6"><p>NVIDIA. (2026). <em>NVIDIA Collective Communications Library Documentation</em> (NCCL 2.32.3). <a href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/index.html">https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/index.html</a>. This current-documentation URL can change versions. Supports NCCL as the common GPU collective library implementing AllReduce, Broadcast, Reduce, AllGather, ReduceScatter, AlltoAll, Gather, Scatter, and point-to-point operations over paths including PCIe, NVLink, NVSwitch, and network interfaces. Limit: documents library behavior and configuration, not achieved bandwidth; algorithm choice depends on message size, rank count, topology, and settings such as NCCL_ALGO.<a href="#fnref6" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn7"><p>PyTorch. (2026). <em>Distributed Communication Package: torch.distributed</em>. Versioned v2.14 documentation at <a href="https://docs.pytorch.org/docs/2.14/distributed.html">https://docs.pytorch.org/docs/2.14/distributed.html</a>, created 2017-07-12 and updated 2026-08-07. Supports process groups with rank identity, backend selection with NCCL for CUDA collectives and Gloo for CPU paths, and NCCL debugging with NCCL_DEBUG equals INFO. Limit: backend availability depends on build and platform; the page documents API behavior, not achieved performance.<a href="#fnref7" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn8"><p>PyTorch. (2026). <em>Distributed Communication Package: torch.distributed</em>. Versioned v2.14 documentation at <a href="https://docs.pytorch.org/docs/2.14/distributed.html">https://docs.pytorch.org/docs/2.14/distributed.html</a>, created 2017-07-12 and updated 2026-08-07. Supports process groups with rank identity, backend selection with NCCL for CUDA collectives and Gloo for CPU paths, and NCCL debugging with NCCL_DEBUG equals INFO. Limit: backend availability depends on build and platform; the page documents API behavior, not achieved performance.<a href="#fnref8" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn9"><p>NVIDIA. (NCCL 2.32.3 documentation). <em>Environment Variables</em>. Retrieved September 28, 2026, from <a href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html">https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html</a>. Describes diagnostic settings and InfiniBand/RoCE transport disabling. The current-documentation URL can change versions. Starting a fresh run for each configuration is a conservative test procedure used here, not a documented guarantee about when every setting is read or whether an existing communicator is reconfigured.<a href="#fnref9" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn10"><p>NVIDIA. (NCCL 2.32.3 documentation). <em>Environment Variables</em>. Retrieved September 28, 2026, from <a href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html">https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html</a>. Describes diagnostic settings and InfiniBand/RoCE transport disabling. The current-documentation URL can change versions. Starting a fresh run for each configuration is a conservative test procedure used here, not a documented guarantee about when every setting is read or whether an existing communicator is reconfigured.<a href="#fnref10" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+</ol>
 </section>
 
 </main> <!-- /main -->
