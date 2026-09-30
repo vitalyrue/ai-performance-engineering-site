@@ -622,13 +622,13 @@ M_{\mathrm{KV}} = 2 \cdot B \cdot L \cdot T \cdot d_{\mathrm{KV}} \cdot b
 </ul>
 </div>
 <p>The same model shows how much room the cache actually gets. On an 80 GB GPU with <code>gpu_memory_utilization</code> set to 0.90, the engine may use 72 GB. The BF16 weights of the 8-billion-parameter model take 16 GB, and activations and execution buffers take an assumed 4 GB, leaving about 52 GB for KV blocks. Each cached token costs 2 × 32 × 1,024 × 2 = 131,072 bytes, so 52 GB holds about 397,000 tokens, or about 49 concurrent sequences of 8,000 tokens. Any memory saved on weights becomes room for more concurrent requests.</p>
-<div id="fig-m3-c03-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="KV-cache memory fans out to allocation, prefix reuse, compression, and pressure-relief controls.">
+<div id="fig-m3-c03-f06" class="quarto-float quarto-figure quarto-figure-center anchored" alt="KV-cache memory fans out to four engine-control families: allocate, reuse, compress, and relieve pressure. A separate model-architecture card identifies fewer KV heads through GQA or MQA.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c03-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m3-c03-f06.png" class="img-fluid figure-img" alt="KV-cache memory fans out to allocation, prefix reuse, compression, and pressure-relief controls.">
+<img src="../assets/fig-m3-c03-f06.png" class="img-fluid figure-img" alt="KV-cache memory fans out to four engine-control families: allocate, reuse, compress, and relieve pressure. A separate model-architecture card identifies fewer KV heads through GQA or MQA.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;4.6: KV-cache pressure can be reduced by block allocation, prefix reuse, compression, or controlled offload and rejection.
+Figure&nbsp;4.6: KV-cache pressure is managed through engine controls for allocation, reuse, quantization, offload, admission, and rejection; fewer KV heads are a separate model-architecture choice.
 </figcaption>
 </figure>
 </div>
@@ -701,13 +701,13 @@ Figure&nbsp;4.7: The eligibility filter checks each replica for health, compatib
 <h2 data-number="4.8" class="anchored" data-anchor-id="sec-m3-c03-s07"><span class="header-section-number">4.8</span> Scaling capacity while limiting cold starts</h2>
 <p>Stateful routing uses the replicas that already exist. Sustained queue growth can require the control plane to add capacity, yet loading large weights from the storage chosen in Chapter 3 can take minutes. The controller must account for that delay before demand exceeds warmed capacity.</p>
 <p>Autoscaling that reacts too strongly to raw one-second metrics can oscillate because one long prompt can temporarily consume free KV blocks or inflate TTFT. The controller described here uses a smoothed demand signal, a cooldown, and separate scale-up and scale-down policies.<a href="#fn17" class="footnote-ref" id="fnref17" role="doc-noteref"><sup>17</sup></a> For the GPU-bound serving workload in this example, queue depth, waiting tokens, available cache blocks, and SLO error describe pressure more directly than CPU utilization. A deployment must confirm that relationship on its own workload.</p>
-<div id="fig-m3-c03-f08" class="quarto-float quarto-figure quarto-figure-center anchored" alt="The control plane reconciles desired deployments while request traffic stays on the serving path.">
+<div id="fig-m3-c03-f08" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Desired state enters a control-plane loop that observes, compares, and acts on a serving fleet with ready, warming, and draining replicas. The router handles requests outside this loop.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c03-f08-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m3-c03-f08.png" class="img-fluid figure-img" alt="The control plane reconciles desired deployments while request traffic stays on the serving path.">
+<img src="../assets/fig-m3-c03-f08.png" class="img-fluid figure-img" alt="Desired state enters a control-plane loop that observes, compares, and acts on a serving fleet with ready, warming, and draining replicas. The router handles requests outside this loop.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f08-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;4.8: The control plane reconciles desired deployments while request traffic stays on the serving path.
+Figure&nbsp;4.8: The control-plane controller compares desired and observed state, acts on the serving fleet, and leaves request routing outside the reconciliation loop.
 </figcaption>
 </figure>
 </div>
@@ -723,13 +723,13 @@ Figure&nbsp;4.8: The control plane reconciles desired deployments while request 
 <li><strong>Conclusion:</strong> Autoscaling capacity depends on warmed service rate and response delay, not an instantaneous utilization sample.</li>
 </ul>
 </div>
-<div id="fig-m3-c03-f09" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Measured scaling behavior includes the delay between a capacity signal and a warmed replica joining traffic.">
+<div id="fig-m3-c03-f09" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A controller scales up before a smoothed-demand curve reaches the threshold. A new replica then passes through node allocation, image and weight loading, kernel warm-up, health checks, and router admission; this example takes about 210 seconds.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c03-f09-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m3-c03-f09.png" class="img-fluid figure-img" alt="Measured scaling behavior includes the delay between a capacity signal and a warmed replica joining traffic.">
+<img src="../assets/fig-m3-c03-f09.png" class="img-fluid figure-img" alt="A controller scales up before a smoothed-demand curve reaches the threshold. A new replica then passes through node allocation, image and weight loading, kernel warm-up, health checks, and router admission; this example takes about 210 seconds.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f09-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;4.9: This example’s scaling signal is followed by allocation, loading, warm-up, health checks, and router admission before the new replica serves traffic.
+Figure&nbsp;4.9: The controller requests capacity before demand reaches the target; in this example, allocation, loading, warm-up, health checks, and router admission take about 210 seconds.
 </figcaption>
 </figure>
 </div>
@@ -805,13 +805,13 @@ Table&nbsp;4.2: A serving bundle advances only when its deployable behavior pass
 </div>
 </figure>
 </div>
-<div id="fig-m3-c03-f11" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A serving rollout keeps stable and candidate bundles alive until performance and quality gates pass.">
+<div id="fig-m3-c03-f11" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A router sends most traffic to a stable bundle and a small share to a candidate. The release controller compares equivalent slices, promotes only when all required gates pass, and returns all traffic to stable when a stop condition is triggered.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m3-c03-f11-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="../assets/fig-m3-c03-f11.png" class="img-fluid figure-img" alt="A serving rollout keeps stable and candidate bundles alive until performance and quality gates pass.">
+<img src="../assets/fig-m3-c03-f11.png" class="img-fluid figure-img" alt="A router sends most traffic to a stable bundle and a small share to a candidate. The release controller compares equivalent slices, promotes only when all required gates pass, and returns all traffic to stable when a stop condition is triggered.">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m3-c03-f11-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;4.11: A serving rollout keeps stable and candidate bundles alive until performance and quality gates pass.
+Figure&nbsp;4.11: The release controller promotes a candidate only when every required gate passes; a triggered stop condition returns all traffic to the stable bundle.
 </figcaption>
 </figure>
 </div>
