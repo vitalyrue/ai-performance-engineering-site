@@ -294,12 +294,6 @@ window.Quarto = {
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../frontmatter/ch-m2-foundations.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Models, tasks, and learning</span></a>
-  </div>
-</li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
   <a href="../frontmatter/ch-m2-roadmap.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Roadmap</span></a>
   </div>
@@ -314,6 +308,12 @@ window.Quarto = {
   <div class="sidebar-item-container"> 
   <a href="../frontmatter/ch-m2-library-map.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Library Map</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-foundations.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction: Models, tasks, and learning</span></a>
   </div>
 </li>
         <li class="sidebar-item sidebar-item-section">
@@ -537,6 +537,12 @@ window.Quarto = {
       <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m2-execution.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Execution records and supporting notebooks</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../appendices/ch-m2-dictionary.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Glossary</span></a>
   </div>
@@ -554,9 +560,9 @@ window.Quarto = {
 <section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
   <dl>
     <dt>Publisher version</dt>
-    <dd>0.8.15</dd>
+    <dd>0.8.21</dd>
     <dt>Released</dt>
-    <dd><time datetime="2026-10-04">2026-10-04</time></dd>
+    <dd><time datetime="2026-10-18">2026-10-18</time></dd>
   </dl>
 </section>
 </nav>
@@ -577,7 +583,7 @@ window.Quarto = {
 </nav>
     </div>
 <!-- main -->
-<main class="content" id="quarto-document-content">
+<main class="content" id="quarto-document-content"><aside id="module2-review-draft" role="note" aria-label="Review draft" style="margin:0 0 1rem;padding:.6rem .8rem;border-left:3px solid #1F4E79;background:#EAF2F8;color:#19202C;font:inherit"><strong>Review draft.</strong> Text and figures are still under review. Some diagrams need correction.</aside>
 
 <header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p06.html">Part VI: Implementation and Extensions</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c23.html"><span class="chapter-number">23</span>&nbsp; <span class="chapter-title">Tensor storage: Shapes, views, devices, and lifetime</span></a></li></ol></nav>
 <div class="quarto-title">
@@ -602,7 +608,6 @@ window.Quarto = {
 <p>Tensor memory and execution claims need storage, layout, numerical type, device, and state lifetime beyond logical shape.</p>
 </div>
 <p>Two tensors can describe the same mathematical array while sharing storage differently or requiring different copies. Shape alone cannot reveal that difference. Layout, numerical type, device, and retained gradient state determine which values are stored and which operations can execute.</p>
-<p>Earlier calculations specified array values and shapes. Checking memory and execution claims also requires the arrays’ storage, placement, and lifetime rules.</p>
 <div id="fig-m2-c23-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Six linked panels show logical arrays sharing or retaining storage, matrix multiplication and broadcasting over different axes, views using strides and offsets versus allocated copies, training and serving arrays with different lifetimes, compatible device placement, and a gradient trace through transpose and contiguous copy but not detachment.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c23-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -616,19 +621,17 @@ Figure&nbsp;23.1: The six sections distinguish logical elements from storage, ma
 <section id="sec-m2-c23-s01" class="level2" data-number="23.1">
 <h2 data-number="23.1" class="anchored" data-anchor-id="sec-m2-c23-s01"><span class="header-section-number">23.1</span> Logical elements and underlying storage</h2>
 <p>A repeated row can appear twice in an array without its values being stored twice. Conversely, a small slice can keep a much larger allocation alive. Memory accounting therefore needs both the logical shape and the underlying storage.</p>
-<p>The tensor primer in <a href="../frontmatter/ch-m2-roadmap.html#sec-m2-roadmap-start">Roadmap</a> established arrays and axis meanings. A tensor’s <span class="definition-term" data-custom-style="Definition Term"><strong>dtype</strong></span> specifies the numerical type of its elements. Its device identifies the memory and execution location, such as CPU or a CUDA GPU. Shape gives the length of every logical axis.</p>
-<p>For axis lengths <span class="math inline">\(d_i\)</span>, the logical element count is</p>
+<p>The Roadmap’s tensor primer introduced shape, dtype and device. Here their storage roles matter: shape counts logical positions, dtype sets their element size, and device identifies where the values reside and operations execute.</p>
+<p>For axis lengths <span class="math inline">\(d_i\)</span>, the logical element count and dense payload are:</p>
 <p><span id="eq-m2-c23-e01"><span class="math display">\[
 \operatorname{numel}(X)=\prod_i d_i
 \tag{23.1}\]</span></span></p>
-<p>Each combination of valid indices identifies one logical entry. A scalar tensor has shape <code>[]</code> and one element. An axis of length zero makes the total zero. Counting entries does not establish how many distinct storage locations they reference.</p>
-<p>The logical dense payload is</p>
 <p><span id="eq-m2-c23-e02"><span class="math display">\[
 \mathrm{logical\ payload}(X)=\operatorname{numel}(X)\cdot\mathrm{bytes\ per\ element}
 \tag{23.2}\]</span></span></p>
-<p>For fixed dtype, each logical value has the same element size. This product equals value storage for a separate dense allocation with no extra capacity. It is not necessarily a view’s underlying allocation or the allocator’s reserved memory.</p>
+<p>A scalar tensor has shape <code>[]</code> and one element. An axis of length zero makes the count zero. The element size in bytes is fixed by dtype. The payload equals value storage for a separate dense allocation with no extra capacity. A <span class="definition-term" data-custom-style="Definition Term"><strong>view</strong></span> is a tensor that shares another tensor’s storage. It can refer to fewer distinct locations or keep a larger allocation alive, and the allocator can reserve additional memory.</p>
 <p>A <span class="definition-term" data-custom-style="Definition Term"><strong>contiguous tensor</strong></span> has the layout required by the specified memory format. In the ordinary row-major format, the last axis changes fastest. This describes the order of stored values, not whether two tensors share an allocation.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<div class="publisher-worked-calculation publisher-fold-never" data-custom-style="Worked Calculation">
 <p><strong>Example: Independent values and expanded rows</strong></p>
 <p>A separately allocated contiguous tensor with shape <span class="math inline">\([2,3,4]\)</span> has <span class="math inline">\(2(3)(4)=24\)</span> values. With <code>float32</code>, its value payload is <span class="math inline">\(24(4)=96\)</span> bytes, excluding overhead.</p>
 <p>In a separate example, three <code>float32</code> values occupy 12 bytes. Expanding their row from <code>[1,3]</code> to <code>[2,3]</code> can produce six logical entries sharing those same three values. Its logical payload is 24 bytes, but its underlying value storage is still 12 bytes.</p>
@@ -644,46 +647,42 @@ Figure&nbsp;23.1: The six sections distinguish logical elements from storage, ma
 <span id="lst-m2-c23-c01-4"><a href="#lst-m2-c23-c01-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.shape)   <span class="co"># batch=4, sequence=8, hidden=16</span></span>
 <span id="lst-m2-c23-c01-5"><a href="#lst-m2-c23-c01-5" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.dtype)   <span class="co"># float32</span></span>
 <span id="lst-m2-c23-c01-6"><a href="#lst-m2-c23-c01-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(x.device)  <span class="co"># cpu unless moved to cuda</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>It prints shape <code>[4,8,16]</code>, dtype <code>torch.float32</code>, and device <code>cpu</code>. Calling <code>.size()</code> returns the same axis lengths as <code>.shape</code>; <code>.dim()</code> returns their count, here three. <code>torch.get_default_dtype()</code> reports the floating dtype used by constructors that rely on that default. An explicit dtype or one inherited from a NumPy array can differ from it. There are 512 logical elements, or 2048 payload bytes for this independent allocation. No gradient tracking is requested. The random values do not affect these counts. Section 23.3 adds the layout information needed to identify sharing.</p>
-<p><code>torch.arange(10)</code> returns the ten integers from zero through nine: its stop value is excluded. <code>torch.linspace(0, 10, 11)</code> instead returns eleven evenly spaced values including both zero and ten. <code>zeros</code> and <code>ones</code> set every value. An allocation without initialization must be filled before its values are used. Existing memory contents are not random samples. A seeded random generator is a separate operation whose distribution and seed define its sampling behavior.</p>
-<p>A dtype such as <code>torch.float32</code> describes tensor storage. It is not a Python class for constructing individual numeric objects. A zero-dimensional indexed tensor still has tensor metadata. Its <code>.item()</code> method returns the corresponding Python scalar, which can incur synchronization when the value resides on a device.</p>
+<p>It prints shape <code>[4,8,16]</code>, dtype <code>torch.float32</code>, and device <code>cpu</code>. Calling <code>.size()</code> returns the same axis lengths as <code>.shape</code>; <code>.dim()</code> returns their count, here three. There are 512 logical elements, or 2048 payload bytes for this independent allocation. No gradient tracking is requested. The random values do not affect these counts. Section 23.3 adds the layout information needed to identify sharing.</p>
+<p>A dtype such as <code>torch.float32</code> describes tensor storage. It is not a Python class for constructing individual numeric objects. A zero-dimensional indexed tensor still has tensor metadata. Its <code>.item()</code> method returns the corresponding Python scalar, which can incur synchronization when the value resides on a device. <code>torch.get_default_dtype()</code> reports the floating dtype used by constructors that rely on that default. An explicit dtype or one inherited from a <code>NumPy</code> array can differ from it.</p>
 <p>The axes also determine whether an operation combines the intended values. A dimensionally legal broadcast can still compare the wrong examples.</p>
 </section>
 <section id="sec-m2-c23-s02" class="level2" data-number="23.2">
 <h2 data-number="23.2" class="anchored" data-anchor-id="sec-m2-c23-s02"><span class="header-section-number">23.2</span> Matrix contraction and trailing-axis broadcasting</h2>
 <p>Applying one bias vector to many rows should reuse its class coordinates without mixing examples. Matrix multiplication and broadcasting provide different rules for that batched computation.</p>
-<p>For row-batch input <span class="math inline">\(X\)</span>, the affine map is</p>
-<p><span id="eq-m2-c23-e03"><span class="math display">\[
-X\in\mathbb{R}^{B\times D_{\mathrm{in}}},\quad W\in\mathbb{R}^{D_{\mathrm{in}}\times D_{\mathrm{out}}},\quad Y=XW+b\in\mathbb{R}^{B\times D_{\mathrm{out}}}
-\tag{23.3}\]</span></span></p>
-<p>The shared input-feature axis has length <span class="math inline">\(D_{\mathrm{in}}\)</span>. Matrix multiplication sums over it, leaving batch size <span class="math inline">\(B\)</span> and output width <span class="math inline">\(D_{\mathrm{out}}\)</span>. Thus a two-by-three matrix times a three-by-four matrix gives a two-by-four matrix.</p>
+<p>The affine map <span class="math inline">\(Y=XW+b\)</span> from §4.3 contracts the shared input-feature axis. With shapes <span class="math inline">\([B,D_{\mathrm{in}}]\)</span> and <span class="math inline">\([D_{\mathrm{in}},D_{\mathrm{out}}]\)</span>, the product has shape <span class="math inline">\([B,D_{\mathrm{out}}]\)</span>. A two-by-three matrix times a three-by-four matrix therefore gives a two-by-four matrix.</p>
 <p><a href="ch-m2-c05.html#sec-m2-c05-s03">Section 5.3</a> establishes the orientation convention: mathematical <span class="math inline">\(W\)</span> has shape <span class="math inline">\([D_{\mathrm{in}},D_{\mathrm{out}}]\)</span>, while <code>nn.Linear</code> stores its transpose with shape <span class="math inline">\([D_{\mathrm{out}},D_{\mathrm{in}}]\)</span>. These are two conventions for the same map, not an instruction to transpose an already compatible mathematical matrix.</p>
 <p>Broadcasting, introduced for biases in §4.3, aligns axes from the right. Two aligned lengths are compatible when they agree or one equals one. A missing leading axis acts as length one. A size-one axis takes the other length, while equal lengths stay unchanged. A length-one input reuses its value along that result axis.<a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a></p>
 <p>For a score array <code>[[1,2,3],[4,5,6]]</code> and bias <code>[10,20,30]</code>, shapes <code>[2,3]</code> and <code>[3]</code> align as <code>[2,3]</code> and <code>[1,3]</code>. Their sum is <code>[[11,22,33],[14,25,36]]</code>. A bias of shape <code>[2]</code> would fail because the trailing lengths three and two disagree.</p>
 <p>A column shape <code>[2,1]</code> is also compatible with <code>[2,3]</code>. It adds one value per row across three columns. This is a different meaning from adding a length-three feature bias, despite both results having shape <code>[2,3]</code>.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<div class="publisher-worked-calculation publisher-fold-never" data-custom-style="Worked Calculation">
 <p><strong>Example: A legal broadcast comparing the wrong pairs</strong></p>
 <p>Predictions <code>[[0.8],[0.2]]</code> have shape <code>[2,1]</code>, while labels <code>[1,0]</code> have shape <code>[2]</code>. Subtraction aligns them as <code>[2,1]</code> and <code>[1,2]</code>, producing shape <code>[2,2]</code>:</p>
 <p><code>[[-0.2,0.8],[-0.8,0.2]]</code>.</p>
 <p>Each prediction has been compared with both labels. Pairwise errors would be <code>[-0.2,0.2]</code>, using two matching <code>[2]</code> arrays, or the equivalent two <code>[2,1]</code> arrays.</p>
 <p><strong>Conclusion:</strong> Broadcasting succeeded but changed the comparison from two aligned pairs to four cross-pairs. Matching the target and prediction contracts prevents a silent objective change.</p>
 </div>
-<p>An expanded view can reuse storage with a zero stride. An arithmetic result such as the sum above normally needs its own values. Vectorization can remove Python loops while still allocating a large intermediate, so it does not make every expression cheaper.</p>
+<p>An expanded view can reuse storage. An arithmetic result such as the sum above normally needs its own values. Vectorization can remove Python loops while still allocating a large intermediate, so it does not make every expression cheaper.</p>
 <p>The axes must retain their meanings after reshaping. In the equal-width attention setup, heads times head width equals model width. <a href="ch-m2-c17.html#sec-m2-c17-s02">§17.2</a> explains why splitting features and permuting axes are separate operations.</p>
 </section>
 <section id="sec-m2-c23-s03" class="level2" data-number="23.3">
 <h2 data-number="23.3" class="anchored" data-anchor-id="sec-m2-c23-s03"><span class="header-section-number">23.3</span> Strides, offsets, aliases, and copies</h2>
-<p>A transpose can change which values are neighbors in logical reading order without moving them in memory. A <span class="definition-term" data-custom-style="Definition Term"><strong>view</strong></span> shares storage while describing its own shape, strides, and starting offset. A <span class="definition-term" data-custom-style="Definition Term"><strong>copy</strong></span> has separately allocated storage containing copied values. Shared-storage tensors are aliases, so changing one can change what another reads.</p>
+<p>A transpose can change which values are neighbors in logical reading order without moving them in memory. A view shares storage while describing its own shape, strides, and starting offset. A <span class="definition-term" data-custom-style="Definition Term"><strong>copy</strong></span> has separately allocated storage containing copied values. Shared-storage tensors are aliases, so changing one can change what another reads.</p>
 <p>A <span class="definition-term" data-custom-style="Definition Term"><strong>storage stride</strong></span> is the number of storage elements traversed when one logical index increases by one. The <span class="definition-term" data-custom-style="Definition Term"><strong>storage offset</strong></span> is the index of the tensor’s first logical element relative to the storage start. For two axes,</p>
 <p><span id="eq-m2-c23-e04"><span class="math display">\[
 \operatorname{offset}(i,j)=o+i s_0+j s_1
-\tag{23.4}\]</span></span></p>
+\tag{23.3}\]</span></span></p>
 <p>Here <span class="math inline">\(o\)</span> is the storage offset, and <span class="math inline">\(s_0,s_1\)</span> are strides. The offset and strides count elements. Multiplying the resulting offset by bytes per element gives a byte displacement from the storage start.</p>
 <p>With strides <code>[3,1]</code>, storage offset zero, and coordinate <code>(1,2)</code>, the element offset is <span class="math inline">\(0+1(3)+2(1)=5\)</span>. For <code>float32</code>, this is 20 bytes from the storage start.</p>
 <p>Now let <code>base</code> contain <code>0</code> through <code>11</code> in shape <code>[4,3]</code>. The slice <code>base[1:3]</code> has shape <code>[2,3]</code>, strides <code>[3,1]</code>, and storage offset 3. Its coordinate <code>(1,2)</code> reaches element <span class="math inline">\(3+3+2=8\)</span>, or 32 bytes from the underlying start. Adding only the strides would incorrectly select element 5.</p>
 <p>For an independent <code>x=[[0,1,2],[3,4,5]]</code>, transposition gives shape <code>[3,2]</code> and strides <code>[1,3]</code>. Its coordinate <code>(2,1)</code> still reaches element 5. Assigning <code>x.T[0,1]=30</code> changes <code>x[1,0]</code> to 30 because both refer to the same location.</p>
+<p>An expanded axis can instead have stride zero: increasing its logical index reads the same storage element. The repeated row in §23.1 uses this layout to share three stored values across six logical entries.</p>
 <p><code>view</code> requires a new shape compatible with the existing strides. It need not require every input to be contiguous. <code>reshape</code> and <code>flatten</code> may return a view or allocate a copy, depending on layout. Their names alone do not guarantee sharing.<a href="#fn2" class="footnote-ref" id="fnref2" role="doc-noteref"><sup>2</sup></a></p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<div class="publisher-worked-calculation publisher-fold-never" data-custom-style="Worked Calculation">
 <p><strong>Example: Two reshapes of one stepped slice</strong></p>
 <p>Let <code>a</code> contain the integers zero through 23 in shape <code>[3,8]</code>, with strides <code>[8,1]</code>. Its 24 values also fit <code>a.view(4, -1)</code>: the inferred axis has length six, and the view shares storage.</p>
 <p>Now take <code>b = a[::2, ::2]</code>. It selects rows zero and two and every other column, giving <code>[[0,2,4,6],[16,18,20,22]]</code>. Its shape is <code>[2,4]</code> and its strides are <code>[16,2]</code>. It is noncontiguous in the ordinary row-major format.</p>
@@ -693,7 +692,58 @@ X\in\mathbb{R}^{B\times D_{\mathrm{in}}},\quad W\in\mathbb{R}^{D_{\mathrm{in}}\t
 </div>
 <p><code>contiguous()</code> returns the existing tensor when it already satisfies the requested memory format from §23.1. Otherwise it copies into compatible storage. Copying <code>x.T</code> therefore separates future mutations, at the cost of allocation and copying. Contiguity alone does not prove a later kernel runs faster.</p>
 <p><code>detach()</code> removes the tensor’s connection to its earlier autograd history while sharing storage. It is not an independent data copy. Changing the detached values also changes the original storage, and can invalidate saved values needed for backward. <code>detach().clone()</code> creates independent values when both separation of history and storage are required.<a href="#fn4" class="footnote-ref" id="fnref4" role="doc-noteref"><sup>4</sup></a></p>
-<p>For a compatible CPU <code>NumPy</code> array, <code>torch.from_numpy</code> preserves its dtype and shares its storage. A typical random <code>NumPy</code> array uses <code>float64</code>, so this conversion does not convert it to <code>float32</code>. Constructing <code>torch.tensor(array, dtype=torch.float32)</code> instead creates a copy in the requested type. A compatible <code>.numpy()</code> conversion can share storage in the other direction. A CUDA tensor first needs a host transfer for ordinary <code>NumPy</code> access. With gradient recording enabled, ordinary <code>.numpy()</code> conversion requires detaching a compatible CPU tensor that requires gradients. For a CPU tensor in a supported numerical type and layout, <code>x.detach().numpy()</code> exposes values without its autograd history and can still share storage. For such a tensor on CUDA, <code>x.detach().cpu().numpy()</code> first creates a host copy. Mutating the resulting array therefore has different sharing consequences in these two cases.<a href="#fn5" class="footnote-ref" id="fnref5" role="doc-noteref"><sup>5</sup></a></p>
+<p>Conversion to or from <code>NumPy</code> can preserve storage sharing or introduce a copy. The result depends on the operation, device, numerical type, layout and gradient state.<a href="#fn5" class="footnote-ref" id="fnref5" role="doc-noteref"><sup>5</sup></a></p>
+<div id="tbl-m2-c23-t02" class="publisher-fold-never publisher-row-labels quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m2-c23-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;23.1: Conversion conditions determine type, storage sharing and gradient history.
+</figcaption>
+<div aria-describedby="tbl-m2-c23-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="publisher-fold-never publisher-row-labels caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Operation and required input</th>
+<th>Storage and numerical type</th>
+<th>Gradient or transfer condition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>torch.from_numpy(array)</code>, for a compatible CPU array</td>
+<td>Shares the array’s storage and preserves its dtype</td>
+<td>No dtype conversion is implied</td>
+</tr>
+<tr class="even">
+<td><code>torch.tensor(array, dtype=torch.float32)</code></td>
+<td>Creates separate float32 storage</td>
+<td>The constructor copies the supplied values</td>
+</tr>
+<tr class="odd">
+<td><code>x.numpy()</code>, for a supported CPU dtype and layout</td>
+<td>Can share the tensor’s storage</td>
+<td>With gradient recording enabled, x must not require gradients</td>
+</tr>
+<tr class="even">
+<td><code>x.detach().numpy()</code>, for such a CPU tensor</td>
+<td>Can still share x’s values</td>
+<td>Detaching removes the earlier gradient history; array mutation can change x</td>
+</tr>
+<tr class="odd">
+<td><code>x.detach().cpu().numpy()</code>, for a CUDA tensor</td>
+<td>The CPU transfer creates host storage</td>
+<td>Array mutation does not modify the original CUDA allocation</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>A typical random <code>NumPy</code> array uses <code>float64</code>. Sharing that storage does not convert it to <code>float32</code>. Detaching changes gradient history, while a device transfer or an explicit copying constructor changes storage.</p>
 <p>An in-place operation, commonly marked by a trailing underscore such as <code>add_</code>, changes existing values. Its out-of-place counterpart returns a separate result. Boolean comparisons such as <code>a &gt; 10</code> produce Boolean values. An in-place comparison such as <code>a.gt_(10)</code> instead writes zero or one into the original tensor’s dtype. Aliases observe those changed values, so the distinction affects both correctness and storage.</p>
 <p>These operations return tensors, so calls can be chained. With independent integer tensors <code>a = torch.tensor([1, 2])</code> and <code>b = torch.tensor([3, 4])</code>, <code>a.add_(b).mul_(2)</code> returns <code>a</code> itself and changes its values to <code>[8,12]</code>. Resetting <code>a</code> to <code>[1,2]</code> and calculating <code>(a + b).mul(2)</code> instead returns <code>[8,12]</code> while <code>a</code> stays <code>[1,2]</code>. Equal final values do not establish equal mutation behavior. This example uses tensors without gradient tracking.</p>
 <p>A call to <code>.to(device)</code> can return the original tensor if device and dtype already match. Changing device requires a transfer. The nonscalar input and weight operands of the matrix operation in §23.5 must have compatible placement. Checking only the input’s device leaves the weight’s location unresolved.</p>
@@ -702,15 +752,11 @@ X\in\mathbb{R}^{B\times D_{\mathrm{in}}},\quad W\in\mathbb{R}^{D_{\mathrm{in}}\t
 <h2 data-number="23.4" class="anchored" data-anchor-id="sec-m2-c23-s04"><span class="header-section-number">23.4</span> Tensor roles and state lifetime</h2>
 <p>A training step can keep several arrays with the same shape alive for different reasons. Releasing one does not release all the others. Their roles determine when they are created, retained, and reused.</p>
 <p>Parameters persist across steps, including frozen parameters whose values remain unchanged during updates. An activation is an intermediate value produced by the forward calculation. Autograd retains the values required by its backward rules while the graph needs them. A vocabulary embedding table is a parameter, while its looked-up vectors are activations. A <code>torch.nn.Module</code> registers parameters and child layers so their state can be discovered, moved, saved, and updated together. Defining a module does not fit its parameters.</p>
-<p>A gradient buffer accumulates derivatives for a parameter. When present, its shape matches that parameter:</p>
-<p><span id="eq-m2-c23-e05"><span class="math display">\[
-\operatorname{shape}(G_{\theta})=\operatorname{shape}(\theta)
-\tag{23.5}\]</span></span></p>
-<p>For a linear weight of shape <code>[4,3]</code>, <code>.grad</code> therefore also has shape <code>[4,3]</code>. Before backward, or when the parameter has no contributing path, the buffer can be absent. Non-leaf gradients propagate without necessarily being retained in <code>.grad</code>, as §11.4 explains.</p>
-<p>The <a href="ch-m2-c10.html#sec-m2-c10-s04">optimizer state introduced with Adam</a> contains persistent information used by an update rule. The following calculation counts the memory used by its first and second moments for each participating parameter:</p>
+<p>A gradient buffer accumulates a parameter’s derivatives in the same shape and orientation, as §5.3 specifies. It can be absent before backward or when the parameter has no contributing path. Non-leaf derivatives can propagate without a retained <code>.grad</code>, as §11.1 explains.</p>
+<p>The <a href="ch-m2-c10.html#sec-m2-c10-s04">optimizer state introduced with Adam</a> contains persistent information used by an update rule. The following relation gives the dimensions of its first and second moment arrays for each participating parameter:</p>
 <p><span id="eq-m2-c23-e06"><span class="math display">\[
 \operatorname{moments}_{\mathrm{Adam}}(\theta)=\{m_{\theta},v_{\theta}\},\quad\operatorname{shape}(m_{\theta})=\operatorname{shape}(v_{\theta})=\operatorname{shape}(\theta)
-\tag{23.6}\]</span></span></p>
+\tag{23.4}\]</span></span></p>
 <p>Here <span class="math inline">\(m_\theta\)</span> and <span class="math inline">\(v_\theta\)</span> have the parameter’s shape. Adam also keeps an update counter for bias correction. The arrays’ numerical type is part of the memory calculation. These arrays belong to the optimizer’s state mapping, not to every tensor’s metadata.</p>
 <p><code>optimizer.step()</code> changes parameters but does not automatically clear <code>.grad</code>. Resetting gradients leaves Adam moments available for later steps. An ordinary backward can release saved graph data that it no longer needs. Keeping references or retaining the graph can extend those lifetimes.</p>
 <div id="fig-m2-c23-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Arrows connect categories whose lifetimes overlap. Embedding parameters are a subset of model parameters, and tokenizer vocabulary need not reside on the GPU.">
@@ -719,12 +765,12 @@ X\in\mathbb{R}^{B\times D_{\mathrm{in}}},\quad W\in\mathbb{R}^{D_{\mathrm{in}}\t
 <img src="../assets/fig-m2-c23-f02.png" class="img-fluid figure-img" style="width:5.9in" alt="Arrows connect categories whose lifetimes overlap. Embedding parameters are a subset of model parameters, and tokenizer vocabulary need not reside on the GPU." data-book-image-preview tabindex="0" role="button">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c23-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;23.2: The diagram groups parameters, forward values, training state, and serving state.
+Figure&nbsp;23.2: Parameters, activations, gradients, optimizer moments and cache values have different uses and can remain alive at the same time.
 </figcaption>
 </figure>
 </div>
-<p>The illustration groups persistent, forward, training, and serving objects but connects them as though they were successive stages. Their lifetimes can overlap. An embedding table is already part of parameter storage and must not be counted again as an independent category. Tokenizer vocabulary also need not reside on a GPU.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p>Parameter, activation, gradient, optimizer and serving-state lifetimes can overlap. The embedding table is part of parameter storage. Counting it again would duplicate the same values. A tokenizer’s vocabulary can remain outside GPU memory.</p>
+<div class="publisher-worked-calculation publisher-fold-never" data-custom-style="Worked Calculation">
 <p><strong>Example: Four arrays for one million parameters</strong></p>
 <p>One million <code>float32</code> parameter values use 4,000,000 bytes, or 4 decimal MB. A same-type gradient adds 4 MB. Two same-type Adam moments add 8 MB, giving 16 MB for these four arrays.</p>
 <p>This is 16,000,000 bytes, about 0.01490 GiB, using <span class="math inline">\(2^{30}\)</span> bytes per GiB. Saved activations, other optimizer scalars, optional master parameter copies, temporary buffers, and allocation overhead are excluded.</p>
@@ -753,7 +799,8 @@ Figure&nbsp;23.2: The diagram groups parameters, forward values, training state,
 <span id="lst-m2-c23-c02-10"><a href="#lst-m2-c23-c02-10" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> logits.device <span class="op">==</span> features.device <span class="op">==</span> <span class="bu">next</span>(model.parameters()).device</span>
 <span id="lst-m2-c23-c02-11"><a href="#lst-m2-c23-c02-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(device, logits.shape)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The output shape is <code>[1,2]</code>. Random layer weights make its values variable. A CPU fallback verifies this placement logic. It is not a GPU execution or performance result. Even on a GPU, a successful device assertion supplies no timing evidence.</p>
-<p>For a supported operation, <code>PyTorch</code> selects an implementation according to the tensors’ device and dtype, together with other properties such as layout. This selection is called dispatch. A kernel is the implementation that executes the operation on that device. A device or dtype without a supported implementation can produce an error. Floating-point kernels can change rounding through operation order and numerical formats. Moving a calculation aims to preserve its mathematical function, not necessarily every output bit. Validation needs appropriate tolerances and task checks.</p>
+<p>For a supported operation, <code>PyTorch</code> selects an implementation according to device, dtype and properties such as layout. This selection is called dispatch. A kernel is the implementation that executes the operation on that device. Missing support for a device or dtype can produce an error.</p>
+<p>Floating-point implementations can change rounding through operation order and numerical formats. Checking a transferred calculation therefore needs numerical tolerances and task results, rather than a requirement that every output bit match.</p>
 <p><span class="definition-term" data-custom-style="Definition Term"><strong>Data parallelism</strong></span> uses model replicas to process different data portions, then combines their gradients before consistent updates. An <span class="definition-term" data-custom-style="Definition Term"><strong>all-reduce</strong></span> operation aggregates arrays across the participating devices and returns the aggregate to each replica.<a href="#fn7" class="footnote-ref" id="fnref7" role="doc-noteref"><sup>7</sup></a></p>
 <p>If two devices each compute a mean over four equally weighted examples, averaging their gradients gives the combined eight-example mean. If their included counts are two and six, their means need weights <span class="math inline">\(2/8\)</span> and <span class="math inline">\(6/8\)</span>. Equal averaging would give the smaller group too much influence. Masked-token objectives require the same count-aware treatment.</p>
 <p>The global batch can stay fixed while its portions shrink across more devices. It grows only if the chosen local batches and device count imply growth. Communication, synchronization, and small local work can offset any computation savings. Greater throughput requires measurement rather than following from the device count.</p>
@@ -772,11 +819,10 @@ Figure&nbsp;23.2: The diagram groups parameters, forward values, training state,
 <img src="../assets/fig-m2-c23-f03.png" class="img-fluid figure-img" style="width:5.9in" alt="Tensor object diagram without storage strides or offset. Optimizer moments are separate state, and leaf tensors can require gradients without a `grad_fn`." data-book-image-preview tabindex="0" role="button">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m2-c23-f03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;23.3: The diagram lists tensor values, dimensions, device, dtype, and gradient information.
+Figure&nbsp;23.3: A tensor’s shape, type, device and recorded gradient history describe different properties; sharing and copies determine which values occupy the same storage.
 </figcaption>
 </figure>
 </div>
-<p>The figure lists values, dimensions, device, dtype, and gradient information. It omits stride and offset, while optimizer state is a separate object. The trace supplies the missing storage facts rather than treating the picture as a complete memory layout.</p>
 <p>The two-axis rule in <a href="#sec-m2-c23-s03">§23.3</a> gives the view’s element offset from the start of its underlying storage. Here <span class="math inline">\(o=0\)</span> and the transpose’s strides are <code>[1,3]</code>. Every term counts storage elements. If <span class="math inline">\(p_0\)</span> is the underlying storage’s byte address and <span class="math inline">\(s\)</span> the element size, the byte address is <span class="math inline">\(p_0+s\,\operatorname{offset}(i,j)\)</span>. A pointer already at the view’s first element must not add its storage offset again.</p>
 <p>For a separate matrix product, <a href="#sec-m2-c23-s02">§23.2’s</a> contraction rule maps <span class="math inline">\([B,F]\)</span> times <span class="math inline">\([F,D_{\mathrm{out}}]\)</span> to <span class="math inline">\([B,D_{\mathrm{out}}]\)</span>. A changed stride does not change this mathematical shape rule. A compatible kernel can multiply a noncontiguous tensor correctly. Whether it copies internally or runs faster with contiguous input depends on the implementation and workload.</p>
 <p>The runnable trace creates the specified leaf directly, checks sharing and copying, then differentiates the copied tensor’s squared sum. It also makes a detached alias without mutating it.</p>
@@ -814,9 +860,9 @@ Figure&nbsp;23.3: The diagram lists tensor values, dimensions, device, dtype, an
 <hr>
 <ol>
 <li id="fn1"><p>PyTorch Contributors. (2026). <em><a href="https://docs.pytorch.org/docs/2.12/notes/broadcasting.html">Broadcasting semantics</a></em>. PyTorch 2.12 documentation.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
-<li id="fn2"><p>PyTorch Contributors. (2026). <em><a href="https://docs.pytorch.org/docs/2.12/tensor_view.html">Tensor views</a></em> and <em><a href="https://docs.pytorch.org/docs/2.12/generated/torch.Tensor.detach.html">Tensor.detach</a></em>. PyTorch 2.12 documentation.<a href="#fnref2" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
-<li id="fn3"><p>PyTorch Contributors. (2026). <em><a href="https://docs.pytorch.org/docs/2.12/tensor_view.html">Tensor views</a></em> and <em><a href="https://docs.pytorch.org/docs/2.12/generated/torch.Tensor.detach.html">Tensor.detach</a></em>. PyTorch 2.12 documentation.<a href="#fnref3" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
-<li id="fn4"><p>PyTorch Contributors. (2026). <em><a href="https://docs.pytorch.org/docs/2.12/tensor_view.html">Tensor views</a></em> and <em><a href="https://docs.pytorch.org/docs/2.12/generated/torch.Tensor.detach.html">Tensor.detach</a></em>. PyTorch 2.12 documentation.<a href="#fnref4" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>PyTorch Contributors. (2026). <em><a href="https://docs.pytorch.org/docs/2.12/tensor_view.html">Tensor views</a></em>. PyTorch 2.12 documentation.<a href="#fnref2" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p>PyTorch Contributors. (2026). <em><a href="https://docs.pytorch.org/docs/2.12/tensor_view.html">Tensor views</a></em>. PyTorch 2.12 documentation.<a href="#fnref3" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn4"><p>PyTorch Contributors. (2026). <em><a href="https://docs.pytorch.org/docs/2.12/generated/torch.Tensor.detach.html">Tensor.detach</a></em>. PyTorch 2.12 documentation.<a href="#fnref4" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
 <li id="fn5"><p>PyTorch Contributors. (2026). <em><a href="https://docs.pytorch.org/docs/2.12/generated/torch.Tensor.numpy.html">Tensor.numpy</a></em>. PyTorch 2.12 documentation. With gradient recording enabled, ordinary conversion requires a supported CPU tensor that does not require gradients.<a href="#fnref5" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
 <li id="fn6"><p>PyTorch Contributors. (2026). <em><a href="https://docs.pytorch.org/docs/2.12/notes/autograd.html#evaluation-mode-nn-module-eval">Autograd mechanics: Evaluation mode</a></em>. PyTorch 2.12 documentation.<a href="#fnref6" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
 <li id="fn7"><p>PyTorch Contributors. (2026). <em><a href="https://docs.pytorch.org/docs/2.12/generated/torch.nn.parallel.DistributedDataParallel.html">DistributedDataParallel</a></em>. PyTorch 2.12 documentation. The example explains weighting needed for a combined mean, not a complete distributed program.<a href="#fnref7" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
@@ -825,6 +871,160 @@ Figure&nbsp;23.3: The diagram lists tensor values, dimensions, device, dtype, an
 </section>
 
 </main> <!-- /main -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const automaticLongContentFolding = true;
+  const referenceSections = document.querySelectorAll(
+    'main.content section.footnotes[role="doc-endnotes"]'
+  );
+
+  referenceSections.forEach((section) => {
+    if (section.closest("details.publisher-chapter-references")) return;
+
+    const details = document.createElement("details");
+    details.className = "publisher-chapter-references";
+    const summary = document.createElement("summary");
+    const count = section.querySelectorAll("ol > li").length;
+    summary.textContent = count ? `References (${count})` : "References";
+
+    section.parentNode.insertBefore(details, section);
+    details.append(summary, section);
+  });
+
+  const openFoldTarget = (target) => {
+    const details = target?.closest(
+      "details.publisher-chapter-references, details.publisher-long-content"
+    );
+    if (details) details.open = true;
+  };
+
+  const targetFromHash = (hash) => {
+    if (!hash || hash === "#") return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('a[href*="#"]');
+    if (!link) return;
+    let destination;
+    try {
+      destination = new URL(link.getAttribute("href") || "", location.href);
+    } catch (_error) {
+      return;
+    }
+    if (destination.href.split("#")[0] !== location.href.split("#")[0]) return;
+    openFoldTarget(targetFromHash(destination.hash));
+  });
+
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
+    if (control?.classList.contains("publisher-fold-never")) return "never";
+    if (control?.classList.contains("publisher-fold-always")) return "always";
+    if (control?.classList.contains("publisher-fold-open")) return "open";
+    const requested = control?.dataset.publisherFold || "auto";
+    return ["auto", "never", "always", "open"].includes(requested)
+      ? requested
+      : "auto";
+  };
+
+  const foldCandidate = (candidate, kind) => {
+    if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
+
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
+    if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
+    const minimumFoldHeight = 320;
+    const foldHeight = Math.max(
+      minimumFoldHeight,
+      Math.round(document.documentElement.clientHeight * 0.5)
+    );
+    if (mode === "auto" && candidate.getBoundingClientRect().height <= foldHeight) return;
+
+    const titleSource = kind === "table"
+      ? candidate.querySelector("figcaption, caption")
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
+    const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
+
+    const details = document.createElement("details");
+    details.className = `publisher-long-content publisher-long-${kind}`;
+    if (mode === "open") details.open = true;
+    const summary = document.createElement("summary");
+    if (titleSource && label) {
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
+    } else {
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
+    }
+    const body = document.createElement("div");
+    body.className = "publisher-fold-body";
+    if (titleSource) titleSource.classList.add("publisher-fold-title-source");
+
+    candidate.parentNode.insertBefore(details, candidate);
+    details.append(summary, body);
+    body.append(candidate);
+  };
+
+  const foldLongContent = () => {
+    if (!automaticLongContentFolding) return;
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
+    document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
+      const float = figure.parentElement?.classList.contains("quarto-float")
+        ? figure.parentElement
+        : figure;
+      foldCandidate(float, "table");
+    });
+    document.querySelectorAll("main.content table").forEach((table) => {
+      if (!table.closest("figure.quarto-float-tbl")) foldCandidate(table, "table");
+    });
+    openFoldTarget(targetFromHash(location.hash));
+  };
+
+  if (document.readyState === "complete") {
+    requestAnimationFrame(foldLongContent);
+  } else {
+    window.addEventListener("load", () => requestAnimationFrame(foldLongContent), {
+      once: true,
+    });
+  }
+
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
+  document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
+  const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
+  window.addEventListener("hashchange", openLocationTarget);
+  openLocationTarget();
+});
+</script>
 <script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {
     const icon = "";

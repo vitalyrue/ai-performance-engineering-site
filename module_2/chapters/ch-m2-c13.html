@@ -294,12 +294,6 @@ window.Quarto = {
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../frontmatter/ch-m2-foundations.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Models, tasks, and learning</span></a>
-  </div>
-</li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
   <a href="../frontmatter/ch-m2-roadmap.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Roadmap</span></a>
   </div>
@@ -314,6 +308,12 @@ window.Quarto = {
   <div class="sidebar-item-container"> 
   <a href="../frontmatter/ch-m2-library-map.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Library Map</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../frontmatter/ch-m2-foundations.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Introduction: Models, tasks, and learning</span></a>
   </div>
 </li>
         <li class="sidebar-item sidebar-item-section">
@@ -537,6 +537,12 @@ window.Quarto = {
       <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="../appendices/ch-m2-execution.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Execution records and supporting notebooks</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="../appendices/ch-m2-dictionary.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Glossary</span></a>
   </div>
@@ -554,9 +560,9 @@ window.Quarto = {
 <section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
   <dl>
     <dt>Publisher version</dt>
-    <dd>0.8.15</dd>
+    <dd>0.8.21</dd>
     <dt>Released</dt>
-    <dd><time datetime="2026-10-04">2026-10-04</time></dd>
+    <dd><time datetime="2026-10-18">2026-10-18</time></dd>
   </dl>
 </section>
 </nav>
@@ -575,7 +581,7 @@ window.Quarto = {
 </nav>
     </div>
 <!-- main -->
-<main class="content" id="quarto-document-content">
+<main class="content" id="quarto-document-content"><aside id="module2-review-draft" role="note" aria-label="Review draft" style="margin:0 0 1rem;padding:.6rem .8rem;border-left:3px solid #1F4E79;background:#EAF2F8;color:#19202C;font:inherit"><strong>Review draft.</strong> Text and figures are still under review. Some diagrams need correction.</aside>
 
 <header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-m2-p03.html">Part III: From Error to Learning</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m2-c13.html"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Embedding tables</span></a></li></ol></nav>
 <div class="quarto-title">
@@ -597,9 +603,9 @@ window.Quarto = {
 
 
 <div class="publisher-purpose">
-<p>Integer token IDs need trainable vector rows and valid-position aggregation before they can supply numerical representations.</p>
+<p>Embedding lookup gives each token ID a vector row. Aggregation combines valid rows into a document representation.</p>
 </div>
-<p>A token ID identifies a vocabulary entry. Its numerical size does not measure the token’s meaning. An embedding table supplies trainable coordinates that a model can combine, while preserving the distinction between an integer identifier and its vector.</p>
+<p>Token IDs identify vocabulary entries, but their numerical order does not express similarity between tokens. An embedding table supplies trainable coordinates for each ID. The training objective shapes any useful geometric relationships between those vectors.</p>
 <div id="fig-m2-c13-f01" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Four numbered panels form one horizontal row. they show one-hot-equivalent row selection, batched lookup with repeated-row gradient contributions, valid-position masked pooling, and a two-document padded batch with masks, pooled vectors, loss, and accumulated row gradients.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c13-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -612,8 +618,7 @@ Figure&nbsp;13.1: The four panels match Sections 13.1 to 13.4. A token ID select
 </div>
 <section id="sec-m2-c13-s01" class="level2" data-number="13.1">
 <h2 data-number="13.1" class="anchored" data-anchor-id="sec-m2-c13-s01"><span class="header-section-number">13.1</span> From a token ID to a parameter row</h2>
-<p>The vocabulary order provides no reason for ID 4 to resemble ID 5 more than ID 100. The IDs select rows. The stored coordinates, and the objective that changes them, determine any useful geometric relationships.</p>
-<p>An <span class="definition-term" data-custom-style="Definition Term"><strong>embedding matrix</strong></span> stores one parameter row for each vocabulary entry:</p>
+<p>Each ID needs a vector of the width expected by the model. An <span class="definition-term" data-custom-style="Definition Term"><strong>embedding matrix</strong></span> stores these trainable values in one row for each vocabulary entry:</p>
 <p><span id="eq-m2-c13-e01"><span class="math display">\[
 E\in\mathbb{R}^{\lvert V\rvert\times D}
 \tag{13.1}\]</span></span></p>
@@ -627,11 +632,12 @@ E\in\mathbb{R}^{\lvert V\rvert\times D}
 \operatorname{emb}(x_{t})=\operatorname{onehot}(x_{t})^{\top}E
 \tag{13.3}\]</span></span></p>
 <p>Transposing the indicator gives a row of shape <span class="math inline">\([1,|V|]\)</span>. Its single one selects a row of <span class="math inline">\(E\)</span>, giving shape <span class="math inline">\([1,D]\)</span>. Removing the singleton row axis gives the same coordinates as the lookup vector of shape <span class="math inline">\([D]\)</span>. Lookup performs this selection without materializing a vocabulary-wide indicator for every position.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Example: Table size and row selection</strong></p>
-<p>With <span class="math inline">\(|V|=50{,}000\)</span> and <span class="math inline">\(D=768\)</span>, the table contains <span class="math inline">\(50{,}000(768)=38.4\)</span> million scalar parameters.</p>
-<p>In a separate table with three-coordinate rows, ID 4 selects row 4 and returns a length-three vector. For a four-entry vocabulary, <span class="math inline">\(\operatorname{onehot}(2)=(0,0,1,0)\)</span> selects row 2 through the same multiplication.</p>
-<p><strong>Conclusion:</strong> Vocabulary size controls the number of stored rows, while embedding width controls the returned vector. The ID selects coordinates without serving as a numerical feature itself.</p>
+<p>A table with <span class="math inline">\(|V|=50{,}000\)</span> and <span class="math inline">\(D=768\)</span> contains <span class="math inline">\(50{,}000(768)=38.4\)</span> million scalar parameters. Vocabulary size controls stored rows, while embedding width controls the vector returned for each ID.</p>
+<div class="publisher-worked-calculation publisher-fold-never" data-custom-style="Worked Calculation">
+<p><strong>Example: One row by lookup or one-hot multiplication</strong></p>
+<p>Use the chosen four-row table <span class="math inline">\(E=[[9,9,9],[1,0,2],[0,3,1],[2,1,0]]\)</span>. ID 2 directly selects <span class="math inline">\(E_{2,:}=(0,3,1)\)</span> using zero-based row numbering.</p>
+<p>The four-entry indicator <span class="math inline">\(\operatorname{onehot}(2)=(0,0,1,0)\)</span> gives the same coordinates through <span class="math inline">\(E^\top\operatorname{onehot}(2)\)</span>.</p>
+<p><strong>Conclusion:</strong> Both operations read the same three parameter values. Lookup avoids constructing the four-entry indicator. In a large vocabulary, the avoided indicator would be much wider. The chosen row values do not claim a learned semantic relationship.</p>
 </div>
 <p>The row values may start randomly. Lookup alone does not give them a semantic interpretation. Training supplies a task-dependent reason to change them, and repeated uses of a row share its parameters.</p>
 </section>
@@ -646,16 +652,25 @@ H_{0}=E[X],\quad H_{0}\in\mathbb{R}^{B\times T\times D}
 <p><span id="eq-m2-c13-e05"><span class="math display">\[
 j\notin\mathcal{I}_{B}\quad\to\quad\frac{\partial L}{\partial E_{j,:}}=0
 \tag{13.5}\]</span></span></p>
-<p>Here <span class="math inline">\(\mathcal I_B\)</span> is the set of IDs selected by the batch. This is a derivative statement, not a guarantee that an optimizer leaves every unused row unchanged. Weight decay, stored momentum, or another use of the same matrix can change such a row.<a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a></p>
+<p>Here <span class="math inline">\(\mathcal I_B\)</span> is the set of IDs selected by the batch. This is a derivative statement, not a guarantee that an optimizer leaves every unused row unchanged. Weight decay, stored momentum, or another use of the same matrix can change such a row. Sections 10.2, 10.4 and 10.5 explain the optimizer state and decay operations.</p>
 <p>In particular, a <span class="definition-term" data-custom-style="Definition Term"><strong>tied weight</strong></span> is one parameter matrix reused for different model operations. If an embedding table also scores output vocabulary entries, that output path can contribute gradients beyond the rows gathered as inputs.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<div class="publisher-worked-calculation publisher-fold-never" data-custom-style="Worked Calculation">
 <p><strong>Example: Repeated IDs share one gradient row</strong></p>
 <p>The IDs <span class="math inline">\((2,5,2)\)</span> produce <span class="math inline">\(H=(E_{2,:},E_{5,:},E_{2,:})\)</span> with shape <span class="math inline">\([3,D]\)</span>. Positions 1 and 3 both depend on row 2, so their derivatives add there. Position 2 contributes to row 5. Unused row 7 receives no direct lookup derivative under the stated loss condition.</p>
 <p>For an illustrative width-two upstream gradient, let the row-2 contributions be <span class="math inline">\((1,2)\)</span> and <span class="math inline">\((-0.5,3)\)</span>. The stored row-2 gradient is <span class="math inline">\((0.5,5)\)</span>.</p>
 <p><strong>Conclusion:</strong> Repeated tokens create additional uses of one parameter row, not additional independent rows. Contributions add even when some coordinates oppose one another.</p>
 </div>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Pooling</strong></span> combines a sequence’s vectors into one fixed-width vector. The code below averages the three positions in each document. <a href="#sec-m2-c13-s03">§13.3</a> develops this mean and its padding correction.</p>
-<p>The runnable <code>PyTorch</code> code below uses <code>nn.Embedding(6, 3)</code>. Its IDs have shape <code>[2,3]</code>, its token vectors <code>[2,3,3]</code>, and its pooled document vectors <code>[2,3]</code>. ID 0 is an ordinary token here. There is no padding in this example.</p>
+<p><code>nn.Embedding</code> gathers selected rows, but its gradient storage is dense by default. Backward creates a gradient array with the table’s full shape, even when the input selects only a few IDs. Sparse gradient storage is a separate option. A <code>padding_idx</code> can suppress the designated row’s direct lookup gradient. It does not make downstream pooling exclude padding.<a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a></p>
+</section>
+<section id="sec-m2-c13-s03" class="level2" data-number="13.3">
+<h2 data-number="13.3" class="anchored" data-anchor-id="sec-m2-c13-s03"><span class="header-section-number">13.3</span> Pooling unequal sequences with a valid-position count</h2>
+<p>The <a href="ch-m2-c12.html#sec-m2-c12-s03">affine classifier head from §12.3</a> expects one fixed-width document vector, even when documents have different token counts. Combining token vectors can provide that width, but added padding must not change the representation of the original text.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Pooling</strong></span> combines a sequence’s vectors into one fixed-width vector. <span class="definition-term" data-custom-style="Definition Term"><strong>Mean pooling</strong></span> uses their average. For <span class="math inline">\(T&gt;0\)</span> unpadded vectors <span class="math inline">\(h_t\in\mathbb R^D\)</span>, it is</p>
+<p><span id="eq-m2-c13-e07"><span class="math display">\[
+s=\frac{1}{T}\sum_{t}h_{t}
+\tag{13.6}\]</span></span></p>
+<p>The first code check uses three valid positions in each document, so no padding correction is needed. It calls <code>nn.Embedding(6, 3)</code>: IDs have shape <code>[2,3]</code>, gathered token vectors <code>[2,3,3]</code>, and pooled document vectors <code>[2,3]</code>. ID 0 is an ordinary token in this example.</p>
+<p>The code averages positions to give <span class="math inline">\(s_0\)</span> and <span class="math inline">\(s_1\)</span>, then averages the squares of their six coordinates as a scalar loss. Thus <span class="math inline">\(\partial L/\partial s_b=s_b/3\)</span>, and each occurrence contributes <span class="math inline">\(s_b/9\)</span> through the positional mean.</p>
 <div class="publisher-code-caption" data-custom-style="Code Caption">
 <p><strong>Code example: Embedding lookup, pooling, and selected-row gradients</strong></p>
 </div>
@@ -672,26 +687,16 @@ j\notin\mathcal{I}_{B}\quad\to\quad\frac{\partial L}{\partial E_{j,:}}=0
 <span id="lst-m2-c13-c01-11"><a href="#lst-m2-c13-c01-11" aria-hidden="true" tabindex="-1"></a></span>
 <span id="lst-m2-c13-c01-12"><a href="#lst-m2-c13-c01-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(token_vectors.shape, document_vectors.shape)</span>
 <span id="lst-m2-c13-c01-13"><a href="#lst-m2-c13-c01-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(embedding.weight.grad.<span class="bu">abs</span>().<span class="bu">sum</span>(dim<span class="op">=</span><span class="dv">1</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>The mean across three positions gives document vectors <span class="math inline">\(s_0\)</span> and <span class="math inline">\(s_1\)</span>. The loss then averages the squares of their six coordinates. Therefore <span class="math inline">\(\partial L/\partial s_b=s_b/3\)</span>, and each occurrence contributes <span class="math inline">\(s_b/9\)</span> through the positional mean.</p>
 <p>Row 1 occurs twice in document 0 and receives <span class="math inline">\(2s_0/9\)</span>. Row 2 occurs in both documents and receives <span class="math inline">\((s_0+s_1)/9\)</span>. Rows 0 and 3 each receive <span class="math inline">\(s_1/9\)</span>. Rows 4 and 5 have zero direct lookup gradient. A selected row’s gradient can still vanish through its values or cancellation.</p>
-<p>The code prints shapes and one absolute-gradient sum per vocabulary row. Random initial rows make those sums variable. The check demonstrates lookup, both mean factors, and gradient accumulation, not a learned document representation.</p>
-<p><code>nn.Embedding</code> gathers rows without a dense vocabulary projection. Its gradient storage is dense by default, with sparse storage available as a separate option. Lookup reads selected rows. The amount of row data read is one cost to measure. Throughput depends on row width, reuse, hardware, and the surrounding computation. A <code>padding_idx</code> can suppress the designated row’s direct lookup gradient. It does not turn every later use or optimizer operation into a padding-aware operation.</p>
-</section>
-<section id="sec-m2-c13-s03" class="level2" data-number="13.3">
-<h2 data-number="13.3" class="anchored" data-anchor-id="sec-m2-c13-s03"><span class="header-section-number">13.3</span> Pooling unequal sequences with a valid-position count</h2>
-<p>The <a href="ch-m2-c12.html#sec-m2-c12-s03">affine classifier head from §12.3</a> expects one fixed-width document vector, even when documents have different token counts. Combining token vectors can provide that width, but added padding must not change the representation of the original text.</p>
-<p><span class="definition-term" data-custom-style="Definition Term"><strong>Mean pooling</strong></span> averages the vectors across retained positions. For <span class="math inline">\(T&gt;0\)</span> unpadded vectors <span class="math inline">\(h_t\in\mathbb R^D\)</span>, it is</p>
-<p><span id="eq-m2-c13-e07"><span class="math display">\[
-s=\frac{1}{T}\sum_{t}h_{t}
-\tag{13.6}\]</span></span></p>
-<p>In a padded batch, let <span class="math inline">\(m_{b,t}\)</span> be 1 for a valid position and 0 for padding. <span class="definition-term" data-custom-style="Definition Term"><strong>Masked pooling</strong></span> excludes padding from both the vector sum and its denominator:</p>
+<p><strong>Conclusion:</strong> Repeated occurrences contribute to the same gradient row. The two means determine the factors <span class="math inline">\(1/3\)</span> and <span class="math inline">\(1/9\)</span>, while the random table values determine the printed gradient magnitudes.</p>
+<p>Padding adds positions that must not enter either part of the mean. Let <span class="math inline">\(m_{b,t}\)</span> be 1 for a valid position and 0 for padding. <span class="definition-term" data-custom-style="Definition Term"><strong>Masked pooling</strong></span> excludes padding from both the vector sum and its denominator:</p>
 <p><span id="eq-m2-c13-e12"><span class="math display">\[
 \begin{aligned}N_b&amp;=\sum_{t=1}^{T}m_{b,t}&gt;0,\\s_b&amp;=\frac{\sum_{t=1}^{T}m_{b,t}h_{b,t}}{N_b}.\end{aligned}
 \tag{13.7}\]</span></span></p>
 <p>The valid count <span class="math inline">\(N_b\)</span> is calculated separately for each document. Multiplication by <span class="math inline">\(m_{b,t}\)</span> excludes an invalid vector, including a nonzero padding vector. Division by <span class="math inline">\(N_b\)</span> averages the retained positions rather than the stored width. A row with <span class="math inline">\(N_b=0\)</span> has no defined mean. The example policy is to reject it before division.</p>
 <p>The validity information comes from <a href="ch-m2-c02.html#sec-m2-c02-s02">§2.2</a>. Its consumer here is pooling. A loss mask determines which targets contribute to loss, while an attention mask controls which positions may be read. Those operations are not interchangeable.</p>
-<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
-<p><strong>Example: Padding must not change the mean</strong></p>
+<div class="publisher-worked-calculation publisher-fold-never" data-custom-style="Worked Calculation">
+<p><strong>Example: Added padding and the mean</strong></p>
 <p>The scalar token values 2, 4, and 6 have mean <span class="math inline">\((2+4+6)/3=4\)</span>. Appending a zero gives unmasked mean <span class="math inline">\(12/4=3\)</span>. Zero padding alone therefore fails to preserve the result.</p>
 <p>With mask <span class="math inline">\((1,1,1,0)\)</span>, the numerator is still 12 and the valid count is 3, giving 4. Even padding value 9 gives the same masked result because its multiplier is zero.</p>
 <p><strong>Conclusion:</strong> Masking the numerator is insufficient if the denominator still counts padding. Both must refer to the same retained positions.</p>
@@ -710,14 +715,14 @@ s=\frac{1}{T}\sum_{t}h_{t}
 <h2 data-number="13.4" class="anchored" data-anchor-id="sec-m2-c13-s04"><span class="header-section-number">13.4</span> A padded ID batch through lookup, pooling, and gradients</h2>
 <p>Two documents can share stored width while contributing different numbers of vectors to their means. The following chosen table values make every contribution visible before any optimizer update.</p>
 <p>Use a six-row table of width three, with <span class="math inline">\(E_0=(9,9,9)\)</span>, <span class="math inline">\(E_1=(1,0,2)\)</span>, <span class="math inline">\(E_2=(0,3,1)\)</span>, and <span class="math inline">\(E_3=(2,1,0)\)</span>. Rows 4 and 5 are unused and may be zero in this illustration.</p>
-<p>The ID rows are <span class="math inline">\((1,2,1)\)</span> and <span class="math inline">\((3,2,0)\)</span>. Their validity masks are <span class="math inline">\((1,1,1)\)</span> and <span class="math inline">\((1,1,0)\)</span>. Here ID 0 occupies a masked padding position, unlike the ordinary token in §13.2’s separate code example.</p>
+<p>The ID rows are <span class="math inline">\((1,2,1)\)</span> and <span class="math inline">\((3,2,0)\)</span>. Their validity masks are <span class="math inline">\((1,1,1)\)</span> and <span class="math inline">\((1,1,0)\)</span>. Here ID 0 occupies a masked padding position, unlike the ordinary token in §13.3’s unpadded code example.</p>
 <p>Use <a href="#sec-m2-c13-s02">§13.2’s</a> gather on the embedding table with the <span class="math inline">\([2,3]\)</span> array of integer IDs. The gathered vectors have shape <span class="math inline">\([2,3,3]\)</span>. Row 0 is read but excluded by its position mask.</p>
 <p>The first document sums <span class="math inline">\(E_1+E_2+E_1=(2,3,5)\)</span> and divides by 3, giving <span class="math inline">\(s_0=(2/3,1,5/3)\)</span>. The second sums <span class="math inline">\(E_3+E_2=(2,4,1)\)</span> and divides by 2, giving <span class="math inline">\(s_1=(1,2,1/2)\)</span>.</p>
 <p>For an unpadded document, <a href="#sec-m2-c13-s03">§13.3’s</a> mean divides the vector sum by its token count. For the second padded row, the valid-position denominator is two. An unmasked mean would instead include <span class="math inline">\((9,9,9)\)</span> and divide by three.</p>
 <p>To inspect backward, choose the mean squared document-coordinate loss <span class="math inline">\(L=(\|s_0\|^2+\|s_1\|^2)/6\)</span>. It gives <span class="math inline">\(\partial L/\partial s_b=s_b/3\)</span>. A valid occurrence in document 0 contributes <span class="math inline">\(s_0/9\)</span>. One in document 1 contributes <span class="math inline">\(s_1/6\)</span>.</p>
 <p>Thus row 1 receives <span class="math inline">\(2s_0/9\)</span>, row 2 receives <span class="math inline">\(s_0/9+s_1/6\)</span>, and row 3 receives <span class="math inline">\(s_1/6\)</span>. Row 0 receives zero from the masked position. Rows 4 and 5 receive no contribution. The resulting loss is <span class="math inline">\(341/216\approx1.578704\)</span>.</p>
 <p><strong>Conclusion:</strong> Lookup preserves shared row identity, while the mask controls each position’s participation. Different valid counts create different gradient factors within the same rectangular batch. No classifier or optimizer is needed to establish those facts.</p>
-<p>The numeric example uses squared loss only to check the lookup, masked mean, and gradient arithmetic. The cluster sketch shows a possible qualitative arrangement. Learning semantic neighborhoods would require a context-based objective and evidence beyond this picture.</p>
+<p>This squared-loss example checks lookup, masked means and their gradients. Learning semantic relationships requires a context-based objective and evaluation on that task.</p>
 <div id="fig-m2-c13-f02" class="quarto-float quarto-figure quarto-figure-center anchored" alt="Schematic clusters of labeled points without a fitted model, numerical coordinates, metric, or projection settings.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-m2-c13-f02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -728,7 +733,7 @@ Figure&nbsp;13.2: The point clusters are a conceptual illustration of vector rel
 </figcaption>
 </figure>
 </div>
-<p>The table and aggregation now have a complete numerical contract. <a href="ch-m2-c14.html">Chapter 14</a> asks which objective gives token vectors useful relationships through observed text context.</p>
+<p><a href="ch-m2-c14.html">Chapter 14</a> asks which objective gives token vectors useful relationships through observed text context.</p>
 <div class="publisher-clarification-note" data-custom-style="Clarification Note">
 <p><strong>Chapter checkpoint</strong></p>
 <p>Does zero-valued padding make an unmasked mean correct? Can a table row change when its current direct lookup gradient is zero?</p>
@@ -745,6 +750,160 @@ Figure&nbsp;13.2: The point clusters are a conceptual illustration of vector rel
 </section>
 
 </main> <!-- /main -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const automaticLongContentFolding = true;
+  const referenceSections = document.querySelectorAll(
+    'main.content section.footnotes[role="doc-endnotes"]'
+  );
+
+  referenceSections.forEach((section) => {
+    if (section.closest("details.publisher-chapter-references")) return;
+
+    const details = document.createElement("details");
+    details.className = "publisher-chapter-references";
+    const summary = document.createElement("summary");
+    const count = section.querySelectorAll("ol > li").length;
+    summary.textContent = count ? `References (${count})` : "References";
+
+    section.parentNode.insertBefore(details, section);
+    details.append(summary, section);
+  });
+
+  const openFoldTarget = (target) => {
+    const details = target?.closest(
+      "details.publisher-chapter-references, details.publisher-long-content"
+    );
+    if (details) details.open = true;
+  };
+
+  const targetFromHash = (hash) => {
+    if (!hash || hash === "#") return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('a[href*="#"]');
+    if (!link) return;
+    let destination;
+    try {
+      destination = new URL(link.getAttribute("href") || "", location.href);
+    } catch (_error) {
+      return;
+    }
+    if (destination.href.split("#")[0] !== location.href.split("#")[0]) return;
+    openFoldTarget(targetFromHash(destination.hash));
+  });
+
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
+    if (control?.classList.contains("publisher-fold-never")) return "never";
+    if (control?.classList.contains("publisher-fold-always")) return "always";
+    if (control?.classList.contains("publisher-fold-open")) return "open";
+    const requested = control?.dataset.publisherFold || "auto";
+    return ["auto", "never", "always", "open"].includes(requested)
+      ? requested
+      : "auto";
+  };
+
+  const foldCandidate = (candidate, kind) => {
+    if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
+
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
+    if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
+    const minimumFoldHeight = 320;
+    const foldHeight = Math.max(
+      minimumFoldHeight,
+      Math.round(document.documentElement.clientHeight * 0.5)
+    );
+    if (mode === "auto" && candidate.getBoundingClientRect().height <= foldHeight) return;
+
+    const titleSource = kind === "table"
+      ? candidate.querySelector("figcaption, caption")
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
+    const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
+
+    const details = document.createElement("details");
+    details.className = `publisher-long-content publisher-long-${kind}`;
+    if (mode === "open") details.open = true;
+    const summary = document.createElement("summary");
+    if (titleSource && label) {
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
+    } else {
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
+    }
+    const body = document.createElement("div");
+    body.className = "publisher-fold-body";
+    if (titleSource) titleSource.classList.add("publisher-fold-title-source");
+
+    candidate.parentNode.insertBefore(details, candidate);
+    details.append(summary, body);
+    body.append(candidate);
+  };
+
+  const foldLongContent = () => {
+    if (!automaticLongContentFolding) return;
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
+    document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
+      const float = figure.parentElement?.classList.contains("quarto-float")
+        ? figure.parentElement
+        : figure;
+      foldCandidate(float, "table");
+    });
+    document.querySelectorAll("main.content table").forEach((table) => {
+      if (!table.closest("figure.quarto-float-tbl")) foldCandidate(table, "table");
+    });
+    openFoldTarget(targetFromHash(location.hash));
+  };
+
+  if (document.readyState === "complete") {
+    requestAnimationFrame(foldLongContent);
+  } else {
+    window.addEventListener("load", () => requestAnimationFrame(foldLongContent), {
+      once: true,
+    });
+  }
+
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
+  document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
+  const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
+  window.addEventListener("hashchange", openLocationTarget);
+  openLocationTarget();
+});
+</script>
 <script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {
     const icon = "";
