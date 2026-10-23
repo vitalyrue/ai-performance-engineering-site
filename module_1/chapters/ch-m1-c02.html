@@ -450,9 +450,9 @@ details.publisher-table-fold > figure > figcaption { display: none; }
 <section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
   <dl>
     <dt>Publisher version</dt>
-    <dd>0.8.18</dd>
+    <dd>0.8.23</dd>
     <dt>Released</dt>
-    <dd><time datetime="2026-10-22">2026-10-22</time></dd>
+    <dd><time datetime="2026-10-23">2026-10-23</time></dd>
   </dl>
 </section>
 </nav>
@@ -697,10 +697,11 @@ document.addEventListener("DOMContentLoaded", () => {
     openFoldTarget(targetFromHash(destination.hash));
   });
 
-  const foldMode = (candidate) => {
-    const control = candidate.closest(
-      '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open'
-    );
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
     if (control?.classList.contains("publisher-fold-never")) return "never";
     if (control?.classList.contains("publisher-fold-always")) return "always";
     if (control?.classList.contains("publisher-fold-open")) return "open";
@@ -713,8 +714,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const foldCandidate = (candidate, kind) => {
     if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
 
-    const mode = foldMode(candidate);
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
     if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
     const minimumFoldHeight = 320;
     const foldHeight = Math.max(
       minimumFoldHeight,
@@ -724,7 +726,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const titleSource = kind === "table"
       ? candidate.querySelector("figcaption, caption")
-      : candidate.querySelector(":scope > p:first-child");
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
     const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
 
     const details = document.createElement("details");
@@ -732,9 +736,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (mode === "open") details.open = true;
     const summary = document.createElement("summary");
     if (titleSource && label) {
-      titleSource.childNodes.forEach((node) => summary.append(node.cloneNode(true)));
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
     } else {
-      summary.textContent = kind === "table" ? "Table" : "Example";
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
     }
     const body = document.createElement("div");
     body.className = "publisher-fold-body";
@@ -747,9 +756,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const foldLongContent = () => {
     if (!automaticLongContentFolding) return;
-    document.querySelectorAll("main.content .publisher-worked-calculation").forEach(
-      (candidate) => foldCandidate(candidate, "example")
-    );
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
     document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
       const float = figure.parentElement?.classList.contains("quarto-float")
         ? figure.parentElement
@@ -770,6 +783,19 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
   document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
   const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
   window.addEventListener("hashchange", openLocationTarget);
