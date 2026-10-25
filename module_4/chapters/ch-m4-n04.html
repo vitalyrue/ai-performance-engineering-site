@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"><head>
+<meta charset="utf-8"/>
+<meta content="quarto-1.10.18" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>4  CUDA execution and data movement – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta content="../" name="quarto:offset"/>
+<link href="../chapters/ch-m4-n05.html" rel="next"/>
+<link href="../parts/part-ii.html" rel="prev"/>
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet"/>
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" id="quarto-text-highlighting-styles" rel="stylesheet"/>
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet"/>
+<link append-hash="true" data-mode="light" href="../site_libs/bootstrap/bootstrap-741cab1455972e99f328c2af765061c1.min.css" id="quarto-bootstrap" rel="stylesheet"/>
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+<link href="../styles.css" rel="stylesheet"/>
+<link data-reading-layout="true" href="../reading-layout/reading.css" rel="stylesheet"/><link data-m4-fold-ui="style" href="../html-folds/folds.css" rel="stylesheet"/><link data-map-style="" href="../map-viewer/viewer.css" rel="stylesheet"/><script data-map-script="" defer="" src="../map-viewer/viewer.js"></script>  <style id="book-image-preview-style">
+    img[data-book-image-preview] {
+      cursor: zoom-in;
+    }
+    img[data-book-image-preview]:focus {
+      outline: 3px solid rgba(15, 107, 120, 0.36);
+      outline-offset: 4px;
+    }
+    body.book-image-preview-open {
+      overflow: hidden;
+    }
+    .book-image-preview-overlay[hidden] {
+      display: none !important;
+    }
+    .book-image-preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .book-image-preview-backdrop {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      background: rgba(18, 28, 40, 0.76);
+      cursor: zoom-out;
+    }
+    .book-image-preview-dialog {
+      position: relative;
+      width: min(94vw, 1100px);
+      max-height: 94vh;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.36);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 24px 70px rgba(18, 28, 40, 0.34);
+    }
+    .book-image-preview-close {
+      display: block;
+      margin: 0 0 12px auto;
+      padding: 7px 12px;
+      border: 1px solid #d7e2e8;
+      border-radius: 6px;
+      background: #f5f8fa;
+      color: #1f2f44;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .book-image-preview-image {
+      display: block;
+      width: 100%;
+      max-height: calc(94vh - 74px);
+      object-fit: contain;
+      border-radius: 6px;
+      background: #eef6f7;
+    }
+  </style>
+  <style id="book-release-metadata-style">
+    .book-release-meta {
+      margin: 0.55rem 0 0.8rem;
+      color: #536273;
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+    .book-release-meta dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.12rem 0.5rem;
+      margin: 0;
+    }
+    .book-release-meta dt {
+      color: #24384d;
+      font-weight: 650;
+    }
+    .book-release-meta dd {
+      margin: 0;
+    }
+    .book-release-home {
+      display: inline-block;
+      color: #0f6b78;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .book-release-home:hover,
+    .book-release-home:focus {
+      text-decoration: underline;
+    }
+    .book-release-home-wrap {
+      margin: 0.55rem 0 0.8rem;
+    }
+    .book-release-meta-sidebar {
+      margin-top: 0.8rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid #d7e2e8;
+    }
+    .book-release-meta-front {
+      padding: 0.7rem 0.85rem;
+      border-left: 3px solid #0f6b78;
+      background: #eef6f7;
+      max-width: 34rem;
+    }
+  </style>
+</head>
+<body class="nav-sidebar floating quarto-light">
+<div id="quarto-search-results"></div>
+<header class="headroom fixed-top" id="quarto-header">
+<nav class="quarto-secondary-nav">
+<div class="container-fluid d-flex">
+<button aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="quarto-btn-toggle btn" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="button" type="button">
+<i class="bi bi-layout-text-sidebar-reverse"></i>
+</button>
+<nav aria-label="breadcrumb" class="quarto-page-breadcrumbs"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: GPU execution, measurement, and optimization</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n04.html"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></a></li></ol></nav>
+<a aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="flex-grow-1" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="navigation">
+</a>
+<button aria-label="Search" class="btn quarto-search-button" onclick="window.quartoOpenSearch();" type="button">
+<i class="bi bi-search"></i>
+</button>
+</div>
+</nav>
+</header>
+<!-- content -->
+<div class="quarto-container page-columns page-rows-contents page-layout-article" id="quarto-content">
+<!-- sidebar -->
+<nav class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto" id="quarto-sidebar">
+<div class="pt-lg-2 mt-2 text-left sidebar-header">
+<div class="sidebar-title mb-0 py-0">
+<a href="../">Advanced LLM Performance Engineering</a>
+</div>
+</div>
+<div class="mt-2 flex-shrink-0 align-items-center">
+<div class="sidebar-search">
+<div class="" id="quarto-search" title="Search"></div>
+</div>
+</div>
+<div class="book-release-home-wrap" data-book-release-location="sidebar-home">
+  <a class="book-release-home" href="../../">&larr; AI Systems Engineering</a>
+</div>
+    <div class="sidebar-menu-container">
+<ul class="list-unstyled mt-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../index.html">
+<span class="menu-text">Advanced LLM Performance Engineering</span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../frontmatter/ch-m4-index.html">
+<span class="menu-text">Introduction and Learning Path</span></a>
+</div>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-i.html">
+<span class="menu-text">Part I: Models, workload state, and GPU hardware</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-1" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n01.html">
+<span class="menu-text"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n02.html">
+<span class="menu-text"><span class="chapter-number">2</span>  <span class="chapter-title">Workload phases and live memory</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n03.html">
+<span class="menu-text"><span class="chapter-number">3</span>  <span class="chapter-title">GPU hardware and memory</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-ii.html">
+<span class="menu-text">Part II: GPU execution, measurement, and optimization</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-2" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-2">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link active" href="../chapters/ch-m4-n04.html">
+<span class="menu-text"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n05.html">
+<span class="menu-text"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n06.html">
+<span class="menu-text"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n07.html">
+<span class="menu-text"><span class="chapter-number">7</span>  <span class="chapter-title">Measurement, profiling and fair comparisons</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n08.html">
+<span class="menu-text"><span class="chapter-number">8</span>  <span class="chapter-title">Compilation and runtime</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iii.html">
+<span class="menu-text">Part III: Training and single-worker inference</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-3" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-3">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n10.html">
+<span class="menu-text"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n11.html">
+<span class="menu-text"><span class="chapter-number">10</span>  <span class="chapter-title">Inference phases and memory budgets</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n12.html">
+<span class="menu-text"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n13.html">
+<span class="menu-text"><span class="chapter-number">12</span>  <span class="chapter-title">Decode and KV-cache layout</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iv.html">
+<span class="menu-text">Part IV: Serving systems</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-4" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-4">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n14.html">
+<span class="menu-text"><span class="chapter-number">13</span>  <span class="chapter-title">Request scheduling and prefix reuse</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n15.html">
+<span class="menu-text"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n16.html">
+<span class="menu-text"><span class="chapter-number">15</span>  <span class="chapter-title">Serving measurement and stack selection</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-v.html">
+<span class="menu-text">Part V: Distributed execution</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-5" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-5">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n17.html">
+<span class="menu-text"><span class="chapter-number">16</span>  <span class="chapter-title">Collective data movement and its cost</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n18.html">
+<span class="menu-text"><span class="chapter-number">17</span>  <span class="chapter-title">Launching and measuring distributed work</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n19.html">
+<span class="menu-text"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n20.html">
+<span class="menu-text"><span class="chapter-number">19</span>  <span class="chapter-title">Tensor and sequence parallelism</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n21.html">
+<span class="menu-text"><span class="chapter-number">20</span>  <span class="chapter-title">Pipeline, expert and combined layouts</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n22.html">
+<span class="menu-text"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a aria-expanded="true" class="sidebar-item-text sidebar-link text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<span class="menu-text">Appendices</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-6">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/references.html">
+<span class="menu-text"><span class="chapter-number">A</span>  <span class="chapter-title">References</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/optional-labs.html">
+<span class="menu-text"><span class="chapter-number">B</span>  <span class="chapter-title">Optional Labs</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
+  <dl>
+    <dt>Publisher version</dt>
+    <dd>0.8.23</dd>
+    <dt>Released</dt>
+    <dd><time datetime="2026-10-25">2026-10-25</time></dd>
+  </dl>
+</section>
+</nav>
+<div class="quarto-sidebar-collapse-item" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" id="quarto-sidebar-glass"></div>
+<!-- margin-sidebar -->
+<div class="sidebar margin-sidebar" id="quarto-margin-sidebar">
+<nav class="toc-active" id="TOC" role="doc-toc">
+<h2 id="toc-title">Table of contents</h2>
+<ul>
+<li><a class="nav-link active" data-scroll-target="#sec-m4-c03-s01" href="#sec-m4-c03-s01" id="toc-sec-m4-c03-s01"><span class="header-section-number">4.1</span> CUDA runtime and vendor libraries</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c03-s04" href="#sec-m4-c03-s04" id="toc-sec-m4-c03-s04"><span class="header-section-number">4.2</span> CUDA execution hierarchy</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c03-s05" href="#sec-m4-c03-s05" id="toc-sec-m4-c03-s05"><span class="header-section-number">4.3</span> CUDA memory allocation and movement</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c03-s08" href="#sec-m4-c03-s08" id="toc-sec-m4-c03-s08"><span class="header-section-number">4.4</span> Asynchronous execution and synchronization</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c03-s09" href="#sec-m4-c03-s09" id="toc-sec-m4-c03-s09"><span class="header-section-number">4.5</span> Thread mapping and grid-stride launch</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c03-s10" href="#sec-m4-c03-s10" id="toc-sec-m4-c03-s10"><span class="header-section-number">4.6</span> Memory coalescing and cache controls</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c03-s11" href="#sec-m4-c03-s11" id="toc-sec-m4-c03-s11"><span class="header-section-number">4.7</span> Matrix operations in vendor libraries</a></li>
+</ul>
+</nav>
+</div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+<header class="quarto-title-block default" id="title-block-header"><nav aria-label="breadcrumb" class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: GPU execution, measurement, and optimization</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n04.html"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span class="quarto-section-identifier" id="sec-ch-m4-n04"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></span></h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+</header>
+<p>Compute Unified Device Architecture (CUDA) is the programming model and platform beneath most NVIDIA GPU deep learning work. A Python program may call <code>PyTorch</code>, which selects a vendor, generated, or framework kernel and submits it through CUDA runtime or driver APIs. The GPU executes submitted work over grids, blocks, threads, and warps. <a href="#sec-m4-c03-s04">Section 4.2</a> develops that hierarchy, and <a href="#sec-m4-c03-s05">Section 4.3</a> follows the memory and copies used by the work.</p>
+<div alt="Framework dispatch reaches libraries or generated kernels and CUDA submission queues. Separate pageable and pinned inputs feed DMA; completed results are read after waits. Producer and consumer streams use an event dependency. Logical thread and address examples show grid stride, sectors, bank conflicts, broadcasts and matrix-weight reuse." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-n04-map">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-n04-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a aria-describedby="fig-m4-n04-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca" aria-label="Enlarge map" class="m4-map-link" data-map-viewer="" href="../assets/fig-m4-n04-map.png" rel="noopener" target="_blank"><img alt="Framework dispatch reaches libraries or generated kernels and CUDA submission queues. Separate pageable and pinned inputs feed DMA; completed results are read after waits. Producer and consumer streams use an event dependency. Logical thread and address examples show grid stride, sectors, bank conflicts, broadcasts and matrix-weight reuse." class="img-fluid figure-img" src="../assets/fig-m4-n04-map.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" /></a>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-n04-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 4.1: CUDA dispatch and execution scopes connect to storage lifetimes, event ordering and logical thread addressing. Coalescing and shared-memory banks depend on actual address sets.
+</figcaption>
+</figure>
+</div>
+<p>One PyTorch statement such as <code>logits = model(input_ids)</code> can submit many kernels during a forward pass. Their number and size depend on the model, input shapes, and backend. A one-token decode step can also consist of many small operations. <a href="ch-m4-n08.html">Chapter 8</a> later explains how supported compilation, fusion, and CUDA Graph replay change the work or its submission once ordinary launches and stream ordering are clear.</p>
+<p>The layer map below identifies which software chooses the operation, which layer submits it, and which device resources execute it. One layer can change the work seen by another, so these roles are not exclusive.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">Model and application calls enter PyTorch, which manages tensor metadata, device placement, and dispatch. A compiler or library supplies kernels, and the CUDA runtime submits launches and copies for GPU execution. Serving software schedules requests and manages KV state. Distributed software coordinates communication among ranks. A change at one layer can alter work measured at later layers.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-21"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Performance control layers from model calls to hardware</span><ul>
+<li><strong>Model and application layer:</strong> Defines model calls, input preparation, generation behavior, and the performance question being measured.</li>
+<li><strong>PyTorch framework layer:</strong> Stores tensor metadata and provides autograd, device placement, dispatch, the caching allocator, and framework-level measurement interfaces.</li>
+<li><strong>Compiler and kernel layer:</strong> Turns operations into vendor, generated, Triton, or CUDA kernels and controls the layout, tiling, fusion, and load/store behavior of hot GPU work.</li>
+<li><strong>CUDA runtime and library layer:</strong> Provides device contexts, streams, events, copies, launch ordering, and access to vendor libraries such as cuBLAS or cuDNN.</li>
+<li><strong>Serving and distributed layer:</strong> Schedules request admission and KV-cache use, and coordinates process groups, collective requests, and rank placement around one model execution path.</li>
+</ul></div>
+<p>The word “local” can describe where state is stored or which process owns it. HBM, for example, is GPU-attached device memory: close to the GPU but not on-chip storage. The remaining chapters use four scopes:</p>
+<ul>
+<li><strong>On-chip:</strong> Registers and shared memory inside one SM, plus the device-wide L2 cache on the GPU die.</li>
+<li><strong>Same-GPU:</strong> L2 cache and HBM, visible to every SM on the device. L2 is also on-chip, while HBM is off-chip.</li>
+<li><strong>Same-server:</strong> GPUs and host memory joined by intra-node links such as PCIe or NVLink.</li>
+<li><strong>Process- or rank-local:</strong> Software ownership: which process or distributed rank holds and manages the object.</li>
+</ul>
+<p>A framework dispatches a vendor-library operation or a custom kernel. The library or launcher uses CUDA runtime or driver APIs to submit the resulting GPU work to a stream queue.</p>
+<div alt="Framework dispatch branches to vendor, generated or custom kernels. Direct launch or copy calls provide another submission path. The selected work passes through CUDA runtime or driver submission, an ordered stream queue and GPU execution. A separate hierarchy places blocks within a grid, warps within each block and logical lanes within each warp. A block executes on one SM." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-c03-f01">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c03-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img alt="Framework dispatch branches to vendor, generated or custom kernels. Direct launch or copy calls provide another submission path. The selected work passes through CUDA runtime or driver submission, an ordered stream queue and GPU execution. A separate hierarchy places blocks within a grid, warps within each block and logical lanes within each warp. A block executes on one SM." class="img-fluid figure-img" src="../assets/fig-m4-c03-f01.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" />
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c03-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 4.2: Framework dispatch selects vendor, generated or custom work before CUDA runtime or driver submission. A launch creates a logical grid of blocks. A block executes on one SM. Its threads form warps. A logical thread is not a dedicated CUDA core.
+</figcaption>
+</figure>
+</div>
+<p>The dispatch path separates host selection and CUDA submission from GPU execution. The hierarchy distinguishes logical grids, blocks, warps and threads from the SM that executes a block. The <a href="#fig-m4-c03-copy-order">copy and stream paths</a> show transfer completion and an explicit producer-to-consumer dependency. The <a href="#fig-m4-c03-address-set">address example</a> connects one warp’s requested addresses to sectors.</p>
+<p>The <a href="ch-m4-n02.html#sec-m4-c01-s03">short lever key</a> applies here: fewer or cheaper launches cut fixed overhead; coalesced access moves fewer bytes for the same useful data; streams can keep hardware busy when independent work and available resources permit overlap.</p>
+<section class="level2" data-number="4.1" id="sec-m4-c03-s01">
+<h2 class="anchored" data-anchor-id="sec-m4-c03-s01" data-number="4.1"><span class="header-section-number">4.1</span> CUDA runtime and vendor libraries</h2>
+<p>The CUDA software layer provides APIs between framework code and NVIDIA GPU execution. Every kernel launch, explicit copy, stream dependency, event, and vendor-library call passes through the runtime or driver path.</p>
+<p><strong>Runtime and device context:</strong> The runtime submits host API requests, the driver loads and launches executable GPU code, and the device context holds process-visible execution state. Their versions and context state determine whether compiled kernels and libraries can execute on the selected GPU.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">CUDA runtime:</strong></span> The host API for selecting devices, allocating memory, launching kernels, creating streams and events, copying memory, and synchronizing work.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">CUDA driver:</strong></span> The lower-level interface that loads executable GPU code, manages device interaction, and links runtime requests to GPU execution through the installed operating-system GPU driver.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Device context:</strong></span> The process-visible execution state for a GPU, including loaded modules, allocations, streams, and runtime resources.</li>
+<li><strong class="m4-term-label">Framework interface:</strong> PyTorch exposes device placement, streams, events, synchronization, allocator statistics, and <span class="definition-term" data-custom-style="Definition Term"><strong>CUDA Graph</strong></span> entry points through <code>torch.cuda</code>. A CUDA Graph records GPU work for later replay. The framework still defines tensor behavior and dispatch policy.</li>
+</ul>
+<p>CUDA Graphs also use this submission layer, but <a href="ch-m4-n08.html">Chapter 8</a> gives their full warmup, capture, replay, and graph-break sequence after ordinary launches are defined.</p>
+<p><strong>Vendor kernel libraries:</strong> Vendor libraries supply prebuilt optimized kernels behind stable APIs. The application or framework launches these operations over GPU tensors instead of editing the underlying kernel source.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label"><code>cuBLAS</code></strong></span> and <span class="definition-term" data-custom-style="Definition Term"><strong><code>cuBLASLt</code></strong></span>: NVIDIA matrix and linear-algebra libraries. Transformer projections commonly reach their tensor-core GEMM implementations when dimensions, dtype, layout, and alignment are supported.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label"><code>cuDNN</code></strong></span>: NVIDIA neural-network operator library, especially important for convolution-oriented workloads and other supported primitives.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Vendor library kernel:</strong></span> A compiled GPU implementation selected through a library API. It provides the baseline that a custom CUDA or Triton kernel should beat on the measured workload.</li>
+<li><strong class="m4-term-label">Communication library:</strong> NVIDIA Collective Communications Library (NCCL) is also a vendor library, but its collectives require processes, ranks, process groups, and physical fabrics. <a href="ch-m4-n17.html">Chapter 16</a> and <a href="ch-m4-n18.html">Chapter 17</a> develop that communication stack.</li>
+</ul>
+<p>Vendor libraries are the default when a supported operation already has a tuned kernel. Custom code is justified only after that baseline is measured on the real shapes and data type. The next question is how CUDA divides any selected kernel into grids, blocks, warps, and threads when it executes.</p>
+</section>
+<section class="level2" data-number="4.2" id="sec-m4-c03-s04">
+<h2 class="anchored" data-anchor-id="sec-m4-c03-s04" data-number="4.2"><span class="header-section-number">4.2</span> CUDA execution hierarchy</h2>
+<p>CUDA execution objects appear in the order a program encounters them. The host is the CPU-side program. The device is the GPU. A kernel is launched from the host onto the device, and the launch creates a grid of blocks, each containing threads grouped for scheduling into warps.</p>
+<p>The hierarchy is logical, not a permanent one-to-one wiring to physical units. One kernel launch creates a grid. The grid contains blocks. An available Streaming Multiprocessor (SM) admits a block when resources permit. Warp schedulers issue active lanes from the block’s warps. A thread is one logical lane rather than a CUDA core reserved for that thread.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Host:</strong></span> The CPU-side program that allocates tensors, launches kernels, schedules framework work, and may synchronize with the GPU. Python code normally runs on the host even when tensors live on the device.</li>
+<li><strong class="m4-term-label">Device:</strong> The GPU selected for execution. A process may see multiple devices, but each device has its own SMs, HBM, streams, and allocator state.</li>
+<li><strong class="m4-term-label">Kernel:</strong> The GPU function introduced in <a href="ch-m4-n01.html#sec-m4-c01-s01">Section 1.2</a> and grouped into blocks and warps in <a href="ch-m4-n03.html#sec-m4-c02-s02">Section 3.1</a>. A <code>PyTorch</code> operation can launch one kernel, many kernels, or a fused/generated kernel depending on the backend path.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Grid:</strong></span> The complete set of blocks created by one kernel launch. Grid dimensions describe how much independent block-level work is exposed.</li>
+<li><strong class="m4-term-label">Block / CTA:</strong> The cooperating thread group introduced in <a href="ch-m4-n03.html#sec-m4-c02-s02">Section 3.1</a>. On NVIDIA GPUs, a block is assigned to one SM for execution. A single block does not span multiple SMs.</li>
+<li><strong class="m4-term-label">Thread:</strong> The logical scalar worker that has registers and computes one or more data elements according to the kernel’s index mapping.</li>
+<li><strong class="m4-term-label">Warp:</strong> The 32-thread scheduling group introduced in <a href="ch-m4-n03.html#sec-m4-c02-s02">Section 3.1</a>. Warps explain why adjacent lane access, branch divergence, and coalescing matter.</li>
+</ul>
+<p>These objects describe where CUDA work is placed. The next terms describe how efficiently resident warps use execution lanes and hide long-latency operations.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Warp divergence:</strong></span> A warp diverges when lanes in the same warp must follow different control-flow paths. The hardware serializes the paths under masks, so useful lane utilization drops even though the kernel is logically correct.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Predication:</strong></span> A compiler or hardware technique that can execute short conditional work under lane masks instead of taking a full branch. It can reduce branch overhead, but both paths may still consume instructions.</li>
+<li><strong class="m4-term-label">Occupancy:</strong> As defined in <a href="ch-m4-n03.html#sec-m4-c02-s02">Section 3.1</a>, the ratio of active resident warps on an SM to the maximum possible resident warps. It is useful because other warps can run while one warp waits on memory, but high occupancy is not the same as high throughput.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Latency hiding:</strong></span> The SM scheduler keeps execution units busy by switching to ready warps when one warp stalls on HBM, dependencies, or synchronization. If too few warps are resident, long HBM latency becomes visible as idle cycles.</li>
+</ul>
+<p>Warp scheduling is the SM-level answer to HBM latency. A global-memory load can take far longer than an arithmetic instruction, so the SM relies on many resident warps to cover the wait. Register pressure, shared-memory use, large blocks, and launch shape can reduce resident warps. When too few warps are ready, a long memory wait becomes visible as idle execution time; more resident warps alone do not guarantee fast work if their accesses or dependencies are poor.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Distinguishing execution limits</strong></p>
+<p>Divergence reduces useful lanes inside a warp. Low occupancy leaves too little ready work to cover latency. Poor coalescing expands the memory transactions needed for a warp’s data. These effects can occur together, but each changes execution in a different way.</p>
+</div>
+<p>This execution model assumes that tensors are available to the device. The next question is how memory is allocated and how bytes reach the kernel.</p>
+</section>
+<section class="level2" data-number="4.3" id="sec-m4-c03-s05">
+<h2 class="anchored" data-anchor-id="sec-m4-c03-s05" data-number="4.3"><span class="header-section-number">4.3</span> CUDA memory allocation and movement</h2>
+<p>A program can be mathematically correct and still slow or unstable because it allocates unpredictably, fragments memory, or synchronizes copies.</p>
+<p><strong>Host-device and peer-transfer ownership:</strong> Explicit transfers are initiated by framework placement calls or CUDA runtime APIs and executed over the path available between the source and destination. The list identifies the objects and hardware conditions that govern those transfers.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">A host-device or peer transfer needs a source, destination, available hardware path, and ordered execution. Pinned host memory and streams can support asynchronous copies, but actual overlap depends on dependencies and hardware support.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-22"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Transfer controls: pinned memory, streams, and peer access</span><ul>
+<li><strong class="m4-term-label">Pinned host memory:</strong> Defined in <a href="ch-m4-n03.html#sec-m4-c02-s06">Section 3.5</a>. It is commonly used by DataLoaders and asynchronous copies, but pinning too much host memory leaves the operating system less it can move or page out.</li>
+<li><strong class="m4-term-label">Asynchronous copy and streams:</strong> A copy can overlap with compute only when the copy is issued asynchronously, the host memory path supports it, and stream dependencies do not serialize the work. A later synchronization can still expose the full cost.</li>
+<li><strong class="m4-term-label"><code>cudaMemcpy</code>:</strong> The CUDA runtime copy operation used to move bytes between host and device or between devices. In <code>PyTorch</code> this is usually hidden behind <code>.to(device)</code>, <code>.cuda()</code>, <code>.cpu()</code>, or tensor copy calls.</li>
+<li><strong class="m4-term-label">Direct Memory Access (DMA):</strong> Defined in <a href="ch-m4-n03.html#sec-m4-c02-s06">Section 3.5</a>. Pinned host memory is what makes a DMA-based GPU transfer possible without an intermediate copy, and the transfer still consumes interconnect bandwidth.</li>
+<li><strong class="m4-term-label">PCIe transfer:</strong> Host-device or some device-device traffic over the PCIe bus. Its bandwidth is far below HBM, so repeated round trips should be avoided.</li>
+<li><strong class="m4-term-label">Peer transfer:</strong> A GPU-to-GPU copy that can avoid host staging when peer access, topology, and the runtime configuration permit a direct path.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Mapped host memory:</strong></span> Lets a GPU kernel access a host allocation through the system interconnect, which can be useful for small or irregular control data and slow for bulk tensor traffic.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Managed memory:</strong></span> Can migrate or prefetch pages between processors. <code>cudaMemAdvise</code> and <code>cudaMemPrefetchAsync</code> guide residency, while ordinary L1 and L2 cache behavior remains hardware-managed.</li>
+</ul></div>
+<p>A low-level CUDA lifecycle makes the hidden costs visible: allocate device memory, copy inputs from host to device, launch the kernel, synchronize only when required, copy results back if the host needs them, and free or reuse device memory. PyTorch hides most of these calls, but the performance costs remain.</p>
+<p>A <span class="definition-term" data-custom-style="Definition Term"><strong>stream</strong></span> is an ordered queue of submitted CUDA operations. Putting the copies and kernel in the same stream makes the kernel wait for its inputs and makes the output copy wait for the kernel. Synchronizing that stream then lets the CPU safely use the copied result.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">This CUDA C++ sketch shows allocation, copies, a kernel launch, stream ordering, synchronization, and cleanup. It requires <code>nvcc</code> and a CUDA-capable GPU. It omits input initialization, result checks, and CUDA error handling, so a runnable test must add those steps.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-23"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Example: Host-device copy lifecycle</span><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Host-device copy lifecycle</strong></p>
+<p>Illustrative CUDA C++ lifecycle. Requires <code>nvcc</code> and a CUDA-capable GPU. The listing emphasizes allocation, stream ordering, copies, launch, synchronization, and cleanup. It omits input initialization, result checking, and CUDA error handling, so it is not a complete runnable test. A runnable version includes initialization for <code>h_x</code> and <code>h_y</code>, checks every CUDA call and the launch, verifies selected <code>h_out</code> values after synchronization, and reports the build command and expected result.</p>
+<p><code>__global__</code> declares <code>add</code> as a GPU kernel entry point. In <code>add&lt;&lt;&lt;(n + 255) / 256, 256, 0, stream&gt;&gt;&gt;(d_x, d_y, d_out, n)</code>, the four launch slots give the number of blocks, threads per block, dynamic shared-memory bytes per block, and the stream receiving the launch. Here no dynamic shared memory is requested. The ordinary arguments are pointers to the two device input buffers, the device output buffer, and their element count. Integer division in <code>(n + 255) / 256</code> rounds the positive length up to enough 256-thread blocks. For <code>n=300</code>, two blocks expose 512 indices. The <code>i &lt; n</code> guard prevents indices 300 through 511 from accessing the arrays. The actual listing uses <code>n=1 &lt;&lt; 20</code>, which divides evenly. The fourth slot selects the same queue as the surrounding copies, establishing their required order.<a class="footnote-ref" href="#fn1" id="fnref1" role="doc-noteref"><sup>1</sup></a></p>
+<div class="m4-contained-code-caption publisher-code-caption" data-custom-style="Code Caption" hidden="">
+<p><strong>Code example: Host-device copy lifecycle</strong></p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c03-c01"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="lst-m4-c03-c01-1"><a aria-hidden="true" href="#lst-m4-c03-c01-1" tabindex="-1"></a><span class="pp">#include </span><span class="im">&lt;cuda_runtime.h&gt;</span></span>
+<span id="lst-m4-c03-c01-2"><a aria-hidden="true" href="#lst-m4-c03-c01-2" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c01-3"><a aria-hidden="true" href="#lst-m4-c03-c01-3" tabindex="-1"></a>__global__ <span class="dt">void</span> add<span class="op">(</span><span class="at">const</span> <span class="dt">float</span><span class="op">*</span> x<span class="op">,</span> <span class="at">const</span> <span class="dt">float</span><span class="op">*</span> y<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="lst-m4-c03-c01-4"><a aria-hidden="true" href="#lst-m4-c03-c01-4" tabindex="-1"></a>    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="lst-m4-c03-c01-5"><a aria-hidden="true" href="#lst-m4-c03-c01-5" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> x<span class="op">[</span>i<span class="op">]</span> <span class="op">+</span> y<span class="op">[</span>i<span class="op">];</span></span>
+<span id="lst-m4-c03-c01-6"><a aria-hidden="true" href="#lst-m4-c03-c01-6" tabindex="-1"></a><span class="op">}</span></span>
+<span id="lst-m4-c03-c01-7"><a aria-hidden="true" href="#lst-m4-c03-c01-7" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c01-8"><a aria-hidden="true" href="#lst-m4-c03-c01-8" tabindex="-1"></a><span class="dt">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="lst-m4-c03-c01-9"><a aria-hidden="true" href="#lst-m4-c03-c01-9" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> n <span class="op">=</span> <span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">20</span><span class="op">;</span></span>
+<span id="lst-m4-c03-c01-10"><a aria-hidden="true" href="#lst-m4-c03-c01-10" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">size_t</span> bytes <span class="op">=</span> n <span class="op">*</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">float</span><span class="op">);</span></span>
+<span id="lst-m4-c03-c01-11"><a aria-hidden="true" href="#lst-m4-c03-c01-11" tabindex="-1"></a>    <span class="dt">float</span> <span class="op">*</span>h_x<span class="op">,</span> <span class="op">*</span>h_y<span class="op">,</span> <span class="op">*</span>h_out<span class="op">,</span> <span class="op">*</span>d_x<span class="op">,</span> <span class="op">*</span>d_y<span class="op">,</span> <span class="op">*</span>d_out<span class="op">;</span></span>
+<span id="lst-m4-c03-c01-12"><a aria-hidden="true" href="#lst-m4-c03-c01-12" tabindex="-1"></a>    <span class="dt">cudaStream_t</span> stream<span class="op">;</span></span>
+<span id="lst-m4-c03-c01-13"><a aria-hidden="true" href="#lst-m4-c03-c01-13" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c01-14"><a aria-hidden="true" href="#lst-m4-c03-c01-14" tabindex="-1"></a>    cudaMallocHost<span class="op">(&amp;</span>h_x<span class="op">,</span> bytes<span class="op">);</span>  <span class="co">// page-locked host buffers</span></span>
+<span id="lst-m4-c03-c01-15"><a aria-hidden="true" href="#lst-m4-c03-c01-15" tabindex="-1"></a>    cudaMallocHost<span class="op">(&amp;</span>h_y<span class="op">,</span> bytes<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-16"><a aria-hidden="true" href="#lst-m4-c03-c01-16" tabindex="-1"></a>    cudaMallocHost<span class="op">(&amp;</span>h_out<span class="op">,</span> bytes<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-17"><a aria-hidden="true" href="#lst-m4-c03-c01-17" tabindex="-1"></a>    cudaMalloc<span class="op">(</span><span class="kw">reinterpret_cast</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">**&gt;(&amp;</span>d_x<span class="op">),</span> bytes<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-18"><a aria-hidden="true" href="#lst-m4-c03-c01-18" tabindex="-1"></a>    cudaMalloc<span class="op">(</span><span class="kw">reinterpret_cast</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">**&gt;(&amp;</span>d_y<span class="op">),</span> bytes<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-19"><a aria-hidden="true" href="#lst-m4-c03-c01-19" tabindex="-1"></a>    cudaMalloc<span class="op">(</span><span class="kw">reinterpret_cast</span><span class="op">&lt;</span><span class="dt">void</span><span class="op">**&gt;(&amp;</span>d_out<span class="op">),</span> bytes<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-20"><a aria-hidden="true" href="#lst-m4-c03-c01-20" tabindex="-1"></a>    cudaStreamCreate<span class="op">(&amp;</span>stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-21"><a aria-hidden="true" href="#lst-m4-c03-c01-21" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c01-22"><a aria-hidden="true" href="#lst-m4-c03-c01-22" tabindex="-1"></a>    cudaMemcpyAsync<span class="op">(</span>d_x<span class="op">,</span> h_x<span class="op">,</span> bytes<span class="op">,</span> cudaMemcpyHostToDevice<span class="op">,</span> stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-23"><a aria-hidden="true" href="#lst-m4-c03-c01-23" tabindex="-1"></a>    cudaMemcpyAsync<span class="op">(</span>d_y<span class="op">,</span> h_y<span class="op">,</span> bytes<span class="op">,</span> cudaMemcpyHostToDevice<span class="op">,</span> stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-24"><a aria-hidden="true" href="#lst-m4-c03-c01-24" tabindex="-1"></a>    add<span class="op">&lt;&lt;&lt;(</span>n <span class="op">+</span> <span class="dv">255</span><span class="op">)</span> <span class="op">/</span> <span class="dv">256</span><span class="op">,</span> <span class="dv">256</span><span class="op">,</span> <span class="dv">0</span><span class="op">,</span> stream<span class="op">&gt;&gt;&gt;(</span>d_x<span class="op">,</span> d_y<span class="op">,</span> d_out<span class="op">,</span> n<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-25"><a aria-hidden="true" href="#lst-m4-c03-c01-25" tabindex="-1"></a>    cudaMemcpyAsync<span class="op">(</span>h_out<span class="op">,</span> d_out<span class="op">,</span> bytes<span class="op">,</span> cudaMemcpyDeviceToHost<span class="op">,</span> stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-26"><a aria-hidden="true" href="#lst-m4-c03-c01-26" tabindex="-1"></a>    cudaStreamSynchronize<span class="op">(</span>stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-27"><a aria-hidden="true" href="#lst-m4-c03-c01-27" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c01-28"><a aria-hidden="true" href="#lst-m4-c03-c01-28" tabindex="-1"></a>    cudaStreamDestroy<span class="op">(</span>stream<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-29"><a aria-hidden="true" href="#lst-m4-c03-c01-29" tabindex="-1"></a>    cudaFree<span class="op">(</span>d_x<span class="op">);</span> cudaFree<span class="op">(</span>d_y<span class="op">);</span> cudaFree<span class="op">(</span>d_out<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-30"><a aria-hidden="true" href="#lst-m4-c03-c01-30" tabindex="-1"></a>    cudaFreeHost<span class="op">(</span>h_x<span class="op">);</span> cudaFreeHost<span class="op">(</span>h_y<span class="op">);</span> cudaFreeHost<span class="op">(</span>h_out<span class="op">);</span></span>
+<span id="lst-m4-c03-c01-31"><a aria-hidden="true" href="#lst-m4-c03-c01-31" tabindex="-1"></a><span class="op">}</span></span></code></pre></div><button class="code-copy-button" title="Copy to Clipboard"><i class="bi"></i></button></div>
+<p><strong>Conclusion:</strong> A pageable host source may require a page-locked staging copy. A pinned source can avoid that step and support asynchronous DMA. The copies and kernel here share one stream, so each operation waits for the data it needs. After stream synchronization returns, the queued work has completed and the host can inspect the output. Asynchronous submission alone does not show overlap with independent work.</p>
+</div></div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Pinned host copy and consumer</strong></p>
+<p>Running this example requires an NVIDIA GPU and a CUDA-enabled PyTorch installation. The small transfer trace starts with four CPU values, pins their storage, requests a non-blocking copy to CUDA, and multiplies the copied values on the current stream. The same stream orders the dependent multiply after the copy. Synchronization waits for the result before the host checks it. The code demonstrates the copy and its dependency; it does not establish copy/compute overlap, which needs independent work, suitable streams and hardware, and timeline evidence.</p>
+<div class="m4-contained-code-caption publisher-code-caption" data-custom-style="Code Caption" hidden="">
+<p><strong>Code example: Pinned host copy and consumer</strong></p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c03-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c03-c02-1"><a aria-hidden="true" href="#lst-m4-c03-c02-1" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c03-c02-2"><a aria-hidden="true" href="#lst-m4-c03-c02-2" tabindex="-1"></a></span>
+<span id="lst-m4-c03-c02-3"><a aria-hidden="true" href="#lst-m4-c03-c02-3" tabindex="-1"></a>host <span class="op">=</span> torch.arange(<span class="dv">4</span>, dtype<span class="op">=</span>torch.float32).pin_memory()</span>
+<span id="lst-m4-c03-c02-4"><a aria-hidden="true" href="#lst-m4-c03-c02-4" tabindex="-1"></a>device <span class="op">=</span> host.to(<span class="st">"cuda"</span>, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c03-c02-5"><a aria-hidden="true" href="#lst-m4-c03-c02-5" tabindex="-1"></a>result <span class="op">=</span> device <span class="op">*</span> <span class="dv">2</span>  <span class="co"># Same current stream, after the copy.</span></span>
+<span id="lst-m4-c03-c02-6"><a aria-hidden="true" href="#lst-m4-c03-c02-6" tabindex="-1"></a>torch.cuda.synchronize()  <span class="co"># Wait before the host checks the result.</span></span>
+<span id="lst-m4-c03-c02-7"><a aria-hidden="true" href="#lst-m4-c03-c02-7" tabindex="-1"></a><span class="cf">assert</span> torch.equal(result.cpu(), torch.tensor([<span class="fl">0.</span>, <span class="fl">2.</span>, <span class="fl">4.</span>, <span class="fl">6.</span>]))</span>
+<span id="lst-m4-c03-c02-8"><a aria-hidden="true" href="#lst-m4-c03-c02-8" tabindex="-1"></a><span class="bu">print</span>(result.cpu().tolist())</span></code></pre></div><button class="code-copy-button" title="Copy to Clipboard"><i class="bi"></i></button></div>
+<p><strong>Conclusion:</strong> The copied values are correct after the synchronized, same-stream consumer finishes. An asynchronous copy hides transfer time only when pinned memory, stream order, hardware, and independent compute permit real overlap. <code>non_blocking=True</code> alone is not evidence. Once the bytes arrive, the next question is how allocator reuse, fragmentation, and runtime controls affect the device memory available to later kernels.</p>
+</div>
+<p><strong>Allocator and runtime memory controls:</strong> Allocation state determines whether the next tensor or workspace can be placed without an expensive driver request or an out-of-memory failure. Runtime controls can influence reuse and cache policy, while hardware still decides exact replacement and residency.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Device tensor:</strong></span> A tensor whose storage is allocated in GPU memory and whose operations normally execute on that GPU. The Python object is host-side metadata. The tensor data pointer refers to device memory.</li>
+<li><strong class="m4-term-label">Caching allocator:</strong> <code>PyTorch</code>’s CUDA allocator reserves blocks from the CUDA driver and reuses them for later tensor allocations, reducing repeated driver allocation calls.</li>
+<li><strong class="m4-term-label">Allocated versus reserved:</strong> Allocated memory is storage currently used by live tensors. Reserved memory is the total pool held by the allocator, including those live allocations and inactive cached blocks. The two measurements are not separate amounts to add together. Unused pool capacity is only part of reserved memory.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Fragmentation</strong></span>: Free capacity divided into blocks that cannot satisfy the next allocation shape. Dynamic sequence lengths, workspaces, and long-running serving admission can make it visible.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">L2 persisting access window:</strong></span> A CUDA stream or graph setting that marks a global-memory range for preferred L2 retention within hardware and set-aside limits.</li>
+</ul>
+<p>The following controls influence resource preference or retention. They guide supported hardware behavior. Ordinary application code still cannot assign a tensor to a chosen cache set or permanently lock arbitrary cache lines.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-49"><div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c03-t01">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" data-m4-fold-heading="1" id="tbl-m4-c03-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 4.1: Runtime memory controls and their limits.
+</figcaption>
+<div aria-describedby="tbl-m4-c03-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Runtime control</th>
+<th>Owner</th>
+<th>Useful influence</th>
+<th>Limits</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Shared-memory/L1 preference</td>
+<td>CUDA runtime or kernel attribute</td>
+<td>Can prefer a supported L1/shared-memory split</td>
+<td>Does not guarantee exact capacity or residency</td>
+</tr>
+<tr class="even">
+<td>L2 persisting window</td>
+<td>CUDA stream or graph kernel-node attribute</td>
+<td>Can prefer retention for a global-memory range</td>
+<td>Cannot exceed set-aside capacity or pin arbitrary lines</td>
+</tr>
+<tr class="odd">
+<td>Allocator configuration</td>
+<td>PyTorch CUDA allocator</td>
+<td>Can change block splitting, reuse, and reclamation behavior</td>
+<td>Cannot reduce the workload’s true live tensor footprint</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div></div>
+<p>Allocator settings can change block reuse and fragmentation, while cache controls can influence retention, but neither reduces the workload’s true live memory or guarantees residency. The next question is how streams and events order allocations, copies, and kernels without adding unnecessary waits.</p>
+</section>
+<section class="level2" data-number="4.4" id="sec-m4-c03-s08">
+<h2 class="anchored" data-anchor-id="sec-m4-c03-s08" data-number="4.4"><span class="header-section-number">4.4</span> Asynchronous execution and synchronization</h2>
+<p>A stream orders the operations submitted to it: a kernel begins only after earlier copies and kernels in that same stream. Different streams do not automatically establish an order merely because one operation reads data written by another. A producer can record an event after its copy or kernel, and a consumer stream can wait on that event before reading the produced data. Without that dependency, the consumer can race the producer. These ordering, pinned-memory, and overlap rules follow the <em>CUDA C++ Programming Guide 12.4</em>.<a class="footnote-ref" href="#fn2" id="fnref2" role="doc-noteref"><sup>2</sup></a></p>
+<div alt="Pageable input may be copied to pinned staging. Input that is already pinned skips that copy. A copy engine transfers the data to GPU input storage over an available link, such as PCIe. Kernel output can be copied back to a host result buffer. The host waits for completion before using the result. Stream 0 orders host-to-device (H2D) copy A, Kernel A, event E, Kernel B and device-to-host (D2H) copy A. Stream 1 orders H2D copy B, Wait E, Kernel C and D2H copy B. Wait E makes stream 1 wait for event E before Kernel C reads A’s result. A shared pointer alone establishes neither cross-stream order nor storage lifetime." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-c03-copy-order">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c03-copy-order-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img alt="Pageable input may be copied to pinned staging. Input that is already pinned skips that copy. A copy engine transfers the data to GPU input storage over an available link, such as PCIe. Kernel output can be copied back to a host result buffer. The host waits for completion before using the result. Stream 0 orders host-to-device (H2D) copy A, Kernel A, event E, Kernel B and device-to-host (D2H) copy A. Stream 1 orders H2D copy B, Wait E, Kernel C and D2H copy B. Wait E makes stream 1 wait for event E before Kernel C reads A’s result. A shared pointer alone establishes neither cross-stream order nor storage lifetime." class="img-fluid figure-img" src="../assets/fig-m4-c03-copy-order.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" />
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c03-copy-order-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 4.3: The copy path shows optional staging from pageable to pinned memory. Input that is already pinned skips that step. The path then shows DMA and device work. A result copy follows if the host needs the output. The host waits for completion before using the result. In the separate stream lanes, the producer records an event after Kernel A. The consumer waits for that event before Kernel C reads A’s result. Independent work may overlap only when stream order, storage lifetime and hardware resources permit.
+</figcaption>
+</figure>
+</div>
+<p>Correctly ordered operations in different streams are eligible to overlap when they are independent and the device has the required copy or compute resources. The host-device copy lifecycle and pinned batch transfer in <a href="#sec-m4-c03-s05">Section 4.3</a> illustrate same-stream order and the conditions for overlap. Independently ordered streams need a deliberate dependency before one consumes another’s output, for example an event and wait or PyTorch’s <code>wait_stream</code>. CUDA’s legacy default stream can add implicit ordering with blocking streams, and host synchronization can also establish order. A shared data pointer alone creates no dependency.</p>
+<p>Execution order and storage lifetime are separate requirements. Input and output storage must remain available until asynchronous work finishes. For an allocator-managed PyTorch tensor used on another stream, <code>tensor.record_stream(consumer_stream)</code> tells the allocator about that use so it does not reuse the storage too soon. Another option is to retain the tensor and join or synchronize the consumer before releasing its storage. Neither option replaces the producer-to-consumer dependency: <code>wait_stream</code> orders the work, while the lifetime rule protects the memory it uses.<a class="footnote-ref" href="#fn3" id="fnref3" role="doc-noteref"><sup>3</sup></a></p>
+<p>GPU elapsed-time measurement records start and end events in the measured stream and synchronizes the end event before reading the duration. A device- or stream-wide synchronization is appropriate only when its full wait scope is required, because a broader wait can remove useful overlap and make a host timer include work outside the intended region.</p>
+</section>
+<section class="level2" data-number="4.5" id="sec-m4-c03-s09">
+<h2 class="anchored" data-anchor-id="sec-m4-c03-s09" data-number="4.5"><span class="header-section-number">4.5</span> Thread mapping and grid-stride launch</h2>
+<p><a href="#sec-m4-c03-s04">Section 4.2</a> defined the grid, block, and thread. To map that hierarchy onto a one-dimensional tensor, thread <code>t</code> in block <code>b</code> starts at <code>i = b * blockDim.x + t</code>, where <code>blockDim.x</code> is threads per block and <code>gridDim.x</code> is blocks per grid. If the grid contains fewer threads than elements, the thread advances by <code>blockDim.x * gridDim.x</code> and processes <code>i + stride</code>, <code>i + 2 * stride</code>, and so on. Adjacent threads then access adjacent elements when the array is contiguous, which gives the memory system an opportunity to coalesce their requests. If lanes diverge into different branches or scattered addresses, the same mathematical operation may require many more memory transactions.</p>
+<p>The mapping also controls work balance. Uneven work can leave lanes idle and delay warp or block completion. Threads wait for each other at required synchronization points. Ordinary work does not imply a block-wide barrier, and warp scheduling depends on the GPU’s execution model. If the launch exposes too little parallel work, SMs remain idle even when the kernel code is correct.</p>
+<p>This CUDA-like pseudocode connects one-dimensional tensor indexing to a launch configuration. It shows block and thread indices, a grid-stride loop, and the access pattern needed for coalescing. Allocation, data transfer, synchronization, and cleanup are outside this example.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-74"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: Grid-stride vector add</strong></p>
+<p>Assume contiguous inputs <code>x=[0,1,2,3,4,5,6,7,8,9]</code> and <code>y=[10,10,10,10,10,10,10,10,10,10]</code>, with space for ten output elements. The example deliberately launches <code>grid=2</code>, <code>block_size=4</code>, so eight logical threads cover <code>n=10</code> elements with stride <span class="math inline">\(2\times4=8\)</span>.</p>
+<p>Block 0, thread 0 starts at index 0 and writes <code>out[0]=0+10=10</code>. Its second loop iteration visits index <span class="math inline">\(0+8=8\)</span> and writes <code>out[8]=8+10=18</code>. Its next candidate, 16, is outside the input, so the loop stops. Block 0, thread 1 visits indices 1 and 9 and writes 11 and 19. Global thread IDs 2 through 7 each visit their first index only, writing 12 through 17, because their next indices are at least 10. The complete result is <code>[10,11,12,13,14,15,16,17,18,19]</code>, with every element written once.</p>
+<p>The alternative full-coverage launch, <code>grid=ceil(n/block_size)=3</code>, exposes twelve threads and stride 12. It gives each valid thread one element, while IDs 10 and 11 do no work. In both launches, the stride counts all logically launched threads, not just those simultaneously resident on SMs. Hardware may schedule the blocks at different times without changing this coverage.</p>
+<div class="m4-contained-code-caption publisher-code-caption" data-custom-style="Code Caption" hidden="">
+<p><strong>Code example: Grid-stride vector add</strong></p>
+</div>
+<pre class="text" id="lst-m4-c03-c03"><code>kernel vector_add(x, y, out, n):
+    tid = blockIdx.x * blockDim.x + threadIdx.x
+    stride = blockDim.x * gridDim.x
+    for i in range(tid, n, stride):
+        out[i] = x[i] + y[i]
+
+n = 10
+block_size = 4
+launch grid = 2, block = block_size
+# Alternative full coverage: grid = ceil(n / block_size)</code></pre>
+<p><strong>Conclusion:</strong> Thread mapping, address order, and grid-stride coverage shape coalescing and work balance. For transfer, synchronization, and cleanup costs, see the copy examples in <a href="#sec-m4-c03-s05">Section 4.3</a> and the ordering rules in <a href="#sec-m4-c03-s08">Section 4.4</a>. Triton keeps the mapping concerns but expresses them through program instances, tiles, offsets, masks, and compiler-selected lower-level execution.</p>
+</div></div>
+</section>
+<section class="level2" data-number="4.6" id="sec-m4-c03-s10">
+<h2 class="anchored" data-anchor-id="sec-m4-c03-s10" data-number="4.6"><span class="header-section-number">4.6</span> Memory coalescing and cache controls</h2>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Memory coalescing</strong></span> combines the participating lanes’ addresses for one warp memory instruction into aligned transactions or sectors. Neighboring lanes reading neighboring addresses are a common efficient pattern, but the set of addresses matters, not their lane order. This controls the requested memory traffic. Caches can satisfy requests, so the sector count does not by itself give HBM bytes.</p>
+<p>GPU memory is served in cache-line and sector-sized transactions rather than one independently sized transfer per scalar address. When neighboring lanes request nearby addresses, one transaction can supply many useful values. When lanes request scattered addresses, the hardware fetches the sectors or cache lines containing those addresses. If each lane uses only one value from a different line, most fetched bytes are unused. The operation then spends bandwidth on transactions that carry little useful data.</p>
+<p>Exact transaction sizes depend on architecture, element width, alignment, and which lanes are active.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Lane order and requested sectors</strong></p>
+<p><strong>Inputs:</strong> Assume 32 active lanes, one FP32 load per lane, a 32-byte sector, and a base address aligned to 128 bytes. The lanes need 128 useful bytes in total.</p>
+<div alt="Lanes 0 through 31 map in order to byte offsets 0, 4, …, 124. Eight adjacent FP32 values share each 32-byte sector. Four sectors cover 128 useful bytes. This example assumes 32 active lanes, one FP32 load per lane, 32-byte sectors and a base aligned to 128 bytes. Reversing lane order requests the same sectors. With strided element offsets 0, 32, 64, …, the lanes request 32 sectors before cache effects." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-c03-address-set">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c03-address-set-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img alt="Lanes 0 through 31 map in order to byte offsets 0, 4, …, 124. Eight adjacent FP32 values share each 32-byte sector. Four sectors cover 128 useful bytes. This example assumes 32 active lanes, one FP32 load per lane, 32-byte sectors and a base aligned to 128 bytes. Reversing lane order requests the same sectors. With strided element offsets 0, 32, 64, …, the lanes request 32 sectors before cache effects." class="img-fluid figure-img" src="../assets/fig-m4-c03-address-set.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" />
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c03-address-set-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 4.4: Thirty-two active lanes each request one FP32 value from a base aligned to 128 bytes. The addresses base + 4 × lane occupy four 32-byte sectors. Reversing lane order preserves that address set. A stride of 32 elements requests 32 sectors under the same assumptions. Requested sectors do not measure HBM traffic.
+</figcaption>
+</figure>
+</div>
+<p><strong>Address sets:</strong> Reading array elements 0 through 31 in lane order requests four sectors. Reversing that order requests the same four sectors. Reading elements 0, 32, 64, and so on instead places each lane in a different sector, requesting 32 sectors for the same 128 useful bytes.</p>
+<p><strong>Conclusion:</strong> Reversing lane order does not spoil this coalesced address set. The strided set requests 1,024 sector bytes for 128 useful bytes before considering cache hits. These are requested sectors, not a measurement of HBM traffic.</p>
+</div>
+<p>Shared memory has a different access problem. It is divided into banks so lanes in a warp can read or write multiple addresses in parallel. A bank conflict occurs when multiple lanes request different addresses that map to the same bank in the same instruction. The access is split into multiple transactions. Broadcast-like same-address cases are handled specially, so shared-memory layout and padding should spread lanes across banks when they need different words.</p>
+<p>Kernel code and compiler backends can also express cache-use intent. These controls are useful only after measurement shows that reuse, sector traffic, or shared-memory capacity is part of the bottleneck.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c03-t02">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c03-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 4.2: Kernel memory-access controls and the evidence needed to justify them.
+</figcaption>
+<div aria-describedby="tbl-m4-c03-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Kernel control</th>
+<th>Where it is expressed</th>
+<th>What it influences</th>
+<th>What to verify</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>PTX cache operators</td>
+<td>Generated PTX or custom kernel code</td>
+<td>Load/store intent such as cache-all, L2-only, or streaming behavior</td>
+<td>Sector traffic, hit behavior, and portability across architectures</td>
+</tr>
+<tr class="even">
+<td>PTX eviction and prefetch hints</td>
+<td>Generated PTX, compiler, or custom code</td>
+<td>Replacement or prefetch preference where supported</td>
+<td>Measured reuse and working-set size</td>
+</tr>
+<tr class="odd">
+<td>Shared-memory tiling</td>
+<td>CUDA C++, Triton, or compiler-generated kernel</td>
+<td>Programmer-controlled staging and reuse near the SM</td>
+<td>Bank conflicts, synchronization, occupancy, and actual reuse</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section class="level2" data-number="4.7" id="sec-m4-c03-s11">
+<h2 class="anchored" data-anchor-id="sec-m4-c03-s11" data-number="4.7"><span class="header-section-number">4.7</span> Matrix operations in vendor libraries</h2>
+<p>Matrix operations show how framework calls, vendor libraries, and custom kernels meet. <code>PyTorch</code> commonly dispatches supported matrix multiplication to <code>cuBLAS</code> or <code>cuBLASLt</code>. Custom CUDA or <code>Triton</code> code is justified when the measured dimensions, layout, fusion needs, or <span class="definition-term" data-custom-style="Definition Term"><strong>epilogue</strong></span> (processing applied to the matrix result, such as adding a bias) are poorly served by that baseline. <code>cuBLAS</code> provides the BLAS implementation on the CUDA runtime documented in the <em>cuBLAS Library</em><a class="footnote-ref" href="#fn4" id="fnref4" role="doc-noteref"><sup>4</sup></a>, and NVIDIA’s matrix-multiplication guidance treats matrix-vector products in its FP16 traffic model as memory limited with arithmetic intensity below 1<a class="footnote-ref" href="#fn5" id="fnref5" role="doc-noteref"><sup>5</sup></a>.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>General Matrix-Matrix Multiplication (GEMM)</strong></span> multiplies two matrices. In mathematical notation, the operation is:</p>
+<p><span id="eq-m4-c03-e01"><span class="math display">\[
+C = A B
+\tag{4.1}\]</span></span></p>
+<p>Here A has shape M by K and can represent one layer’s weight matrix. B has shape K by N and holds N compatible token vectors as columns; C has shape M by N. The same projection over a 2,048-token batch can multiply those vectors by one 4,096 by 4,096 weight matrix, exposing reuse of its weight tiles. A row-major framework call may transpose this written orientation without changing the operation. The notation omits layout, precision, tiling, and whether Tensor Cores are actually used.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>General Matrix-Vector Multiplication (GEMV)</strong></span> multiplies a matrix by a vector:</p>
+<p><span id="eq-m4-c03-e02"><span class="math display">\[
+y = A x
+\tag{4.2}\]</span></span></p>
+<p>Here the same A has shape M by K, x is one vector of length K, and y has length M. This is the N=1 case of the projection above. One active token vector in a decode projection can use this form; a few compatible active vectors form a matrix mathematically but still offer little weight reuse. Production code may batch or reshape them and select a matrix-multiply kernel. For one 4,096-element vector and a 4,096 by 4,096 weight matrix, the projection reads many weights for one output vector, subject to cache and kernel behavior.</p>
+<p>The difference is how many vector columns reuse each loaded weight tile. Training or prefill usually supplies many compatible vectors, and batched decode can also do so. With one or a few vectors, arithmetic per loaded weight is lower and the projection can be GEMV-like in cost. <code>GEMV-like</code> describes possible performance, not the kernel that production code must launch: shape, dtype, batching, fusion, cache residency, and the selected backend determine the measured result. <a class="quarto-xref" href="#tbl-m4-c03-t03">Table <span>4.3</span></a> compares the two input counts. <a href="ch-m4-n06.html#sec-m4-c02-s08">Section 6.2</a> works through the arithmetic and byte estimates for the same projection across batch sizes.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c03-t03">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c03-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 4.3: One projection with one input vector or many.
+</figcaption>
+<div aria-describedby="tbl-m4-c03-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Operation</th>
+<th>Mathematical form</th>
+<th>Projection input count</th>
+<th>Conditional performance character</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>GEMM</td>
+<td>C = AB</td>
+<td>Many compatible token vectors in training, prefill or batched decode</td>
+<td>Weight reuse can raise arithmetic intensity and Tensor Core use when shape, dtype and kernel fit</td>
+</tr>
+<tr class="even">
+<td>GEMV</td>
+<td>y = Ax</td>
+<td>One token vector, such as a single active decode position</td>
+<td>Little within-call weight reuse; often bandwidth-sensitive when weights must come from HBM</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The reported GEMV timings compare PyTorch/cuBLAS with five custom CUDA iterations, in milliseconds. They record one measured implementation sequence, not a generic ranking of every possible GEMV kernel.</p>
+<p>In a simple one-vector projection, each loaded weight supports one multiply-add within that call. If the weights must come from HBM, low arithmetic intensity can make the call bandwidth-sensitive. Several vectors can reuse a loaded weight tile. Actual HBM traffic depends on cache residency, layout, batching, and the selected kernel, so this comparison alone does not diagnose a measured call.</p>
+<p>The reported values are 0.0594 ms for PyTorch/cuBLAS and 0.60, 0.276, 0.464, 0.0789, and 0.0593 ms for iterations 1 through 5. These are observations from one experiment. The supplied slides describe an 8,192 by 4,096 matrix and a 4,096-element vector on one H100, and their CUDA screenshots use FP32 pointers.<a class="footnote-ref" href="#fn6" id="fnref6" role="doc-noteref"><sup>6</sup></a> They do not supply a complete executable benchmark, software versions, warmup, timing boundary, or correctness tolerance. Those missing settings prevent reproduction or a portable performance ranking. No uncertainty estimate is supplied, so 0.0593 versus 0.0594 ms does not establish a reliable advantage over cuBLAS.</p>
+<p>The iteration labels suggest different ways to read a row and combine partial sums. The mechanisms below explain those designs. The reported times alone do not verify the implementation details or their costs. A fresh comparison would need the same shape, dtype, GPU, warmup, timing boundary, and correctness tolerance for every implementation.</p>
+<p>A <span class="definition-term" data-custom-style="Definition Term"><strong>shuffle</strong></span> transfers a register value from one participating warp lane to another. It can combine partial sums within a warp.<a class="footnote-ref" href="#fn7" id="fnref7" role="doc-noteref"><sup>7</sup></a></p>
+<ul>
+<li><strong>Iteration 1 (Naive):</strong> A one-thread-per-output design loops over the columns of each row of A. With row-major storage, adjacent threads reading the same column in different rows use addresses separated by the row width, which can require more memory transactions. The exact cost depends on layout and shape.</li>
+<li><strong>Iteration 2 (Transposed):</strong> The slides store the transposed matrix and read <code>A_T[i*M+row]</code>. At a fixed column <code>i</code>, consecutive row-owning threads read consecutive FP32 elements. This can improve coalescing compared with row-strided reads. A fresh comparison must state whether producing the transposed storage is inside or outside the measured workload; the reported time alone does not isolate that cost.</li>
+<li><strong>Iteration 3 (Shared vector tiles):</strong> The slides stage chunks of <code>x</code> in shared memory for reuse by row-owning threads, with block barriers around each tile. Its reported 0.464 ms exceeds iteration 2’s 0.276 ms. The illustration does not divide each row among threads for a block reduction; that begins in iteration 4. Cache behavior, barrier waits, address arithmetic, and occupancy are hypotheses to test with a runnable benchmark and counters, rather than causes established by these timings.</li>
+<li><strong>Iteration 4 (Cooperating Threads):</strong> A row is divided across many threads and reduced at block scope. The useful thread count depends on row width, dtype, occupancy, and synchronization cost.</li>
+<li><strong>Iteration 5 (Warp per Row / Warp-Shuffle):</strong> One warp can cooperate on a row and reduce partial sums with register shuffles, avoiding block-wide barriers for that reduction. Whether it approaches cuBLAS depends on the measured shape, dtype, GPU, and timing method.</li>
+</ul>
+<p>Distinguishing those hypotheses requires the original kernels and measurements: shared-memory conflict counters, barrier-stall evidence, instruction counts, and register/shared-memory limits would test different possible causes. Those records are not supplied with the table. The optional warp-shuffle calculation below shows how cooperating lanes combine one row’s products. It is an arithmetic trace, not a reconstruction or benchmark of iteration 5.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-05"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: Combining a row across warp lanes</strong></p>
+<p>Take one matrix row <code>[1,2,3,4]</code> and vector <code>[2,3,4,5]</code>. Their dot product is <span class="math inline">\(1\times2+2\times3+3\times4+4\times5=40\)</span>. Assign the four products to lanes 0 through 3 of one 32-lane warp. Their register partial sums are <code>[2,6,12,20]</code>. Lanes 4 through 31 hold zero and remain active. For a longer row, lane <span class="math inline">\(l\)</span> first sums products at columns <span class="math inline">\(l,l+32,l+64,\ldots\)</span> that are within the row.</p>
+<p>Consider stages with <code>delta</code> equal to 16, 8, 4, 2, then 1. At every stage all 32 lanes execute <code>other = __shfl_down_sync(0xffffffff, partial, delta)</code>. Only lanes with <code>lane + delta &lt; 32</code> then add <code>other</code> to their partial sum. Each exchange reads the values from before that stage’s additions.</p>
+<p>The first three stages add only zeros to lanes 0 through 3, so their values remain <code>[2,6,12,20]</code>. At <code>delta=2</code>, lane 0 reads lane 2’s 12 and becomes 14. Lane 1 reads lane 3’s 20 and becomes 26. At <code>delta=1</code>, lane 0 reads lane 1’s 26 and becomes 40. Only lane 0 writes this row’s output, <code>y[row]=40</code>. The other lanes’ final registers are not separate output elements.</p>
+<p>The full mask is valid here because all 32 lanes participate in every exchange with the same mask. Lanes holding zero must not exit early. Reading an inactive source lane is not valid, and a shuffle does not order shared-memory accesses.<a class="footnote-ref" href="#fn8" id="fnref8" role="doc-noteref"><sup>8</sup></a> A shared-memory alternative writes every lane’s partial sum to a distinct shared slot, lets the whole block reach <code>__syncthreads()</code>, then has one thread read and add the slots. A parallel shared-memory tree also needs ordering between stages. These methods combine the same products but use different storage and synchronization. Neither has a universal timing advantage, and floating-point addition order can change rounding.</p>
+</div></div>
+<p>Launch overhead often becomes visible in small-batch decode because each kernel does little work. A CUDA launch has a nonzero host-side cost whose size depends on the software stack, hardware, synchronization, and measurement method. For sufficiently small operations, that fixed cost can exceed device execution time. A knee on a size-versus-latency plot marks a change in the measured trend for one operation and environment. A flat small-input region suggests fixed cost, but host submission, stream execution, and a timeline are needed to identify exposed launch cost. Larger inputs can then expose memory or compute limits.</p>
+</section>
+<section class="footnotes footnotes-end-of-document" data-m4-endnotes="1" id="footnotes" role="doc-endnotes"><h2 data-m4-endnotes-heading="1" data-m4-fold-ui="references-heading">References</h2><div data-m4-endnotes-body="1" data-m4-fold-created="endnotes-body" id="m4-endnotes-body">
+<hr/>
+<ol>
+<li id="fn1"><p>NVIDIA. (2024). <em>CUDA C++ Programming Guide 12.4</em>. <a href="https://docs.nvidia.com/cuda/archive/12.4.0/cuda-c-programming-guide/index.html">CUDA 12.4 programming guide</a> (release 2024-03-05). Support: streams, events, page-locked host memory, peer access, coalesced device access, and L2 persistence controls used in Sections 4.3, 4.4, and 4.6. Limit: overlap also requires pinned memory, independent work, and hardware support, as stated in the chapter.<a class="footnote-back" href="#fnref1" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>NVIDIA. (2024). <em>CUDA C++ Programming Guide 12.4</em>. <a href="https://docs.nvidia.com/cuda/archive/12.4.0/cuda-c-programming-guide/index.html">CUDA 12.4 programming guide</a> (release 2024-03-05). Support: streams, events, page-locked host memory, peer access, coalesced device access, and L2 persistence controls used in Sections 4.3, 4.4, and 4.6. Limit: overlap also requires pinned memory, independent work, and hardware support, as stated in the chapter.<a class="footnote-back" href="#fnref2" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p>PyTorch contributors. (2.4 documentation). <em>CUDA semantics</em>, CUDA streams. <a href="https://docs.pytorch.org/docs/2.4/notes/cuda.html#cuda-streams">PyTorch CUDA stream ordering and storage lifetime</a>. Distinguishes <code>wait_stream</code> execution ordering from <code>record_stream</code> protection against premature allocator reuse and describes an explicit later wait as an alternative. These are correctness conditions, not a guarantee of overlap.<a class="footnote-back" href="#fnref3" role="doc-backlink">↩︎</a></p></li>
+<li id="fn4"><p>NVIDIA. (n.d.). <em>cuBLAS Library</em> (versioned cuBLAS 13.4 documentation). <a href="https://docs.nvidia.com/cuda/cublas/">cuBLAS 13.4 library documentation</a>. Support: cuBLAS as the CUDA BLAS implementation with GEMM, GEMV, and batched variants behind the library API. Limit: the dispatch and baseline recommendation still requires validation on the intended workload; exact kernel selection depends on shape, dtype, and version.<a class="footnote-back" href="#fnref4" role="doc-backlink">↩︎</a></p></li>
+<li id="fn5"><p>NVIDIA. (2023). <em>Matrix Multiplication Background User’s Guide</em> (last updated 2023-02-01). <a href="https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html">NVIDIA matrix multiplication guide</a>. Support: GEMM tiling approach and the statement that matrix-vector products with M = 1 or N = 1 are always memory limited. Limit: arithmetic intensity comparison is a rule of thumb that omits instruction overhead and on-chip hierarchy effects.<a class="footnote-back" href="#fnref5" role="doc-backlink">↩︎</a></p></li>
+<li id="fn6"><p>Gardin, A. (2026, June 26). <em>CUDA and Triton: Writing fast GPU kernels: from a naïve CUDA matrix-vector multiply to fused FlashAttention in Triton</em> [Supplied slides, <code>Performance Engineering - L4.pdf</code>]. Physical PDF pp. 10–29 support the stated GEMV settings, reported iteration timings, and illustrated transposed-indexing, shared-input staging and cooperating-reduction mechanisms. Printed FP32 pointers describe the shown code. The slides do not supply a complete executable benchmark, software versions, warmup, timing interval, correctness tolerance, or uncertainty estimate.<a class="footnote-back" href="#fnref6" role="doc-backlink">↩︎</a></p></li>
+<li id="fn7"><p>NVIDIA. (2024). <em>CUDA C++ Programming Guide 12.4</em>. <a href="https://docs.nvidia.com/cuda/archive/12.4.0/cuda-c-programming-guide/index.html">CUDA 12.4 programming guide</a> (release 2024-03-05). Support: streams, events, page-locked host memory, peer access, coalesced device access, and L2 persistence controls used in Sections 4.3, 4.4, and 4.6. Limit: overlap also requires pinned memory, independent work, and hardware support, as stated in the chapter.<a class="footnote-back" href="#fnref7" role="doc-backlink">↩︎</a></p></li>
+<li id="fn8"><p>NVIDIA. (2024). <em>CUDA C++ Programming Guide 12.4</em>. <a href="https://docs.nvidia.com/cuda/archive/12.4.0/cuda-c-programming-guide/index.html">CUDA 12.4 programming guide</a> (release 2024-03-05). Support: streams, events, page-locked host memory, peer access, coalesced device access, and L2 persistence controls used in Sections 4.3, 4.4, and 4.6. Limit: overlap also requires pinned memory, independent work, and hardware support, as stated in the chapter.<a class="footnote-back" href="#fnref8" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</div></section>
+</main> <!-- /main -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const automaticLongContentFolding = false;
+  const referenceSections = document.querySelectorAll(
+    'main.content section.footnotes[role="doc-endnotes"]'
+  );
+
+  referenceSections.forEach((section) => {
+    if (section.closest("details.publisher-chapter-references")) return;
+
+    const details = document.createElement("details");
+    details.className = "publisher-chapter-references";
+    const summary = document.createElement("summary");
+    const count = section.querySelectorAll("ol > li").length;
+    summary.textContent = count ? `References (${count})` : "References";
+
+    section.parentNode.insertBefore(details, section);
+    details.append(summary, section);
+  });
+
+  const openFoldTarget = (target) => {
+    const details = target?.closest(
+      "details.publisher-chapter-references, details.publisher-long-content"
+    );
+    if (details) details.open = true;
+  };
+
+  const targetFromHash = (hash) => {
+    if (!hash || hash === "#") return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('a[href*="#"]');
+    if (!link) return;
+    let destination;
+    try {
+      destination = new URL(link.getAttribute("href") || "", location.href);
+    } catch (_error) {
+      return;
+    }
+    if (destination.href.split("#")[0] !== location.href.split("#")[0]) return;
+    openFoldTarget(targetFromHash(destination.hash));
+  });
+
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
+    if (control?.classList.contains("publisher-fold-never")) return "never";
+    if (control?.classList.contains("publisher-fold-always")) return "always";
+    if (control?.classList.contains("publisher-fold-open")) return "open";
+    const requested = control?.dataset.publisherFold || "auto";
+    return ["auto", "never", "always", "open"].includes(requested)
+      ? requested
+      : "auto";
+  };
+
+  const foldCandidate = (candidate, kind) => {
+    if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
+
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
+    if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
+    const minimumFoldHeight = 320;
+    const foldHeight = Math.max(
+      minimumFoldHeight,
+      Math.round(document.documentElement.clientHeight * 0.5)
+    );
+    if (mode === "auto" && candidate.getBoundingClientRect().height <= foldHeight) return;
+
+    const titleSource = kind === "table"
+      ? candidate.querySelector("figcaption, caption")
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
+    const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
+
+    const details = document.createElement("details");
+    details.className = `publisher-long-content publisher-long-${kind}`;
+    if (mode === "open") details.open = true;
+    const summary = document.createElement("summary");
+    if (titleSource && label) {
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
+    } else {
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
+    }
+    const body = document.createElement("div");
+    body.className = "publisher-fold-body";
+    if (titleSource) titleSource.classList.add("publisher-fold-title-source");
+
+    candidate.parentNode.insertBefore(details, candidate);
+    details.append(summary, body);
+    body.append(candidate);
+  };
+
+  const foldLongContent = () => {
+    if (!automaticLongContentFolding) return;
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
+    document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
+      const float = figure.parentElement?.classList.contains("quarto-float")
+        ? figure.parentElement
+        : figure;
+      foldCandidate(float, "table");
+    });
+    document.querySelectorAll("main.content table").forEach((table) => {
+      if (!table.closest("figure.quarto-float-tbl")) foldCandidate(table, "table");
+    });
+    openFoldTarget(targetFromHash(location.hash));
+  };
+
+  if (document.readyState === "complete") {
+    requestAnimationFrame(foldLongContent);
+  } else {
+    window.addEventListener("load", () => requestAnimationFrame(foldLongContent), {
+      once: true,
+    });
+  }
+
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
+  document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
+  const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
+  window.addEventListener("hashchange", openLocationTarget);
+  openLocationTarget();
+});
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+<div class="nav-page nav-page-previous">
+<a aria-label="Part II: GPU execution, measurement, and optimization" class="pagination-link" href="../parts/part-ii.html">
+<i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part II: GPU execution, measurement, and optimization</span>
+</a>
+</div>
+<div class="nav-page nav-page-next">
+<a aria-label="Triton and attention kernels" class="pagination-link" href="../chapters/ch-m4-n05.html">
+<span class="nav-page-text"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span> <i class="bi bi-arrow-right-short"></i>
+</a>
+</div>
+</nav>
+</div> <!-- /content -->
+<script data-m4-fold-ui="script" defer="defer" src="../html-folds/folds.js"></script>  <div class="book-image-preview-overlay" data-book-image-overlay hidden>
+    <button class="book-image-preview-backdrop" type="button" data-book-image-close aria-label="Close image preview"></button>
+    <div class="book-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview">
+      <button class="book-image-preview-close" type="button" data-book-image-close>Close</button>
+      <img class="book-image-preview-image" data-book-image-preview-img alt="">
+    </div>
+  </div>
+  <script id="book-image-preview-script">
+    (() => {
+      if (window.__bookImagePreviewReady) {
+        return;
+      }
+      window.__bookImagePreviewReady = true;
+
+      const overlay = document.querySelector("[data-book-image-overlay]");
+      const preview = document.querySelector("[data-book-image-preview-img]");
+      const closeButtons = document.querySelectorAll("[data-book-image-close]");
+      const closeButton = overlay ? overlay.querySelector(".book-image-preview-close") : null;
+      let restoreFocus = null;
+
+      if (!overlay || !preview) {
+        return;
+      }
+
+      function openPreview(image) {
+        restoreFocus = image;
+        preview.src = image.currentSrc || image.src;
+        preview.alt = image.alt || "";
+        overlay.hidden = false;
+        document.body.classList.add("book-image-preview-open");
+        if (closeButton) {
+          closeButton.focus();
+        }
+      }
+
+      function closePreview() {
+        if (overlay.hidden) {
+          return;
+        }
+        overlay.hidden = true;
+        preview.removeAttribute("src");
+        preview.alt = "";
+        document.body.classList.remove("book-image-preview-open");
+        if (restoreFocus) {
+          restoreFocus.focus();
+        }
+      }
+
+      document.querySelectorAll("img[data-book-image-preview]").forEach((image) => {
+        image.addEventListener("click", () => openPreview(image));
+        image.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPreview(image);
+          }
+        });
+      });
+      closeButtons.forEach((button) => {
+        button.addEventListener("click", closePreview);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!overlay.hidden && event.key === "Escape") {
+          closePreview();
+        }
+      });
+    })();
+  </script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "bf257544e13140429e7cbda3a16caddb"}'></script><!-- End Cloudflare Web Analytics -->
+<!-- book-ask-ai:start -->
+<link rel="stylesheet" href="../ask-ai-assets/ask-ai.css">
+<script id="book-ask-ai-config" type="application/json">{"endpoint": "https://course-ask-ai.course-ask-ai-backend.workers.dev/ask", "book": "module_4", "bookTitle": "", "version": ""}</script>
+<script defer src="../ask-ai-assets/ask-ai.js"></script>
+<!-- book-ask-ai:end -->
+</body></html>

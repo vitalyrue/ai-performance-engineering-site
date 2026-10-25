@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"><head>
+<meta charset="utf-8"/>
+<meta content="quarto-1.10.18" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>14  Speculative and constrained decoding – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta content="../" name="quarto:offset"/>
+<link href="../chapters/ch-m4-n16.html" rel="next"/>
+<link href="../chapters/ch-m4-n14.html" rel="prev"/>
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet"/>
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" id="quarto-text-highlighting-styles" rel="stylesheet"/>
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet"/>
+<link append-hash="true" data-mode="light" href="../site_libs/bootstrap/bootstrap-741cab1455972e99f328c2af765061c1.min.css" id="quarto-bootstrap" rel="stylesheet"/>
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+<link href="../styles.css" rel="stylesheet"/>
+<link data-reading-layout="true" href="../reading-layout/reading.css" rel="stylesheet"/><link data-m4-fold-ui="style" href="../html-folds/folds.css" rel="stylesheet"/><link data-map-style="" href="../map-viewer/viewer.css" rel="stylesheet"/><script data-map-script="" defer="" src="../map-viewer/viewer.js"></script>  <style id="book-image-preview-style">
+    img[data-book-image-preview] {
+      cursor: zoom-in;
+    }
+    img[data-book-image-preview]:focus {
+      outline: 3px solid rgba(15, 107, 120, 0.36);
+      outline-offset: 4px;
+    }
+    body.book-image-preview-open {
+      overflow: hidden;
+    }
+    .book-image-preview-overlay[hidden] {
+      display: none !important;
+    }
+    .book-image-preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .book-image-preview-backdrop {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      background: rgba(18, 28, 40, 0.76);
+      cursor: zoom-out;
+    }
+    .book-image-preview-dialog {
+      position: relative;
+      width: min(94vw, 1100px);
+      max-height: 94vh;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.36);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 24px 70px rgba(18, 28, 40, 0.34);
+    }
+    .book-image-preview-close {
+      display: block;
+      margin: 0 0 12px auto;
+      padding: 7px 12px;
+      border: 1px solid #d7e2e8;
+      border-radius: 6px;
+      background: #f5f8fa;
+      color: #1f2f44;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .book-image-preview-image {
+      display: block;
+      width: 100%;
+      max-height: calc(94vh - 74px);
+      object-fit: contain;
+      border-radius: 6px;
+      background: #eef6f7;
+    }
+  </style>
+  <style id="book-release-metadata-style">
+    .book-release-meta {
+      margin: 0.55rem 0 0.8rem;
+      color: #536273;
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+    .book-release-meta dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.12rem 0.5rem;
+      margin: 0;
+    }
+    .book-release-meta dt {
+      color: #24384d;
+      font-weight: 650;
+    }
+    .book-release-meta dd {
+      margin: 0;
+    }
+    .book-release-home {
+      display: inline-block;
+      color: #0f6b78;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .book-release-home:hover,
+    .book-release-home:focus {
+      text-decoration: underline;
+    }
+    .book-release-home-wrap {
+      margin: 0.55rem 0 0.8rem;
+    }
+    .book-release-meta-sidebar {
+      margin-top: 0.8rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid #d7e2e8;
+    }
+    .book-release-meta-front {
+      padding: 0.7rem 0.85rem;
+      border-left: 3px solid #0f6b78;
+      background: #eef6f7;
+      max-width: 34rem;
+    }
+  </style>
+</head>
+<body class="nav-sidebar floating quarto-light">
+<div id="quarto-search-results"></div>
+<header class="headroom fixed-top" id="quarto-header">
+<nav class="quarto-secondary-nav">
+<div class="container-fluid d-flex">
+<button aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="quarto-btn-toggle btn" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="button" type="button">
+<i class="bi bi-layout-text-sidebar-reverse"></i>
+</button>
+<nav aria-label="breadcrumb" class="quarto-page-breadcrumbs"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-iv.html">Part IV: Serving systems</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n15.html"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></a></li></ol></nav>
+<a aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="flex-grow-1" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="navigation">
+</a>
+<button aria-label="Search" class="btn quarto-search-button" onclick="window.quartoOpenSearch();" type="button">
+<i class="bi bi-search"></i>
+</button>
+</div>
+</nav>
+</header>
+<!-- content -->
+<div class="quarto-container page-columns page-rows-contents page-layout-article" id="quarto-content">
+<!-- sidebar -->
+<nav class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto" id="quarto-sidebar">
+<div class="pt-lg-2 mt-2 text-left sidebar-header">
+<div class="sidebar-title mb-0 py-0">
+<a href="../">Advanced LLM Performance Engineering</a>
+</div>
+</div>
+<div class="mt-2 flex-shrink-0 align-items-center">
+<div class="sidebar-search">
+<div class="" id="quarto-search" title="Search"></div>
+</div>
+</div>
+<div class="book-release-home-wrap" data-book-release-location="sidebar-home">
+  <a class="book-release-home" href="../../">&larr; AI Systems Engineering</a>
+</div>
+    <div class="sidebar-menu-container">
+<ul class="list-unstyled mt-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../index.html">
+<span class="menu-text">Advanced LLM Performance Engineering</span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../frontmatter/ch-m4-index.html">
+<span class="menu-text">Introduction and Learning Path</span></a>
+</div>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-i.html">
+<span class="menu-text">Part I: Models, workload state, and GPU hardware</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-1" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n01.html">
+<span class="menu-text"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n02.html">
+<span class="menu-text"><span class="chapter-number">2</span>  <span class="chapter-title">Workload phases and live memory</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n03.html">
+<span class="menu-text"><span class="chapter-number">3</span>  <span class="chapter-title">GPU hardware and memory</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-ii.html">
+<span class="menu-text">Part II: GPU execution, measurement, and optimization</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-2" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-2">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n04.html">
+<span class="menu-text"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n05.html">
+<span class="menu-text"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n06.html">
+<span class="menu-text"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n07.html">
+<span class="menu-text"><span class="chapter-number">7</span>  <span class="chapter-title">Measurement, profiling and fair comparisons</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n08.html">
+<span class="menu-text"><span class="chapter-number">8</span>  <span class="chapter-title">Compilation and runtime</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iii.html">
+<span class="menu-text">Part III: Training and single-worker inference</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-3" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-3">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n10.html">
+<span class="menu-text"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n11.html">
+<span class="menu-text"><span class="chapter-number">10</span>  <span class="chapter-title">Inference phases and memory budgets</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n12.html">
+<span class="menu-text"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n13.html">
+<span class="menu-text"><span class="chapter-number">12</span>  <span class="chapter-title">Decode and KV-cache layout</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iv.html">
+<span class="menu-text">Part IV: Serving systems</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-4" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-4">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n14.html">
+<span class="menu-text"><span class="chapter-number">13</span>  <span class="chapter-title">Request scheduling and prefix reuse</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link active" href="../chapters/ch-m4-n15.html">
+<span class="menu-text"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n16.html">
+<span class="menu-text"><span class="chapter-number">15</span>  <span class="chapter-title">Serving measurement and stack selection</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-v.html">
+<span class="menu-text">Part V: Distributed execution</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-5" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-5">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n17.html">
+<span class="menu-text"><span class="chapter-number">16</span>  <span class="chapter-title">Collective data movement and its cost</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n18.html">
+<span class="menu-text"><span class="chapter-number">17</span>  <span class="chapter-title">Launching and measuring distributed work</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n19.html">
+<span class="menu-text"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n20.html">
+<span class="menu-text"><span class="chapter-number">19</span>  <span class="chapter-title">Tensor and sequence parallelism</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n21.html">
+<span class="menu-text"><span class="chapter-number">20</span>  <span class="chapter-title">Pipeline, expert and combined layouts</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n22.html">
+<span class="menu-text"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a aria-expanded="true" class="sidebar-item-text sidebar-link text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<span class="menu-text">Appendices</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-6">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/references.html">
+<span class="menu-text"><span class="chapter-number">A</span>  <span class="chapter-title">References</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/optional-labs.html">
+<span class="menu-text"><span class="chapter-number">B</span>  <span class="chapter-title">Optional Labs</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
+  <dl>
+    <dt>Publisher version</dt>
+    <dd>0.8.23</dd>
+    <dt>Released</dt>
+    <dd><time datetime="2026-10-25">2026-10-25</time></dd>
+  </dl>
+</section>
+</nav>
+<div class="quarto-sidebar-collapse-item" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" id="quarto-sidebar-glass"></div>
+<!-- margin-sidebar -->
+<div class="sidebar margin-sidebar" id="quarto-margin-sidebar">
+<nav class="toc-active" id="TOC" role="doc-toc">
+<h2 id="toc-title">Table of contents</h2>
+<ul>
+<li><a class="nav-link active" data-scroll-target="#sec-m4-c10-s11" href="#sec-m4-c10-s11" id="toc-sec-m4-c10-s11"><span class="header-section-number">14.1</span> Speculative decoding</a>
+<ul class="collapse">
+<li><a class="nav-link" data-scroll-target="#sec-m4-c10-s12" href="#sec-m4-c10-s12" id="toc-sec-m4-c10-s12"><span class="header-section-number">14.1.1</span> Draft and verify mechanism</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c10-s13" href="#sec-m4-c10-s13" id="toc-sec-m4-c10-s13"><span class="header-section-number">14.1.2</span> Implementation choices and measurement</a></li>
+</ul></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c10-s14" href="#sec-m4-c10-s14" id="toc-sec-m4-c10-s14"><span class="header-section-number">14.2</span> Constrained decoding</a></li>
+</ul>
+</nav>
+</div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+<header class="quarto-title-block default" id="title-block-header"><nav aria-label="breadcrumb" class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-iv.html">Part IV: Serving systems</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n15.html"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span class="quarto-section-identifier" id="sec-ch-m4-n15"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></span></h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+</header>
+<p>The scheduling chapter decided when requests run and when compatible KV state can be reused. The decoder still has to choose each next token. Two changes answer different questions: <span class="definition-term" data-custom-style="Definition Term"><strong>speculative decoding</strong></span> lets a cheaper draft method propose tokens for target-model verification, while <span class="definition-term" data-custom-style="Definition Term"><strong>constrained decoding</strong></span> limits which tokens are allowed so output can follow a schema or grammar. Speculation needs acceptance and correction rules to preserve the intended distribution when exact sampling is required. Constraints serve a validity requirement and may add work. Neither method inherits the other’s correctness check or performance evidence.</p>
+<div alt="A three-token draft suffix enters parallel target verification. Accept, first-rejection correction and all-pass extra-token branches lead to committed output. A schematic probability example rejects mat and corrects with dog. A separate parser tests age from the opening key prefix, masks invalid tokens and commits state only after selection. Timing, constraint cost and completion checks remain separate." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-n15-map">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-n15-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a aria-describedby="fig-m4-n15-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca" aria-label="Enlarge map" class="m4-map-link" data-map-viewer="" href="../assets/fig-m4-n15-map.png" rel="noopener" target="_blank"><img alt="A three-token draft suffix enters parallel target verification. Accept, first-rejection correction and all-pass extra-token branches lead to committed output. A schematic probability example rejects mat and corrects with dog. A separate parser tests age from the opening key prefix, masks invalid tokens and commits state only after selection. Timing, constraint cost and completion checks remain separate." class="img-fluid figure-img" src="../assets/fig-m4-n15-map.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" /></a>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-n15-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 14.1: Speculation commits a verified prefix and uses residual correction to preserve the target distribution. The probability bars and whole-run timing record are illustrative. Constraints mask illegal continuations and update request state only after selection; their validity and total cost require separate checks.
+</figcaption>
+</figure>
+</div>
+<section class="level2" data-number="14.1" id="sec-m4-c10-s11">
+<h2 class="anchored" data-anchor-id="sec-m4-c10-s11" data-number="14.1"><span class="header-section-number">14.1</span> Speculative decoding</h2>
+<p>Speculative decoding uses a cheaper draft method to propose several tokens and the target model to verify them. The method follows <em>Fast Inference from Transformers via Speculative Decoding</em><a class="footnote-ref" href="#fn1" id="fnref1" role="doc-noteref"><sup>1</sup></a>, which proposes candidates with an approximation model and verifies them in parallel with the target model without changing the output distribution. The draft method accelerates proposal, but the output is exact only when the acceptance and residual rules preserve the target distribution.</p>
+<p>The problem is serial target-model decoding. A normal autoregressive loop asks the large target model for one token at a time. Speculative decoding tries to advance several tokens per target-model verification pass by first generating a candidate suffix with a cheaper draft model.</p>
+<section class="level3" data-number="14.1.1" id="sec-m4-c10-s12">
+<h3 class="anchored" data-anchor-id="sec-m4-c10-s12" data-number="14.1.1"><span class="header-section-number">14.1.1</span> Draft and verify mechanism</h3>
+<p>The mechanism has four ordered stages: draft a candidate suffix, run the target model over its prefixes in parallel, accept the longest prefix that passes the tests, and sample one more token. For γ draft tokens, the algorithm needs γ + 1 target next-token distributions: one at each draft position and one after the whole suffix. A target verification can produce them in parallel; a serving engine may already have the first distribution from its preceding target step. A rejection uses target p and draft q at that position for the corrected residual token. If all proposals pass, the last target distribution supplies the extra token without another target pass. The equations and worked example below explain these steps before implementation choices are considered.</p>
+<p>Let p(x) and q(x) be normalized target and draft next-token distributions over the same vocabulary, conditioned on the same token prefix and incorporating the chosen sampling settings. The draft model samples a short candidate suffix cheaply. The target model evaluates that suffix in a larger verification pass. Each proposed token is accepted with a rule based on how much the draft distribution overstated or understated that token relative to the target distribution. If a token is rejected, the algorithm samples a replacement from a fallback distribution derived from the target and draft distributions, then discards the unaccepted suffix.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>One word, two meanings: residual</strong></p>
+<p><strong>Residual connection:</strong> the addition that carries a sub-layer’s input forward alongside its output, so the sub-layer only has to produce the difference (<a href="ch-m4-n01.html#sec-m4-c01-s09">the model behind the workload, Section 1.1</a>). It is part of the model’s architecture.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Residual distribution:</strong></span> what is left of the target distribution p after the draft distribution q is subtracted, with negative values set to zero and the result renormalized. It is the distribution a rejected token is resampled from, and it is what keeps the output exact.</p>
+<p>The shared word means the remaining part in both cases, but the two refer to different objects: one is a tensor addition inside the model, and the other is a probability correction in the sampling algorithm.</p>
+</div>
+<p>The standard acceptance and residual rules preserve the target distribution:<a class="footnote-ref" href="#fn2" id="fnref2" role="doc-noteref"><sup>2</sup></a></p>
+<p><span id="eq-m4-c10-e01"><span class="math display">\[
+\text{Acceptance Probability} = \min\left(1, \frac{p(x)}{q(x)}\right)
+\tag{14.1}\]</span></span></p>
+<p>When a draft token x is rejected, a corrected token is sampled from the residual distribution:</p>
+<p><span id="eq-m4-c10-e02"><span class="math display">\[
+p'(x) = \frac{\max(0, p(x) - q(x))}{\sum_{y} \max(0, p(y) - q(y))}
+\tag{14.2}\]</span></span></p>
+<p>For one position, a token x is proposed with probability q(x). Multiplying by its acceptance probability gives accepted output mass min(p(x), q(x)). Tokens with q(x) = 0 cannot be proposed. Let R be the rejection probability, 1 minus the sum of those accepted masses over the vocabulary. Since p sums to one, R is also the sum of max(p(x) - q(x), 0). When R &gt; 0, rejection followed by residual sampling contributes R times p’(x) = max(p(x) - q(x), 0). Adding accepted and corrected mass gives p(x) for each token. If R = 0, p and q coincide and rejection cannot occur in exact arithmetic, so residual normalization is unnecessary.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Where rejected probability goes</strong></p>
+<p>For an illustrative vocabulary (A, B, C), take p = (0.6, 0.3, 0.1) and q = (0.2, 0.5, 0.3) at one fixed prefix. The acceptance probabilities are (1, 0.6, 1/3). Multiplying each by its proposal probability gives accepted masses (0.2, 0.3, 0.1), totaling 0.6. Thus rejection occurs with probability 0.4.</p>
+<p>The missing target mass is max(p - q, 0) = (0.4, 0, 0). Dividing by 0.4 gives residual probabilities (1, 0, 0): every rejection supplies A. The final output masses are (0.2, 0.3, 0.1) + 0.4 times (1, 0, 0) = (0.6, 0.3, 0.1), exactly p. Sampling ordinary p after rejection would instead produce (0.44, 0.42, 0.14), changing the target distribution.</p>
+<p>This calculation explains the correction rule across repeated samples, not a requirement that a particular draft token equal the target’s most likely token. Applying the same rule at each retained prefix preserves the next-token distribution at every step. After the first rejection, later proposals have the wrong conditioning prefix and are discarded. If all proposals survive, the extra token is sampled directly from the target after that suffix.</p>
+</div>
+<p>A simple sequential cost model relates expected progress to the draft acceptance rate alpha, candidate length gamma, and draft-to-target cost ratio c. It assumes a constant independent acceptance probability, gamma sequential draft steps, and one target verification whose cost is approximated by one ordinary target step.</p>
+<p>Every verification commits one correction token after a rejection or one extra target token after all proposals survive. Retaining at least i draft tokens requires the first i proposals to be accepted, with probability alpha^i under the model’s assumptions. Each retained position adds one token when reached. Averaging these contributions gives 1 + alpha + alpha^2 + … + alpha^gamma, the geometric sum written below:</p>
+<p><span id="eq-m4-c10-e03"><span class="math display">\[
+\text{Expected Tokens} = \frac{1 - \alpha^{\gamma + 1}}{1 - \alpha}
+\tag{14.3}\]</span></span></p>
+<p>Here c = time(M_q) / time(M_p) is the execution-time ratio of one draft step to one target step. In units of one ordinary target step, the draft costs gamma times c and verification costs one more. Dividing expected advance by this cost, gamma c + 1, gives the estimated speedup for long enough generations. Near the generation limit, there may be too few remaining tokens to obtain that average gain.</p>
+<p><span id="eq-m4-c10-e04"><span class="math display">\[
+\text{Speedup} = \frac{1 - \alpha^{\gamma + 1}}{(1 - \alpha)(\gamma c + 1)}
+\tag{14.4}\]</span></span></p>
+<p>As alpha approaches 1, the expected advance approaches gamma + 1 tokens. Real systems can deviate from this estimate because target verification cost changes with batch shape, removing KV entries computed for a rejected suffix (<span class="definition-term" data-custom-style="Definition Term"><strong>cache rollback</strong></span>) costs work, and requests do not share one constant acceptance probability.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-88"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: Estimating speculative speedup</strong></p>
+<p><strong>Illustrative assumptions:</strong> Take gamma = 4 draft tokens, theoretical alpha = 0.8, and c = 0.2 draft-to-target cost ratio. These are assumed inputs to the cost model, not benchmark measurements.</p>
+<p><strong>Expected advance:</strong> 1 + 0.8 + 0.64 + 0.512 + 0.4096 = 3.3616, or 3.36 tokens per target verification. This is also (1 - 0.8^5) / (1 - 0.8). It includes the final target or residual-sampled token, not only accepted draft tokens.</p>
+<p><strong>Estimated speedup:</strong> 3.36 / (4 x 0.2 + 1) = 1.87x before rollback, scheduler overhead, cache maintenance, and batch-shape effects.</p>
+<p><strong>Validation:</strong> Compare the estimate with wall-clock target verification, draft work, rollback, and serving-scheduler time on the same prompt distribution.</p>
+</div></div>
+<p>The exact acceptance rule preserves the target distribution, but speed depends on accepted progress relative to draft, verification, rollback, and cache-maintenance cost. The next question is which draft design and candidate length minimize measured end-to-end latency for the actual prompt classes.</p>
+</section>
+<section class="level3" data-number="14.1.2" id="sec-m4-c10-s13">
+<h3 class="anchored" data-anchor-id="sec-m4-c10-s13" data-number="14.1.2"><span class="header-section-number">14.1.2</span> Implementation choices and measurement</h3>
+<p>The theoretical alpha is the mean conditional probability that a draft proposal is accepted at a prefix, under the independence assumptions used in the cost model. A mean retained-prefix length, even divided by gamma, is not that parameter: positions after the first rejection do not belong to the committed continuation.</p>
+<p>The acceptance rule, the residual correction, and the exactness guarantee are defined in <a href="#sec-m4-c10-s11">speculative decoding (Section 14.1)</a>. Three implementation choices remain:</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Parallel verification:</strong></span> The target model evaluates the drafted suffix in one larger forward pass instead of one target pass per drafted token.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Lenience:</strong></span> A relaxation that can improve speed by accepting more tokens, but it no longer has the same exact-distribution guarantee and must be evaluated as a quality/speed trade-off.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">N-gram or context-copy draft:</strong></span> A near-zero-cost approximator that proposes tokens from repeated recent context rather than a separate neural draft model. It is attractive when text has strong repetition and model loading a second draft is too expensive.</li>
+</ul>
+<p>An example experiment pairs a larger target model with a smaller draft model and tokenizes the same fixed prompt sample from the intended text domain in both comparison arms. Keep the stopping rule, output-token count and timing interval the same for the target-only comparison. Record retained draft-prefix lengths separately from committed output-token counts and elapsed time, and report mean accepted-prefix length plus committed tokens per measured wall time. Coloring proposed tokens by accepted or rejected status shows whether progress comes from long accepted runs or occasional accepted proposals; measured time and committed tokens determine whether either pattern improves speed.</p>
+<p>Speculative decoding helps when the draft is cheap, aligned with the target, and verification batches efficiently. It is weak when the target model is already saturated by a large batch, when the draft is inaccurate for the domain, when gamma is too large for the acceptance rate, or when KV-cache rollback and CPU sampling overhead dominate.</p>
+<p>Accepted-prefix lengths show how far verification advances through each proposal. The table describes qualitative acceptance regimes, not an estimator of alpha from those lengths. Any engine-reported acceptance rate needs its own numerator, denominator, and treatment of positions after the first rejection. Draft cost, target batch efficiency, rollback cost, and serving-scheduler pressure determine whether that progress saves time.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c10-t02">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c10-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 14.1: How speculative-decoding acceptance rate affects expected speed.
+</figcaption>
+<div aria-describedby="tbl-m4-c10-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Acceptance-rate range</th>
+<th>What it means</th>
+<th>Likely speed result</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>High</td>
+<td>Most drafted tokens survive target verification</td>
+<td>Speculation can reduce target-model passes if the draft is cheap and verification is batched well</td>
+<td>Increase candidate length carefully until rollback or verification cost grows</td>
+</tr>
+<tr class="even">
+<td>Medium</td>
+<td>Some runs are accepted but rejections are frequent</td>
+<td>Speedup is workload-dependent and may vary by prompt domain</td>
+<td>Measure by prompt class; tune candidate length, draft model, and batching policy</td>
+</tr>
+<tr class="odd">
+<td>Low</td>
+<td>Draft proposals rarely match the target distribution</td>
+<td>Extra draft work and rollback can make decoding slower</td>
+<td>Use a better draft, reduce candidate length, or disable speculation for that traffic class</td>
+</tr>
+<tr class="even">
+<td>High acceptance but no speedup</td>
+<td>The target path is already saturated or overhead moved elsewhere</td>
+<td>Wall time stays flat despite good token acceptance</td>
+<td>Inspect GPU timeline, scheduler gaps, KV rollback, and CPU sampling work</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>For a speculative-decoding comparison, record proposed tokens, target verification, retained-prefix lengths, committed token counts, gamma, and measured wall time together. Theoretical alpha and c belong to the separate cost-model estimate. Acceptance alone is not evidence of faster service.</p>
+</section>
+</section>
+<section class="level2" data-number="14.2" id="sec-m4-c10-s14">
+<h2 class="anchored" data-anchor-id="sec-m4-c10-s14" data-number="14.2"><span class="header-section-number">14.2</span> Constrained decoding</h2>
+<p>Constrained decoding restricts output to a structured language, such as a JSON schema, grammar, regular expression, or finite set of choices. It belongs to the serving-engine or decoder layer between model logits and token selection. The reliability benefit is valid structured output. The performance cost is maintaining one constraint state and valid-token mask per active request.</p>
+<p>In a finite-state design, a <span class="definition-term" data-custom-style="Definition Term"><strong>state</strong></span> records progress through the permitted character sequence. A <span class="definition-term" data-custom-style="Definition Term"><strong>transition</strong></span> consumes a character along a labeled edge to another state. The current state determines which continuations remain possible. Some states also permit completion of the whole constrained output.</p>
+<p>One implementation path from JSON schema to regular expression, finite-state machine, and logit mask represents one compiled-constraint design, following <em>Efficient Guided Generation for Large Language Models</em><a class="footnote-ref" href="#fn3" id="fnref3" role="doc-noteref"><sup>3</sup></a>. A regular expression or finite choice set can use finite-state machinery directly with a vocabulary index over valid continuations. Nested JSON or general grammar constraints may instead need parser or grammar-stack state beyond finite-state scope. In each case, a constraint compiler produces runtime state that identifies which next-token byte sequences remain valid.</p>
+<p>At every decode step, the constraint runtime keeps the current parser state, derives legal next terminals or byte prefixes, maps those possibilities to tokenizer IDs, constructs a vocabulary-sized valid-token mask, masks invalid logits, samples or selects one remaining token, and advances the parser state with that token. Tokenization matters because one vocabulary token can contain several characters or a partial structural sequence. Validity cannot be implemented as a simple one-character lookup.</p>
+<p>Compiling the constraint, matching token strings to grammar continuations, constructing masks, and updating parser state add CPU or scheduler work. Requests with different constraint states may also fragment a batch. A validity gain does not imply a speed gain.</p>
+<p>Checking a candidate token does not advance the request’s constraint state; only the selected token commits that change. The end-of-sequence token (EOS) is allowed only when the full constraint permits termination. An output-length limit can stop generation before that point and leave incomplete output.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-84"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: The age-field token walk</strong></p>
+<p>This simplified character machine checks one field fragment inside an object. The surrounding constraint has already consumed <code>{"</code> before state 0. The local machine then requires the key <code>age</code>, its closing quote, a colon, one or more digits, and a comma. It has these eight states and only these local edges:</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c10-t05">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c10-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 14.2: Character transitions in the age-field fragment.
+</figcaption>
+<div aria-describedby="tbl-m4-c10-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>State</th>
+<th>Progress so far</th>
+<th>Allowed next character and destination</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>Opening key quote consumed</td>
+<td><code>a</code> -&gt; 1</td>
+</tr>
+<tr class="even">
+<td>1</td>
+<td><code>a</code> consumed</td>
+<td><code>g</code> -&gt; 2</td>
+</tr>
+<tr class="odd">
+<td>2</td>
+<td><code>ag</code> consumed</td>
+<td><code>e</code> -&gt; 3</td>
+</tr>
+<tr class="even">
+<td>3</td>
+<td><code>age</code> consumed</td>
+<td><code>"</code> -&gt; 4</td>
+</tr>
+<tr class="odd">
+<td>4</td>
+<td>Closing key quote consumed</td>
+<td><code>:</code> -&gt; 5</td>
+</tr>
+<tr class="even">
+<td>5</td>
+<td>Colon consumed; no value digit yet</td>
+<td>Any digit <code>0</code> through <code>9</code> -&gt; 6</td>
+</tr>
+<tr class="odd">
+<td>6</td>
+<td>At least one value digit consumed</td>
+<td>Any digit <code>0</code> through <code>9</code> -&gt; 6; <code>,</code> -&gt; 7</td>
+</tr>
+<tr class="even">
+<td>7</td>
+<td>Field and following comma consumed</td>
+<td>Hand control to the surrounding object constraint</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Unlisted local characters are rejected. This toy fragment has no whitespace edges. Its digit loop alone does not enforce JSON number syntax: for example, it would admit leading-zero digit strings. A full JSON or schema constraint must additionally enforce number syntax, any required value range, and the rest of the object. This machine demonstrates token matching, not a complete JSON validator.</p>
+<p>For a vocabulary token whose decoded text is <code>age</code>, the runtime checks all three edges: <code>a</code> takes 0 to 1, <code>g</code> takes 1 to 2, and <code>e</code> takes 2 to 3. The token is allowed and its ending state is 3. <code>Age</code> and <code>hou</code> fail at their first character. A token beginning legally but containing a later illegal character must also be masked. These examples apply when the tokenizer contains the corresponding token IDs.</p>
+<p>The runtime tests candidates from the same current state without committing their trial transitions. It sets each valid token ID’s mask entry to allowed, masks the others before selection, and updates the request’s state only for the selected token. Selecting <code>age</code> therefore commits state 3, where the next character must be the closing quote.</p>
+<p>The closing quote moves 3 to 4, and the colon moves 4 to 5. For the value <code>27</code>, <code>2</code> moves 5 to 6, <code>7</code> loops at 6, and the comma moves 6 to 7. The resulting prefix <code>{"age":27,</code> is not a completed JSON document. No local state 0 through 7 establishes whole-document completion. The end-of-sequence token (EOS) is allowed only when the full constraint permits termination, after the remaining fields and closing syntax. Ending at a length limit before that point produces incomplete output, not valid completion.</p>
+</div></div>
+<p>The schema can be compiled before requests arrive, and an engine may reuse token masks for repeated states. Each request still needs its own current state. The mask-build time, state-update time, constrained TPOT, and completion validity reveal the runtime cost of that work.</p>
+<p>The practical question is whether validity is worth its decode overhead for the traffic class. Group requests with the same constraint when the engine supports it, precompile stable schemas, and measure constrained Time Per Output Token (TPOT) separately from unconstrained decode. Schema enforcement checks JSON structure. Application validation checks the business rules.</p>
+<p>A useful cache hit, a long accepted draft prefix, or a valid structured response shows only part of the result. Their lookup, transfer, verification, and constraint costs also affect the time a user waits. <a href="ch-m4-n16.html#sec-m4-c10-s15">Serving measurement and stack selection (Section 15.1)</a> places those effects inside a fixed request workload and the service’s latency, quality, and cost requirements.</p>
+</section>
+<section class="footnotes footnotes-end-of-document" data-m4-endnotes="1" id="footnotes" role="doc-endnotes"><h2 data-m4-endnotes-heading="1" data-m4-fold-ui="references-heading">References</h2><div data-m4-endnotes-body="1" data-m4-fold-created="endnotes-body" id="m4-endnotes-body">
+<hr/>
+<ol>
+<li id="fn1"><p>Leviathan, Y., Kalman, M., &amp; Matias, Y. (2023). <em>Fast Inference from Transformers via Speculative Decoding</em>. In <em>Proceedings of the 40th International Conference on Machine Learning (ICML 2023, Oral)</em>, preprint at <a href="https://arxiv.org/abs/2211.17192">Speculative decoding paper preprint</a> (<a href="https://doi.org/10.48550/arXiv.2211.17192">DOI</a>), v1 submitted 2022-11-30, v2 revised 2023-05-18. Supports draft-then-verify with acceptance rule min(1, p(x)/q(x)) and residual sampling preserving the target distribution, plus the expected-token and speedup equations used in <a href="#sec-m4-c10-s12">Section 14.1.1</a>. Limit: reported 2 to 3 times acceleration on T5-XXL needs a cheap aligned draft and high acceptance; low acceptance or costly draft removes the gain.<a class="footnote-back" href="#fnref1" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>Leviathan, Y., Kalman, M., &amp; Matias, Y. (2023). <em>Fast Inference from Transformers via Speculative Decoding</em>. In <em>Proceedings of the 40th International Conference on Machine Learning (ICML 2023, Oral)</em>, preprint at <a href="https://arxiv.org/abs/2211.17192">Speculative decoding paper preprint</a> (<a href="https://doi.org/10.48550/arXiv.2211.17192">DOI</a>), v1 submitted 2022-11-30, v2 revised 2023-05-18. Supports draft-then-verify with acceptance rule min(1, p(x)/q(x)) and residual sampling preserving the target distribution, plus the expected-token and speedup equations used in <a href="#sec-m4-c10-s12">Section 14.1.1</a>. Limit: reported 2 to 3 times acceleration on T5-XXL needs a cheap aligned draft and high acceptance; low acceptance or costly draft removes the gain.<a class="footnote-back" href="#fnref2" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p>Willard, B. T., &amp; Louf, R. (2023). <em>Efficient Guided Generation for Large Language Models</em>. Preprint at <a href="https://arxiv.org/abs/2307.09702">Guided generation paper preprint</a> (<a href="https://doi.org/10.48550/arXiv.2307.09702">DOI</a>), v1 submitted 2023-07-19, v4 revised 2023-08-19. Supports reformulating guided generation as finite-state transitions with an index over the model vocabulary and valid-token masking. Limit: finite-state scope covers regular expressions and finite choices directly; nested JSON or general grammars need additional parser or grammar-stack state, and overhead depends on schema and batching.<a class="footnote-back" href="#fnref3" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</div></section>
+</main> <!-- /main -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const automaticLongContentFolding = false;
+  const referenceSections = document.querySelectorAll(
+    'main.content section.footnotes[role="doc-endnotes"]'
+  );
+
+  referenceSections.forEach((section) => {
+    if (section.closest("details.publisher-chapter-references")) return;
+
+    const details = document.createElement("details");
+    details.className = "publisher-chapter-references";
+    const summary = document.createElement("summary");
+    const count = section.querySelectorAll("ol > li").length;
+    summary.textContent = count ? `References (${count})` : "References";
+
+    section.parentNode.insertBefore(details, section);
+    details.append(summary, section);
+  });
+
+  const openFoldTarget = (target) => {
+    const details = target?.closest(
+      "details.publisher-chapter-references, details.publisher-long-content"
+    );
+    if (details) details.open = true;
+  };
+
+  const targetFromHash = (hash) => {
+    if (!hash || hash === "#") return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('a[href*="#"]');
+    if (!link) return;
+    let destination;
+    try {
+      destination = new URL(link.getAttribute("href") || "", location.href);
+    } catch (_error) {
+      return;
+    }
+    if (destination.href.split("#")[0] !== location.href.split("#")[0]) return;
+    openFoldTarget(targetFromHash(destination.hash));
+  });
+
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
+    if (control?.classList.contains("publisher-fold-never")) return "never";
+    if (control?.classList.contains("publisher-fold-always")) return "always";
+    if (control?.classList.contains("publisher-fold-open")) return "open";
+    const requested = control?.dataset.publisherFold || "auto";
+    return ["auto", "never", "always", "open"].includes(requested)
+      ? requested
+      : "auto";
+  };
+
+  const foldCandidate = (candidate, kind) => {
+    if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
+
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
+    if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
+    const minimumFoldHeight = 320;
+    const foldHeight = Math.max(
+      minimumFoldHeight,
+      Math.round(document.documentElement.clientHeight * 0.5)
+    );
+    if (mode === "auto" && candidate.getBoundingClientRect().height <= foldHeight) return;
+
+    const titleSource = kind === "table"
+      ? candidate.querySelector("figcaption, caption")
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
+    const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
+
+    const details = document.createElement("details");
+    details.className = `publisher-long-content publisher-long-${kind}`;
+    if (mode === "open") details.open = true;
+    const summary = document.createElement("summary");
+    if (titleSource && label) {
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
+    } else {
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
+    }
+    const body = document.createElement("div");
+    body.className = "publisher-fold-body";
+    if (titleSource) titleSource.classList.add("publisher-fold-title-source");
+
+    candidate.parentNode.insertBefore(details, candidate);
+    details.append(summary, body);
+    body.append(candidate);
+  };
+
+  const foldLongContent = () => {
+    if (!automaticLongContentFolding) return;
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
+    document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
+      const float = figure.parentElement?.classList.contains("quarto-float")
+        ? figure.parentElement
+        : figure;
+      foldCandidate(float, "table");
+    });
+    document.querySelectorAll("main.content table").forEach((table) => {
+      if (!table.closest("figure.quarto-float-tbl")) foldCandidate(table, "table");
+    });
+    openFoldTarget(targetFromHash(location.hash));
+  };
+
+  if (document.readyState === "complete") {
+    requestAnimationFrame(foldLongContent);
+  } else {
+    window.addEventListener("load", () => requestAnimationFrame(foldLongContent), {
+      once: true,
+    });
+  }
+
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
+  document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
+  const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
+  window.addEventListener("hashchange", openLocationTarget);
+  openLocationTarget();
+});
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+<div class="nav-page nav-page-previous">
+<a aria-label="Request scheduling and prefix reuse" class="pagination-link" href="../chapters/ch-m4-n14.html">
+<i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">13</span>  <span class="chapter-title">Request scheduling and prefix reuse</span></span>
+</a>
+</div>
+<div class="nav-page nav-page-next">
+<a aria-label="Serving measurement and stack selection" class="pagination-link" href="../chapters/ch-m4-n16.html">
+<span class="nav-page-text"><span class="chapter-number">15</span>  <span class="chapter-title">Serving measurement and stack selection</span></span> <i class="bi bi-arrow-right-short"></i>
+</a>
+</div>
+</nav>
+</div> <!-- /content -->
+<script data-m4-fold-ui="script" defer="defer" src="../html-folds/folds.js"></script>  <div class="book-image-preview-overlay" data-book-image-overlay hidden>
+    <button class="book-image-preview-backdrop" type="button" data-book-image-close aria-label="Close image preview"></button>
+    <div class="book-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview">
+      <button class="book-image-preview-close" type="button" data-book-image-close>Close</button>
+      <img class="book-image-preview-image" data-book-image-preview-img alt="">
+    </div>
+  </div>
+  <script id="book-image-preview-script">
+    (() => {
+      if (window.__bookImagePreviewReady) {
+        return;
+      }
+      window.__bookImagePreviewReady = true;
+
+      const overlay = document.querySelector("[data-book-image-overlay]");
+      const preview = document.querySelector("[data-book-image-preview-img]");
+      const closeButtons = document.querySelectorAll("[data-book-image-close]");
+      const closeButton = overlay ? overlay.querySelector(".book-image-preview-close") : null;
+      let restoreFocus = null;
+
+      if (!overlay || !preview) {
+        return;
+      }
+
+      function openPreview(image) {
+        restoreFocus = image;
+        preview.src = image.currentSrc || image.src;
+        preview.alt = image.alt || "";
+        overlay.hidden = false;
+        document.body.classList.add("book-image-preview-open");
+        if (closeButton) {
+          closeButton.focus();
+        }
+      }
+
+      function closePreview() {
+        if (overlay.hidden) {
+          return;
+        }
+        overlay.hidden = true;
+        preview.removeAttribute("src");
+        preview.alt = "";
+        document.body.classList.remove("book-image-preview-open");
+        if (restoreFocus) {
+          restoreFocus.focus();
+        }
+      }
+
+      document.querySelectorAll("img[data-book-image-preview]").forEach((image) => {
+        image.addEventListener("click", () => openPreview(image));
+        image.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPreview(image);
+          }
+        });
+      });
+      closeButtons.forEach((button) => {
+        button.addEventListener("click", closePreview);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!overlay.hidden && event.key === "Escape") {
+          closePreview();
+        }
+      });
+    })();
+  </script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "bf257544e13140429e7cbda3a16caddb"}'></script><!-- End Cloudflare Web Analytics -->
+<!-- book-ask-ai:start -->
+<link rel="stylesheet" href="../ask-ai-assets/ask-ai.css">
+<script id="book-ask-ai-config" type="application/json">{"endpoint": "https://course-ask-ai.course-ask-ai-backend.workers.dev/ask", "book": "module_4", "bookTitle": "", "version": ""}</script>
+<script defer src="../ask-ai-assets/ask-ai.js"></script>
+<!-- book-ask-ai:end -->
+</body></html>

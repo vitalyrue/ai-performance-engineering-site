@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"><head>
+<meta charset="utf-8"/>
+<meta content="quarto-1.10.18" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>6  Performance models – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta content="../" name="quarto:offset"/>
+<link href="../chapters/ch-m4-n07.html" rel="next"/>
+<link href="../chapters/ch-m4-n05.html" rel="prev"/>
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet"/>
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" id="quarto-text-highlighting-styles" rel="stylesheet"/>
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet"/>
+<link append-hash="true" data-mode="light" href="../site_libs/bootstrap/bootstrap-741cab1455972e99f328c2af765061c1.min.css" id="quarto-bootstrap" rel="stylesheet"/>
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+<link href="../styles.css" rel="stylesheet"/>
+<link data-reading-layout="true" href="../reading-layout/reading.css" rel="stylesheet"/><link data-m4-fold-ui="style" href="../html-folds/folds.css" rel="stylesheet"/><link data-map-style="" href="../map-viewer/viewer.css" rel="stylesheet"/><script data-map-script="" defer="" src="../map-viewer/viewer.js"></script>  <style id="book-image-preview-style">
+    img[data-book-image-preview] {
+      cursor: zoom-in;
+    }
+    img[data-book-image-preview]:focus {
+      outline: 3px solid rgba(15, 107, 120, 0.36);
+      outline-offset: 4px;
+    }
+    body.book-image-preview-open {
+      overflow: hidden;
+    }
+    .book-image-preview-overlay[hidden] {
+      display: none !important;
+    }
+    .book-image-preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .book-image-preview-backdrop {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      background: rgba(18, 28, 40, 0.76);
+      cursor: zoom-out;
+    }
+    .book-image-preview-dialog {
+      position: relative;
+      width: min(94vw, 1100px);
+      max-height: 94vh;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.36);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 24px 70px rgba(18, 28, 40, 0.34);
+    }
+    .book-image-preview-close {
+      display: block;
+      margin: 0 0 12px auto;
+      padding: 7px 12px;
+      border: 1px solid #d7e2e8;
+      border-radius: 6px;
+      background: #f5f8fa;
+      color: #1f2f44;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .book-image-preview-image {
+      display: block;
+      width: 100%;
+      max-height: calc(94vh - 74px);
+      object-fit: contain;
+      border-radius: 6px;
+      background: #eef6f7;
+    }
+  </style>
+  <style id="book-release-metadata-style">
+    .book-release-meta {
+      margin: 0.55rem 0 0.8rem;
+      color: #536273;
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+    .book-release-meta dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.12rem 0.5rem;
+      margin: 0;
+    }
+    .book-release-meta dt {
+      color: #24384d;
+      font-weight: 650;
+    }
+    .book-release-meta dd {
+      margin: 0;
+    }
+    .book-release-home {
+      display: inline-block;
+      color: #0f6b78;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .book-release-home:hover,
+    .book-release-home:focus {
+      text-decoration: underline;
+    }
+    .book-release-home-wrap {
+      margin: 0.55rem 0 0.8rem;
+    }
+    .book-release-meta-sidebar {
+      margin-top: 0.8rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid #d7e2e8;
+    }
+    .book-release-meta-front {
+      padding: 0.7rem 0.85rem;
+      border-left: 3px solid #0f6b78;
+      background: #eef6f7;
+      max-width: 34rem;
+    }
+  </style>
+</head>
+<body class="nav-sidebar floating quarto-light">
+<div id="quarto-search-results"></div>
+<header class="headroom fixed-top" id="quarto-header">
+<nav class="quarto-secondary-nav">
+<div class="container-fluid d-flex">
+<button aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="quarto-btn-toggle btn" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="button" type="button">
+<i class="bi bi-layout-text-sidebar-reverse"></i>
+</button>
+<nav aria-label="breadcrumb" class="quarto-page-breadcrumbs"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: GPU execution, measurement, and optimization</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n06.html"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></a></li></ol></nav>
+<a aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="flex-grow-1" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="navigation">
+</a>
+<button aria-label="Search" class="btn quarto-search-button" onclick="window.quartoOpenSearch();" type="button">
+<i class="bi bi-search"></i>
+</button>
+</div>
+</nav>
+</header>
+<!-- content -->
+<div class="quarto-container page-columns page-rows-contents page-layout-article" id="quarto-content">
+<!-- sidebar -->
+<nav class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto" id="quarto-sidebar">
+<div class="pt-lg-2 mt-2 text-left sidebar-header">
+<div class="sidebar-title mb-0 py-0">
+<a href="../">Advanced LLM Performance Engineering</a>
+</div>
+</div>
+<div class="mt-2 flex-shrink-0 align-items-center">
+<div class="sidebar-search">
+<div class="" id="quarto-search" title="Search"></div>
+</div>
+</div>
+<div class="book-release-home-wrap" data-book-release-location="sidebar-home">
+  <a class="book-release-home" href="../../">&larr; AI Systems Engineering</a>
+</div>
+    <div class="sidebar-menu-container">
+<ul class="list-unstyled mt-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../index.html">
+<span class="menu-text">Advanced LLM Performance Engineering</span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../frontmatter/ch-m4-index.html">
+<span class="menu-text">Introduction and Learning Path</span></a>
+</div>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-i.html">
+<span class="menu-text">Part I: Models, workload state, and GPU hardware</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-1" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n01.html">
+<span class="menu-text"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n02.html">
+<span class="menu-text"><span class="chapter-number">2</span>  <span class="chapter-title">Workload phases and live memory</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n03.html">
+<span class="menu-text"><span class="chapter-number">3</span>  <span class="chapter-title">GPU hardware and memory</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-ii.html">
+<span class="menu-text">Part II: GPU execution, measurement, and optimization</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-2" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-2">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n04.html">
+<span class="menu-text"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n05.html">
+<span class="menu-text"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link active" href="../chapters/ch-m4-n06.html">
+<span class="menu-text"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n07.html">
+<span class="menu-text"><span class="chapter-number">7</span>  <span class="chapter-title">Measurement, profiling and fair comparisons</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n08.html">
+<span class="menu-text"><span class="chapter-number">8</span>  <span class="chapter-title">Compilation and runtime</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iii.html">
+<span class="menu-text">Part III: Training and single-worker inference</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-3" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-3">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n10.html">
+<span class="menu-text"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n11.html">
+<span class="menu-text"><span class="chapter-number">10</span>  <span class="chapter-title">Inference phases and memory budgets</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n12.html">
+<span class="menu-text"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n13.html">
+<span class="menu-text"><span class="chapter-number">12</span>  <span class="chapter-title">Decode and KV-cache layout</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iv.html">
+<span class="menu-text">Part IV: Serving systems</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-4" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-4">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n14.html">
+<span class="menu-text"><span class="chapter-number">13</span>  <span class="chapter-title">Request scheduling and prefix reuse</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n15.html">
+<span class="menu-text"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n16.html">
+<span class="menu-text"><span class="chapter-number">15</span>  <span class="chapter-title">Serving measurement and stack selection</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-v.html">
+<span class="menu-text">Part V: Distributed execution</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-5" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-5">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n17.html">
+<span class="menu-text"><span class="chapter-number">16</span>  <span class="chapter-title">Collective data movement and its cost</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n18.html">
+<span class="menu-text"><span class="chapter-number">17</span>  <span class="chapter-title">Launching and measuring distributed work</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n19.html">
+<span class="menu-text"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n20.html">
+<span class="menu-text"><span class="chapter-number">19</span>  <span class="chapter-title">Tensor and sequence parallelism</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n21.html">
+<span class="menu-text"><span class="chapter-number">20</span>  <span class="chapter-title">Pipeline, expert and combined layouts</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n22.html">
+<span class="menu-text"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a aria-expanded="true" class="sidebar-item-text sidebar-link text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<span class="menu-text">Appendices</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-6">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/references.html">
+<span class="menu-text"><span class="chapter-number">A</span>  <span class="chapter-title">References</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/optional-labs.html">
+<span class="menu-text"><span class="chapter-number">B</span>  <span class="chapter-title">Optional Labs</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
+  <dl>
+    <dt>Publisher version</dt>
+    <dd>0.8.23</dd>
+    <dt>Released</dt>
+    <dd><time datetime="2026-10-25">2026-10-25</time></dd>
+  </dl>
+</section>
+</nav>
+<div class="quarto-sidebar-collapse-item" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" id="quarto-sidebar-glass"></div>
+<!-- margin-sidebar -->
+<div class="sidebar margin-sidebar" id="quarto-margin-sidebar">
+<nav class="toc-active" id="TOC" role="doc-toc">
+<h2 id="toc-title">Table of contents</h2>
+<ul>
+<li><a class="nav-link active" data-scroll-target="#sec-m4-c01-s10" href="#sec-m4-c01-s10" id="toc-sec-m4-c01-s10"><span class="header-section-number">6.1</span> Bottleneck classes and optimization levers</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c02-s08" href="#sec-m4-c02-s08" id="toc-sec-m4-c02-s08"><span class="header-section-number">6.2</span> Work, bytes, and time</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c05-s01" href="#sec-m4-c05-s01" id="toc-sec-m4-c05-s01"><span class="header-section-number">6.3</span> Quantities and formulas</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c05-s02" href="#sec-m4-c05-s02" id="toc-sec-m4-c05-s02"><span class="header-section-number">6.4</span> Limits on kernel performance</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c05-s03" href="#sec-m4-c05-s03" id="toc-sec-m4-c05-s03"><span class="header-section-number">6.5</span> Roofline analysis</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-n06-model-work" href="#sec-m4-n06-model-work" id="toc-sec-m4-n06-model-work"><span class="header-section-number">6.6</span> Model-work counts and utilization</a></li>
+</ul>
+</nav>
+</div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+<header class="quarto-title-block default" id="title-block-header"><nav aria-label="breadcrumb" class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: GPU execution, measurement, and optimization</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n06.html"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span class="quarto-section-identifier" id="sec-ch-m4-n06"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></span></h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+</header>
+<p>A roofline model combines the arithmetic work and memory traffic of a defined region with compute and bandwidth ceilings. The counts depend on the operation and phase: training backward, prompt prefill and one-token decode can move different data even with the same model weights.</p>
+<div alt="Memory, compute, launch and communication scenes suggest different measurements. A matrix operation shares one work, byte and time boundary. A qualitative roofline contrasts a valid below-roof measurement with an inconsistent above-roof record. Batch reuse, exact Amdahl sums and model FLOPs utilization answer separate performance questions." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-n06-map">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-n06-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a aria-describedby="fig-m4-n06-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca" aria-label="Enlarge map" class="m4-map-link" data-map-viewer="" href="../assets/fig-m4-n06-map.png" rel="noopener" target="_blank"><img alt="Memory, compute, launch and communication scenes suggest different measurements. A matrix operation shares one work, byte and time boundary. A qualitative roofline contrasts a valid below-roof measurement with an inconsistent above-roof record. Batch reuse, exact Amdahl sums and model FLOPs utilization answer separate performance questions." class="img-fluid figure-img" src="../assets/fig-m4-n06-map.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" /></a>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-n06-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 6.1: Roofline relates one region’s work, traffic and completed time to matching ceilings. Batch rows can reuse weights, and Amdahl limits how one improved region changes a whole step.
+</figcaption>
+</figure>
+</div>
+<p>Elapsed time places a measured result against those ceilings. A point below the roof shows a gap to the ideal bound; it does not identify the cause or prove that the gap can be closed. Launch overhead, synchronization, communication, cache behavior and inaccurate counts can all affect the comparison. <a href="ch-m4-n07.html#sec-m4-c05-s07">Profiler selection in Section 7.2.1</a> explains the evidence used to distinguish them.</p>
+<p>A <span class="definition-term" data-custom-style="Definition Term"><strong>bottleneck</strong></span> is the resource or dependency that currently limits one measured execution region. It is not a permanent label for the whole model: a training forward pass, an optimizer update, prompt prefill, one-token decode, and distributed synchronization can each be limited by a different resource.</p>
+<section class="level2" data-number="6.1" id="sec-m4-c01-s10">
+<h2 class="anchored" data-anchor-id="sec-m4-c01-s10" data-number="6.1"><span class="header-section-number">6.1</span> Bottleneck classes and optimization levers</h2>
+<p>A measurement names the slow region. The next decision is what kind of limit that region hits, because each kind has its own family of fixes. Two classifications organize the rest of the guide: bottleneck classes describe what limits a region, and optimization levers describe what a change does.</p>
+<p>A region’s <span class="definition-term" data-custom-style="Definition Term"><strong>bottleneck class</strong></span> identifies its limiting resource or wait. Capacity can instead limit whether the requested work fits at all. <a href="ch-m4-n01.html#sec-m4-c01-s01">Tensor storage (Section 1.2)</a> tells us how many bytes each object occupies. <a href="ch-m4-n02.html#sec-m4-c01-s02">Live state and memory (Section 2.1)</a> explains which objects stay live together and set peak memory. <a href="ch-m4-n02.html#sec-m4-c01-s03">Workload phases (Section 2.2)</a> and <a href="ch-m4-n02.html#sec-m4-c01-s04">the training step (Section 2.3)</a> identify which computation, transfers, and waits belong to the region being timed. These connections determine the measurements: arithmetic, bytes transferred, peak storage, and time spent waiting. Each class describes one region under measured conditions, not a permanent property of the model.</p>
+<p>When a region runs near its arithmetic throughput limit, it is <span class="definition-term" data-custom-style="Definition Term"><strong>compute-bound</strong></span>. When transfers run near the bandwidth limit of a memory tier, it is <span class="definition-term" data-custom-style="Definition Term"><strong>memory-bound</strong></span>. A <span class="definition-term" data-custom-style="Definition Term"><strong>latency-bound</strong></span> region has too little parallel work to hide memory or instruction delays, so neither throughput limit is reached. NVIDIA GPUs schedule threads in groups of 32. Each group is a warp. Occupancy, the fraction of supported warps active on a GPU processing unit, is one clue to available parallel work (<a href="ch-m4-n03.html#sec-m4-c02-s02">Section 3.1</a>); it is not a speed measurement by itself.</p>
+<p>A lever applied to one region improves the whole run only in proportion to that region’s share of the time. If a non-overlapped fraction <span class="math inline">\(f\)</span> of the step time is sped up by a factor <span class="math inline">\(k\)</span> and the remaining work and scheduling are unchanged, the new step takes <span class="math inline">\((1-f)+f/k\)</span> of the old time, so the overall speedup is</p>
+<p><span class="math display">\[ \text{speedup}=\frac{1}{(1-f)+f/k}. \]</span></p>
+<p>This relation is <span class="definition-term" data-custom-style="Definition Term"><strong>Amdahl’s law</strong></span>.<a class="footnote-ref" href="#fn1" id="fnref1" role="doc-noteref"><sup>1</sup></a></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: A 3x faster kernel</strong></p>
+<p><strong>Inputs:</strong> One kernel takes 40 percent of a training step (<span class="math inline">\(f=0.4\)</span>), and a rewrite makes it three times faster (<span class="math inline">\(k=3\)</span>).</p>
+<p><strong>Calculation:</strong> The new step takes <span class="math inline">\(0.6+0.4/3\approx0.733\)</span> of the old time, a speedup of <span class="math inline">\(1/0.733\approx1.36\times\)</span>. Even an infinitely fast kernel gives at most <span class="math inline">\(1/0.6\approx1.67\times\)</span>.</p>
+<p><strong>Conclusion:</strong> A region’s share of the time bounds what any lever applied to it can achieve, so measuring the share comes before choosing the fix. After the change, a new measurement identifies the resource or wait limiting the remaining exposed work. The largest remaining time share is a useful place to investigate, but its cause still needs evidence. The limiting region can move as described in <a href="ch-m4-n02.html#sec-m4-c01-s03">Section 2.2</a>.</p>
+</div>
+</section>
+<section class="level2" data-number="6.2" id="sec-m4-c02-s08">
+<h2 class="anchored" data-anchor-id="sec-m4-c02-s08" data-number="6.2"><span class="header-section-number">6.2</span> Work, bytes, and time</h2>
+<p>For a first projection-only estimate, one multiplication and one addition per weight give <span class="math inline">\(2N_p\)</span> <span class="definition-term" data-custom-style="Definition Term"><strong>floating-point operations (FLOPs)</strong></span> per token. Taking <span class="math inline">\(N_p=8\times10^9\)</span> gives 16 GFLOP, roughly 16 microseconds at an H100’s dense BF16 peak. The <a href="#sec-m4-n06-model-work">model-work estimate</a> below states the omitted operations and attention term. For a model whose projection weights exceed cache capacity, a small decode step typically reads most of those weights from HBM, so memory traffic can set the time. Arithmetic and data movement each impose a lower bound. Their maximum is an ideal estimate when they overlap completely. Choosing the right optimization therefore starts with knowing which of the two is slower.</p>
+<p>To a first approximation, arithmetic takes FLOPs divided by the peak compute rate, and data movement takes bytes moved divided by the memory bandwidth. Their ratio depends on one property of the operation:</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Arithmetic intensity</strong></span>: FLOPs performed per byte moved to or from memory, measured in FLOP/byte. It states how much arithmetic each fetched byte supports.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Ridge point</strong></span>: the peak compute rate divided by the memory bandwidth. At this intensity the two times are equal.</li>
+<li><strong class="m4-term-label">Memory-bound and compute-bound regions:</strong> below the ridge point, the bandwidth ceiling is lower than the compute ceiling. Above it, the compute ceiling is lower. These are the model’s limiting resources. A measured kernel can still be limited by launch overhead, latency, or poor utilization.</li>
+</ul>
+<p>For an H100 SXM GPU, the dense BF16 Tensor Core peak is about 989 TFLOP/s. NVIDIA’s specification lists 1,979 TFLOP/s with structured sparsity, twice the dense rate. With 3.35 TB/s of HBM bandwidth, the ridge point is <span class="math inline">\(989\times10^{12}/3.35\times10^{12}\approx295\)</span> FLOP/byte.<a class="footnote-ref" href="#fn2" id="fnref2" role="doc-noteref"><sup>2</sup></a> A BF16 operation must therefore perform about 295 arithmetic operations for every byte it moves before the arithmetic units, rather than memory, become the limit.</p>
+<p>Several token rows can reuse each loaded weight. Increasing the number of rows therefore adds arithmetic without requiring a separate weight read for each row, although input and output traffic also grows. This raises arithmetic intensity and can move the operation toward the compute limit.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-04"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: One projection at four batch sizes</strong></p>
+<p><strong>Inputs:</strong> A BF16 weight matrix of shape <span class="math inline">\(4{,}096\times4{,}096\)</span> multiplies a batch of <span class="math inline">\(B\)</span> token vectors of width 4,096, the query projection from <a href="ch-m4-n01.html#sec-m4-c01-s09">Section 1.1</a>. Each weight is used once per row in one multiply and one add, so the operation performs <span class="math inline">\(2\times B\times4{,}096^2=33{,}554{,}432\,B\)</span> FLOPs. It reads the weights once (<span class="math inline">\(2\times4{,}096^2=33{,}554{,}432\)</span> bytes) and reads and writes <span class="math inline">\(B\)</span> rows of 4,096 two-byte values (<span class="math inline">\(16{,}384\,B\)</span> bytes). The intensity is therefore <span class="math inline">\(33{,}554{,}432\,B/(33{,}554{,}432+16{,}384\,B)=B/(1+B/2{,}048)\)</span> FLOP/byte.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c02-t05">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c02-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 6.1: Work, estimated HBM bytes, and ideal time lower bounds for one 4,096 by 4,096 projection as the row count grows.
+</figcaption>
+<div aria-describedby="tbl-m4-c02-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 14%"/>
+<col style="width: 14%"/>
+<col style="width: 14%"/>
+<col style="width: 14%"/>
+<col style="width: 14%"/>
+<col style="width: 14%"/>
+<col style="width: 14%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Rows <span class="math inline">\(B\)</span></th>
+<th>FLOPs</th>
+<th>Bytes moved</th>
+<th>Intensity (FLOP/byte)</th>
+<th>Time at 3.35 TB/s</th>
+<th>Time at 989 TFLOP/s</th>
+<th>Limit</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>33.6 M</td>
+<td>33.6 MB</td>
+<td>1.0</td>
+<td>10.0 µs</td>
+<td>0.03 µs</td>
+<td>Memory</td>
+</tr>
+<tr class="even">
+<td>64</td>
+<td>2.15 G</td>
+<td>34.6 MB</td>
+<td>62</td>
+<td>10.3 µs</td>
+<td>2.2 µs</td>
+<td>Memory</td>
+</tr>
+<tr class="odd">
+<td>345</td>
+<td>11.6 G</td>
+<td>39.2 MB</td>
+<td>295</td>
+<td>11.7 µs</td>
+<td>11.7 µs</td>
+<td>Balanced</td>
+</tr>
+<tr class="even">
+<td>2,048</td>
+<td>68.7 G</td>
+<td>67.1 MB</td>
+<td>1,024</td>
+<td>20.0 µs</td>
+<td>69.5 µs</td>
+<td>Compute</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p><strong>Conclusion:</strong> With one row, which is one token of single-request decode, each weight byte supports about one FLOP, nearly 300 times below the ridge point. Under this HBM-traffic estimate, the memory-time lower bound is about 10 microseconds. Adding rows reuses each loaded weight, so this ideal bound grows slowly until about 345 rows, where the compute and memory bounds meet. This is why prefill and training, which process many tokens at once, tend to be compute-bound, while small-batch decode tends to be memory-bound. The estimate assumes that the weights come from HBM and that copying and computing overlap perfectly.</p>
+</div></div>
+<p>These two times give a lower bound, not a prediction. A kernel can be slower than both because of launch overhead, too little parallel work, poor memory access patterns, or synchronization. The counting rules and roofline model below generalize this projection estimate. The following measurement chapter then compares the bound with completed GPU work. The earlier <a href="ch-m4-n04.html#sec-m4-c03-s11">matrix-vector explanation</a> shows how access and parallelism affect the gap; the later decode chapter applies the same work-and-byte reasoning to a complete generation step.</p>
+</section>
+<section class="level2" data-number="6.3" id="sec-m4-c05-s01">
+<h2 class="anchored" data-anchor-id="sec-m4-c05-s01" data-number="6.3"><span class="header-section-number">6.3</span> Quantities and formulas</h2>
+<p>Performance models compare measured work, elapsed time, and data movement. The core quantities are floating-point operations, bytes moved through the memory level being modeled, arithmetic intensity, and achieved throughput. <a href="#sec-m4-c02-s08">Section 6.2</a> introduced arithmetic intensity and the ridge point. This section fixes the counting rules they depend on, because both the roofline model and profiler results use them. Arithmetic intensity is written as:</p>
+<p><span id="eq-m4-c05-e01"><span class="math display">\[
+\text{AI} = \frac{\text{FLOPs}}{\text{bytes moved}}
+\tag{6.1}\]</span></span></p>
+<p>The numerator and denominator must describe the same measured region and memory boundary. The definitions below make those counting choices explicit.</p>
+<ul>
+<li><strong class="m4-term-label">AI:</strong> Arithmetic intensity, measured in FLOPs per byte. Higher AI means more arithmetic is performed for each byte moved.</li>
+<li><strong class="m4-term-label">FLOPs:</strong> Floating-point operations performed by the kernel or phase. The count must match the operation being timed.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">bytes moved:</strong></span> Estimated traffic through the memory level being modeled, usually HBM for a first roofline pass. If the byte estimate ignores cache reuse or temporary buffers, the roofline conclusion can be wrong.</li>
+</ul>
+<p>For example, 2e12 FLOPs and 1e12 bytes gives AI = 2 FLOPs/byte. The formula is useful because it forces an explicit byte estimate, but it omits cache effects, compression, metadata traffic, and hidden workspace movement.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c05-t01">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c05-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 6.2: Byte-count starting points. They are lower bounds or first-pass estimates, not replacements for profiler counters.
+</figcaption>
+<div aria-describedby="tbl-m4-c05-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Workload fragment</th>
+<th>First byte-count estimate</th>
+<th>What the estimate misses</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Vector read and write</td>
+<td>Read n elements and write n elements: about 2 x n x dtype_bytes</td>
+<td>Cache reuse, write allocation policy, alignment, and vectorized transaction granularity.</td>
+</tr>
+<tr class="even">
+<td>GEMV y = Ax</td>
+<td>Read M x N matrix values, read N vector values, and write M outputs</td>
+<td>Repeated vector reuse from cache, partial sums in registers, batching, and fused final operations, such as bias or activation.</td>
+</tr>
+<tr class="odd">
+<td>GEMM C = AB</td>
+<td>Read A and B and write C as a lower bound</td>
+<td>Tiling can reuse A and B many times from on-chip storage, while poor tiling can add extra movement.</td>
+</tr>
+<tr class="even">
+<td>Naive attention scores</td>
+<td>Materializing scores costs batch x heads x sequence x sequence x dtype_bytes for the score tensor alone</td>
+<td>Masks, softmax temporaries, dropout, and whether an IO-aware kernel avoids the score tensor entirely.</td>
+</tr>
+<tr class="odd">
+<td>KV-cache decode read</td>
+<td>Read cached K and V for active tokens, layers, KV heads, head dimension, and dtype</td>
+<td>Paged-cache metadata, cache locality, sharing key/value heads among query heads, quantized cache formats, and batching policy.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The arithmetic count can be derived from the same dimensions as the byte estimate. In <code>C = AB</code>, with shapes <code>(M, K)</code>, <code>(K, N)</code>, and <code>(M, N)</code>, there are <code>M*N</code> output entries. Each accumulates <code>K</code> products. Counting one multiply plus one add as two FLOPs gives the usual estimate <code>2*M*N*K</code>, even when a fused multiply-add is one machine instruction<a class="footnote-ref" href="#fn3" id="fnref3" role="doc-noteref"><sup>3</sup></a>. This convention starts each output accumulator at zero and counts <code>K</code> multiplications and <code>K</code> additions, including the first addition to zero. A dot product written as <code>K</code> multiplies and <code>K-1</code> additions has an exact algebraic count of <code>2*K-1</code> instead. Bias, activation, output scaling, and other final operations are additional work if they are inside the measured region. For <a href="ch-m4-n05.html">Chapter 5</a>’s GEMV, <code>A</code> has shape <code>(M, N)</code>, so the same convention gives <code>2*M*N</code> FLOPs.</p>
+<p>Achieved throughput is computed from the measured runtime:</p>
+<p><span id="eq-m4-c05-e02"><span class="math display">\[
+\text{achieved throughput} = \frac{\text{FLOPs}}{\text{seconds}}
+\tag{6.2}\]</span></span></p>
+<p>This quotient is valid only when the operation count and elapsed time cover the same work. Reporting the operation count, elapsed time, and rate together makes the measurement checkable.</p>
+<ul>
+<li><strong>FLOPs:</strong> The same operation count used in the roofline estimate.</li>
+<li><strong>seconds:</strong> Measured elapsed time for the same region. Include launch, synchronization, and communication only if those costs are part of the question.</li>
+<li><strong>throughput:</strong> Measured work rate, usually reported as TFLOP/s for deep learning kernels.</li>
+</ul>
+<p>If the same 2e12-FLOP kernel runs in 0.020 seconds, achieved throughput is 100 TFLOP/s. This is an illustrative rate calculation, not a reported measurement or a hardware property. It becomes misleading when warmup, compilation, or unrelated synchronization is included accidentally.</p>
+<p>Monitoring tools report a different quantity under a similar name. The “GPU utilization” shown by <code>nvidia-smi</code> is the percentage of time over the sample period during which one or more kernels was executing on the GPU.<a class="footnote-ref" href="#fn4" id="fnref4" role="doc-noteref"><sup>4</sup></a> A single small kernel running continuously reports 100 percent while it occupies a tiny fraction of the SMs and arithmetic units. That figure therefore detects idle gaps between kernels, but it cannot show how efficiently the GPU works while kernels run. MFU and the kernel metrics in <a href="ch-m4-n07.html#sec-m4-c05-s09">Section 7.2.2</a> can.</p>
+<p>A roofline estimate compares the compute ceiling with the bandwidth ceiling<a class="footnote-ref" href="#fn5" id="fnref5" role="doc-noteref"><sup>5</sup></a>:</p>
+<p><span id="eq-m4-c05-e03"><span class="math display">\[
+\text{roofline bound} = \min(\text{peak compute}, \text{AI} \times \text{peak bandwidth})
+\tag{6.3}\]</span></span></p>
+<p>The ridge point is the arithmetic intensity where the bandwidth ceiling reaches the compute ceiling:</p>
+<p><span id="eq-m4-c05-e04"><span class="math display">\[
+\text{AI}_{\text{ridge}} = \frac{\text{peak compute}}{\text{peak memory bandwidth}}
+\tag{6.4}\]</span></span></p>
+<p>The two ceilings must refer to the selected dtype, operation path, and memory tier. These terms determine which side of the ridge point the workload occupies.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">peak compute:</strong></span> Best plausible arithmetic throughput for the selected precision, GPU generation, and kernel path. FP16, BF16, <span class="definition-term" data-custom-style="Definition Term"><strong>TF32</strong></span> (NVIDIA’s reduced-precision mode for FP32 matrix math, <a href="ch-m4-n10.html#sec-m4-c07-s04">Section 9.4</a>), FP8, and integer formats have different ceilings.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">peak bandwidth:</strong></span> Relevant memory bandwidth for the modeled path. HBM bandwidth is not the same as NVLink, PCIe, or network bandwidth.</li>
+<li><strong class="m4-term-label">AI times peak bandwidth:</strong> The bandwidth ceiling expressed as FLOP/s. It says how much compute can be sustained if every byte must be supplied at that bandwidth.</li>
+<li><strong class="m4-term-label">ridge point:</strong> Arithmetic intensity at which the bandwidth ceiling and compute ceiling meet. Left of the ridge, bandwidth is the first-order limit. Right of the ridge, compute throughput is the first-order limit.</li>
+</ul>
+<p>If AI = 2 FLOPs/byte and bandwidth is 3 TB/s, the memory ceiling is 6 TFLOP/s, so a 200 TFLOP/s compute peak does not matter for that kernel until reuse improves. The roofline omits scheduler overhead, launch overhead, synchronization, imperfect occupancy, dynamic shapes, and distributed communication.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">For an illustrative FP16 matrix product with M=64, N=32, and K=128, the one-read-per-input, one-write-per-output estimate gives about 18.29 FLOPs per byte. At matching ceilings of 200 TFLOP/s and 3 TB/s, bandwidth caps the roof at about 54.86 TFLOP/s. That ceiling is not achieved speed, especially for this small launch.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-30"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Example: Matrix dimensions to a roofline bound</span><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: From matrix dimensions to a roofline bound</strong></p>
+<p><strong>Inputs and work:</strong> Consider <code>C = AB</code> with <code>M=64</code>, <code>N=32</code>, and <code>K=128</code>, FP16 inputs and output, and no bias or read of an old <code>C</code>. There are <code>64*32 = 2,048</code> output entries, each with <code>128</code> multiply-add steps. At two FLOPs per step, the count is <code>2*64*32*128 = 524,288</code> FLOPs.</p>
+<p><strong>Bytes and intensity:</strong> Using the table’s one-read-per-input, one-write-per-output estimate gives <code>2*(64*128 + 128*32 + 64*32) = 28,672</code> bytes. FP16 occupies two bytes per stored value regardless of a wider accumulator. Arithmetic intensity is <code>524,288 / 28,672</code>, approximately <code>18.29 FLOPs/byte</code>.</p>
+<p><strong>Ceiling and interpretation:</strong> For illustrative matching ceilings of <code>200 TFLOP/s</code> and <code>3 TB/s</code>, the bandwidth roof is <code>18.29*3 = 54.86 TFLOP/s</code>, below the compute roof. The model therefore predicts a bandwidth ceiling of about <code>54.86 TFLOP/s</code>, not an achieved speed. The tiny shape can also be limited by launch overhead. Repeated HBM reads or extra writes increase the byte count and lower this roof, while inputs already in cache require a different HBM traffic estimate. No measured runtime is supplied for this calculation.</p>
+</div></div>
+</section>
+<section class="level2" data-number="6.4" id="sec-m4-c05-s02">
+<h2 class="anchored" data-anchor-id="sec-m4-c05-s02" data-number="6.4"><span class="header-section-number">6.4</span> Limits on kernel performance</h2>
+<p>A measured region can take longer because it is moving bytes, performing arithmetic, waiting on dispatch, or waiting for other devices. The following labels make those causes explicit.</p>
+<p>These categories are diagnostic, not labels for whole applications. One training step can contain compute-bound GEMMs, memory-bound optimizer updates, launch-bound small operations, and communication-bound gradient synchronization. The right optimization depends on the region being measured.</p>
+<p>The following four labels describe a measured region. Each names the dominant cost and points to the first change worth testing:</p>
+<ul>
+<li><strong>Memory-bound:</strong> Runtime follows bytes moved. Key-value cache reads during decode are a common example. Test locality, precision, coalescing, and cache layout.</li>
+<li><strong>Compute-bound:</strong> Runtime follows arithmetic throughput. Large dense projections are a common example. Test Tensor Core use, dimension alignment, and useful batch size.</li>
+<li><strong>Launch-bound:</strong> GPU work is short and CPU or dispatch gaps dominate. Many small eager operations are a common example. Test fusion, compilation, or CUDA Graph replay.</li>
+<li><strong>Communication-bound:</strong> Collectives dominate the timeline. Distributed gradient synchronization is a common example. Test overlap, sharding, rank placement, and topology.</li>
+</ul>
+<p>These four classes connect the local work to possible limits. The following measurement chapter adds evidence for launch, input, communication and scheduler waits in <a href="ch-m4-n07.html#sec-m4-n07-trace-interpretation">trace interpretation</a>. Arithmetic intensity then tests whether memory bandwidth or compute throughput can explain the measured region.</p>
+</section>
+<section class="level2" data-number="6.5" id="sec-m4-c05-s03">
+<h2 class="anchored" data-anchor-id="sec-m4-c05-s03" data-number="6.5"><span class="header-section-number">6.5</span> Roofline analysis</h2>
+<p>A roofline derivation turns a measured or estimated kernel into a ceiling comparison. The input is FLOPs, bytes moved, elapsed time, peak compute, and memory bandwidth. The output is a first-order explanation of whether the kernel is plausibly limited by memory traffic or arithmetic throughput.</p>
+<p><strong>Constructing the model:</strong> The roofline chart places achieved throughput against arithmetic intensity on a log-log scale. Its diagonal memory-bandwidth ceiling and horizontal compute ceiling meet at the ridge point, which separates the first-order bandwidth-limited and compute-limited regions.</p>
+<p>For one measured region, FLOPs divided by bytes moved place the point on the horizontal axis, while FLOPs divided by elapsed time place it on the vertical axis. The comparison uses bandwidth and compute ceilings for the same dtype, operation path, and memory level.</p>
+<p>In the first-order model, points left of the ridge are bounded by the memory roof and points right of it by the compute roof. A point below either roof still requires profiling before choosing a kernel, precision, or hardware change.</p>
+<p>Low arithmetic intensity means the bandwidth ceiling is low. High arithmetic intensity can move the kernel toward the compute ceiling. The ridge point is the diagnostic boundary: to the left, reduce bytes or increase reuse. To the right, improve arithmetic throughput, tensor-core utilization, or useful batch shape.</p>
+<p>The derivation is deliberately approximate. If the measured point appears above the roofline, the FLOP count, byte estimate, measurement window, or peak numbers are inconsistent. That inconsistency is useful because it forces the engineer to refine the model before choosing an optimization.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Roofline limit</strong></p>
+<p>Peak compute and peak HBM bandwidth define an upper bound. Real kernels can sit below it because of instruction mix, occupancy limits, shared-memory bank conflicts, register spilling, Tensor Core alignment, synchronization, launch overhead, cache misses, or incomplete overlap. Profiler evidence explains the gap below the bound.</p>
+</div>
+<p>A point below the roofline shows a gap to the ideal bound but does not identify whether launch gaps, occupancy, synchronization, or cache behavior caused it. The next question is whether a worked set of FLOPs, bytes, and elapsed time is internally consistent before an optimization is selected.</p>
+<p><strong>Worked roofline interpretation:</strong> A worked roofline pass counts FLOPs, estimates bytes moved, and measures runtime, then forms the two quantities below. The calculation that follows checks whether they are consistent with the hardware ceilings.</p>
+<p><span id="eq-m4-c05-e05"><span class="math display">\[
+\text{AI} = \frac{2 \times 10^{12} \text{ FLOPs}}{10^{12} \text{ bytes}} = 2 \text{ FLOPs/byte}
+\tag{6.5}\]</span></span></p>
+<p><span id="eq-m4-c05-e06"><span class="math display">\[
+\text{achieved throughput} = \frac{2 \times 10^{12} \text{ FLOPs}}{0.020 \text{ s}} = 100 \text{ TFLOP/s}
+\tag{6.6}\]</span></span></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Roofline diagnosis</strong></p>
+<p><strong>Illustrative measurement record:</strong> Suppose the same region as in <a href="#sec-m4-c05-s01">Section 6.3</a> has 2e12 FLOPs counted, 1e12 bytes estimated for that region, and 0.020 seconds recorded. The target GPU has a 3 TB/s peak-bandwidth estimate.</p>
+<p><strong>Arithmetic intensity:</strong> 2e12 / 1e12 = 2 FLOPs per byte.</p>
+<p><strong>Achieved throughput:</strong> 2e12 / 0.020 s = 100 TFLOP/s.</p>
+<p><strong>First-order ceiling:</strong> 2 FLOPs/byte x 3 TB/s = 6 TFLOP/s. The measured 100 TFLOP/s is above that ceiling, so the byte estimate, FLOP count, timing region, or assumed memory level must be wrong.</p>
+<p><strong>Next measurement:</strong> Profiler bytes, cache reuse, operation count, and timing boundaries identify the assumption that needs refinement before a kernel change is selected.</p>
+</div>
+<p>In LLM inference, this is why prefill and decode should not be tuned with one mental model. Large prefill projections are GEMM-like and can move toward the compute side of the roofline. Small-batch decode is often GEMV-like, repeatedly reading weights and key-value cache for few new tokens, so it tends to remain left of the ridge and bandwidth-sensitive unless batching or fusion changes the shape.</p>
+</section>
+<section class="level2" data-number="6.6" id="sec-m4-n06-model-work">
+<h2 class="anchored" data-anchor-id="sec-m4-n06-model-work" data-number="6.6"><span class="header-section-number">6.6</span> Model-work counts and utilization</h2>
+<p>A first estimate of dense projection arithmetic uses the number <span class="math inline">\(N_p\)</span> of weights participating in those projections. Each such weight contributes one multiplication and one addition per token, giving about <span class="math inline">\(2N_p\)</span> FLOPs per token. Backward propagation costs about twice the forward pass, so training costs about <span class="math inline">\(6N_p\)</span> FLOPs per token.<a class="footnote-ref" href="#fn6" id="fnref6" role="doc-noteref"><sup>6</sup></a> This estimate omits embedding lookup, normalization, and other smaller operations; an embedding lookup does not multiply every entry in its table. The cited scaling-law estimate excludes embedding parameters. Attention adds a term that grows with context length. That term is small when the context is short relative to the hidden width.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Arithmetic per token for an 8B model</strong></p>
+<p><strong>Inputs:</strong> Use <span class="math inline">\(N_p=8\times10^9\)</span> as a rough proxy for the dense projection parameter count at the Llama 3 8B scale from <a href="ch-m4-n01.html#sec-m4-c01-s09">Section 1.1</a>, with the attention term ignored. This rounded estimate is not an exact operation count for that model’s embedding and output layers.</p>
+<p><strong>Inference:</strong> One forward pass per generated token costs <span class="math inline">\(2\times8\times10^9=1.6\times10^{10}\)</span> FLOPs, or 16 GFLOP.</p>
+<p><strong>Training:</strong> One training token costs <span class="math inline">\(6\times8\times10^9=4.8\times10^{10}\)</span> FLOPs. Training on <span class="math inline">\(10^{12}\)</span> tokens therefore costs <span class="math inline">\(4.8\times10^{22}\)</span> FLOPs. One H100 SXM running at its dense BF16 peak of about <span class="math inline">\(989\)</span> TFLOP/s (<a href="#sec-m4-c02-s08">Section 6.2</a>) would need <span class="math inline">\(4.8\times10^{22}/9.89\times10^{14}\approx4.9\times10^{7}\)</span> seconds, about 560 days, and real runs achieve only a fraction of peak.</p>
+<p><strong>Conclusion:</strong> The rough training work scales with participating projection weights times tokens, which helps explain the use of many GPUs (<a href="ch-m4-n19.html">Chapter 18</a> and <a href="ch-m4-n20.html">Chapter 19</a>). For one generated token, 16 GFLOP would take about 16 microseconds at the stated peak rate. If each token step must read the model’s 16 GB of BF16 weights from HBM, that read alone takes at least about 4.8 milliseconds at 3.35 TB/s, roughly 300 times the arithmetic lower bound. This comparison shows why weight traffic can dominate a small, poorly reused decode step under those assumptions; cache reuse, batching, launch costs, and the actual kernel path determine measured time (<a href="#sec-m4-c02-s08">Section 6.2</a>).</p>
+</div>
+<p>Moving bottlenecks are normal. Removing recomputation can expose memory bandwidth. Increasing batch size can expose KV-cache capacity. Sharding model state can expose network synchronization. The engineering task is to follow the bottleneck as each change exposes a new constraint.</p>
+<p>Achieved FLOP/s describes one kernel. A training run needs the same question answered for the whole model. <span class="definition-term" data-custom-style="Definition Term"><strong>Model FLOPs utilization (MFU)</strong></span> is the ratio of the arithmetic rate the model requires to the hardware’s peak rate: tokens processed per second times FLOPs per token, divided by the peak FLOP/s of the GPUs. For training, a rough dense-model estimate is <span class="math inline">\(6N_p\)</span> FLOPs per token, using the <a href="#sec-m4-n06-model-work">projection-weight counting convention</a>, plus an attention term that grows with sequence length. MFU counts only the operations that forward and backward passes require, so activation-checkpointing recomputation is excluded from its operation count. Checkpointing can still change MFU by changing achieved tokens per second. Comparisons need the same model-work convention and matching dtype-specific hardware peaks.<a class="footnote-ref" href="#fn7" id="fnref7" role="doc-noteref"><sup>7</sup></a></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: MFU of a training run</strong></p>
+<p><strong>Inputs:</strong> An 8B-parameter model trains across eight H100 SXM GPUs at an illustrative aggregate 64,000 tokens per second. Each GPU’s dense BF16 peak is about 989 TFLOP/s (<a href="#sec-m4-c02-s08">Section 6.2</a>). The 8B parameter count is used as the same rough <a href="#sec-m4-n06-model-work">projection-count proxy</a>, and the attention term is ignored. This is an arithmetic example, not a measured run. The model and training state must be distributed with a per-GPU memory budget as described in <a href="ch-m4-n19.html">Chapter 18</a> and <a href="ch-m4-n20.html">Chapter 19</a>.</p>
+<p><strong>Calculation:</strong> The model requires <span class="math inline">\(64{,}000\times6\times8\times10^9=3.072\times10^{15}\)</span> FLOP/s. Dividing by the eight GPUs’ total peak, <span class="math inline">\(8\times9.89\times10^{14}=7.912\times10^{15}\)</span> FLOP/s gives an MFU of about 39 percent.</p>
+<p><strong>Conclusion:</strong> MFU compares runs by the useful arithmetic they complete. The gap to peak does not identify a time breakdown. Memory-bound work, recomputation, communication, launch gaps, instruction mix, and idle time can all contribute. A profile is needed to distinguish them.</p>
+</div>
+</section>
+<section class="footnotes footnotes-end-of-document" data-m4-endnotes="1" id="footnotes" role="doc-endnotes"><h2 data-m4-endnotes-heading="1" data-m4-fold-ui="references-heading">References</h2><div data-m4-endnotes-body="1" data-m4-fold-created="endnotes-body" id="m4-endnotes-body">
+<hr/>
+<ol>
+<li id="fn1"><p>Amdahl, G. M. (1967). Validity of the single processor approach to achieving large scale computing capabilities. In <em>Proceedings of the April 18-20, 1967, Spring Joint Computer Conference (AFIPS ’67 Spring)</em>, 483-485. <a href="https://doi.org/10.1145/1465482.1465560">Amdahl’s paper at ACM</a>. Source of the argument that the serial fraction of a workload limits overall speedup. Limit: the formula in Section 6.1 is the standard modern statement of that argument, not a quotation from the paper.<a class="footnote-back" href="#fnref1" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>NVIDIA. (n.d.). <em>NVIDIA H100 Tensor Core GPU</em> product specifications. <a href="https://www.nvidia.com/en-us/data-center/h100/">NVIDIA H100 performance specifications</a>. Support: the H100 SXM column lists BFLOAT16 Tensor Core performance of 1,979 teraFLOPS, footnoted “With sparsity,” and 3.35 TB/s GPU memory bandwidth. Limit: the dense value of about 989 TFLOP/s is half the listed sparse figure, and both are theoretical peaks that depend on clocks and kernel path.<a class="footnote-back" href="#fnref2" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p>NVIDIA. (2023). <em>Matrix Multiplication Background User’s Guide</em>, section 2, Math and Memory Bounds (last updated 2023-02-01). <a href="https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html">Matrix Multiplication Background User Guide</a>. Supports the two-FLOP multiply-add convention and 2<em>M</em>N*K GEMM estimate. Limit: arithmetic counts omit output scaling and other final operations unless added explicitly. The chapter’s small-shape calculation and hardware ceilings are illustrative. This source is also used in Chapter 3.<a class="footnote-back" href="#fnref3" role="doc-backlink">↩︎</a></p></li>
+<li id="fn4"><p>NVIDIA. (n.d.). <em>nvidia-smi</em> documentation. <a href="https://docs.nvidia.com/deploy/nvidia-smi/index.html"><code>nvidia-smi</code> documentation</a>. Support: the Utilization GPU field is the percentage of time over the past sample period during which one or more kernels was executing on the GPU. The sample period ranges from 1 second to 1/6 second depending on the product. Limit: the field does not measure how much of each SM or arithmetic unit is in use.<a class="footnote-back" href="#fnref4" role="doc-backlink">↩︎</a></p></li>
+<li id="fn5"><p>Williams, S., Waterman, A., &amp; Patterson, D. (2009). <em>Roofline: An Insightful Visual Performance Model for Multicore Architectures</em>. Communications of the ACM, 52(4), 65-76. <a href="https://doi.org/10.1145/1498765.1498785">Roofline paper (DOI)</a>. Supports the ceiling form min(peak compute, operational intensity times peak bandwidth), the ridge point where the roofs meet, and the bound and bottleneck reading used in Sections 6.3 and 6.5. Limit: the paper models DRAM traffic after cache filtering on multicore CPUs; the chapter applies the same first-order reading to GPU HBM as a teaching model and adds GPU specific gaps separately.<a class="footnote-back" href="#fnref5" role="doc-backlink">↩︎</a></p></li>
+<li id="fn6"><p>Kaplan, J., et al. (2020). <em>Scaling Laws for Neural Language Models</em>. <a href="https://arxiv.org/abs/2001.08361">arXiv:2001.08361</a>. Section 2.1 and Table 1 estimate forward compute as about 2N plus a context-dependent attention term per token, and training compute as about 6N FLOPs per token after accounting for the backward pass. Limit: N excludes embedding parameters, and the attention term matters when context length is large relative to model width.<a class="footnote-back" href="#fnref6" role="doc-backlink">↩︎</a></p></li>
+<li id="fn7"><p>Chowdhery, A., et al. (2022). <em>PaLM: Scaling Language Modeling with Pathways</em>. <a href="https://arxiv.org/abs/2204.02311">arXiv:2204.02311</a>. Section 4.1 defines model FLOPs utilization as observed tokens per second relative to the theoretical maximum at peak FLOPs, counting only the forward and backward operations and not rematerialization. Appendix B gives 6N matmul FLOPs per token plus 6LH(2QT) for dense attention. Limit: the chapter’s aggregate 64,000 tokens/s on eight GPUs is an illustrative input, not a reported result.<a class="footnote-back" href="#fnref7" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</div></section>
+</main> <!-- /main -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const automaticLongContentFolding = false;
+  const referenceSections = document.querySelectorAll(
+    'main.content section.footnotes[role="doc-endnotes"]'
+  );
+
+  referenceSections.forEach((section) => {
+    if (section.closest("details.publisher-chapter-references")) return;
+
+    const details = document.createElement("details");
+    details.className = "publisher-chapter-references";
+    const summary = document.createElement("summary");
+    const count = section.querySelectorAll("ol > li").length;
+    summary.textContent = count ? `References (${count})` : "References";
+
+    section.parentNode.insertBefore(details, section);
+    details.append(summary, section);
+  });
+
+  const openFoldTarget = (target) => {
+    const details = target?.closest(
+      "details.publisher-chapter-references, details.publisher-long-content"
+    );
+    if (details) details.open = true;
+  };
+
+  const targetFromHash = (hash) => {
+    if (!hash || hash === "#") return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('a[href*="#"]');
+    if (!link) return;
+    let destination;
+    try {
+      destination = new URL(link.getAttribute("href") || "", location.href);
+    } catch (_error) {
+      return;
+    }
+    if (destination.href.split("#")[0] !== location.href.split("#")[0]) return;
+    openFoldTarget(targetFromHash(destination.hash));
+  });
+
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
+    if (control?.classList.contains("publisher-fold-never")) return "never";
+    if (control?.classList.contains("publisher-fold-always")) return "always";
+    if (control?.classList.contains("publisher-fold-open")) return "open";
+    const requested = control?.dataset.publisherFold || "auto";
+    return ["auto", "never", "always", "open"].includes(requested)
+      ? requested
+      : "auto";
+  };
+
+  const foldCandidate = (candidate, kind) => {
+    if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
+
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
+    if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
+    const minimumFoldHeight = 320;
+    const foldHeight = Math.max(
+      minimumFoldHeight,
+      Math.round(document.documentElement.clientHeight * 0.5)
+    );
+    if (mode === "auto" && candidate.getBoundingClientRect().height <= foldHeight) return;
+
+    const titleSource = kind === "table"
+      ? candidate.querySelector("figcaption, caption")
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
+    const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
+
+    const details = document.createElement("details");
+    details.className = `publisher-long-content publisher-long-${kind}`;
+    if (mode === "open") details.open = true;
+    const summary = document.createElement("summary");
+    if (titleSource && label) {
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
+    } else {
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
+    }
+    const body = document.createElement("div");
+    body.className = "publisher-fold-body";
+    if (titleSource) titleSource.classList.add("publisher-fold-title-source");
+
+    candidate.parentNode.insertBefore(details, candidate);
+    details.append(summary, body);
+    body.append(candidate);
+  };
+
+  const foldLongContent = () => {
+    if (!automaticLongContentFolding) return;
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
+    document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
+      const float = figure.parentElement?.classList.contains("quarto-float")
+        ? figure.parentElement
+        : figure;
+      foldCandidate(float, "table");
+    });
+    document.querySelectorAll("main.content table").forEach((table) => {
+      if (!table.closest("figure.quarto-float-tbl")) foldCandidate(table, "table");
+    });
+    openFoldTarget(targetFromHash(location.hash));
+  };
+
+  if (document.readyState === "complete") {
+    requestAnimationFrame(foldLongContent);
+  } else {
+    window.addEventListener("load", () => requestAnimationFrame(foldLongContent), {
+      once: true,
+    });
+  }
+
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
+  document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
+  const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
+  window.addEventListener("hashchange", openLocationTarget);
+  openLocationTarget();
+});
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+<div class="nav-page nav-page-previous">
+<a aria-label="Triton and attention kernels" class="pagination-link" href="../chapters/ch-m4-n05.html">
+<i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span>
+</a>
+</div>
+<div class="nav-page nav-page-next">
+<a aria-label="Measurement, profiling and fair comparisons" class="pagination-link" href="../chapters/ch-m4-n07.html">
+<span class="nav-page-text"><span class="chapter-number">7</span>  <span class="chapter-title">Measurement, profiling and fair comparisons</span></span> <i class="bi bi-arrow-right-short"></i>
+</a>
+</div>
+</nav>
+</div> <!-- /content -->
+<script data-m4-fold-ui="script" defer="defer" src="../html-folds/folds.js"></script>  <div class="book-image-preview-overlay" data-book-image-overlay hidden>
+    <button class="book-image-preview-backdrop" type="button" data-book-image-close aria-label="Close image preview"></button>
+    <div class="book-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview">
+      <button class="book-image-preview-close" type="button" data-book-image-close>Close</button>
+      <img class="book-image-preview-image" data-book-image-preview-img alt="">
+    </div>
+  </div>
+  <script id="book-image-preview-script">
+    (() => {
+      if (window.__bookImagePreviewReady) {
+        return;
+      }
+      window.__bookImagePreviewReady = true;
+
+      const overlay = document.querySelector("[data-book-image-overlay]");
+      const preview = document.querySelector("[data-book-image-preview-img]");
+      const closeButtons = document.querySelectorAll("[data-book-image-close]");
+      const closeButton = overlay ? overlay.querySelector(".book-image-preview-close") : null;
+      let restoreFocus = null;
+
+      if (!overlay || !preview) {
+        return;
+      }
+
+      function openPreview(image) {
+        restoreFocus = image;
+        preview.src = image.currentSrc || image.src;
+        preview.alt = image.alt || "";
+        overlay.hidden = false;
+        document.body.classList.add("book-image-preview-open");
+        if (closeButton) {
+          closeButton.focus();
+        }
+      }
+
+      function closePreview() {
+        if (overlay.hidden) {
+          return;
+        }
+        overlay.hidden = true;
+        preview.removeAttribute("src");
+        preview.alt = "";
+        document.body.classList.remove("book-image-preview-open");
+        if (restoreFocus) {
+          restoreFocus.focus();
+        }
+      }
+
+      document.querySelectorAll("img[data-book-image-preview]").forEach((image) => {
+        image.addEventListener("click", () => openPreview(image));
+        image.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPreview(image);
+          }
+        });
+      });
+      closeButtons.forEach((button) => {
+        button.addEventListener("click", closePreview);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!overlay.hidden && event.key === "Escape") {
+          closePreview();
+        }
+      });
+    })();
+  </script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "bf257544e13140429e7cbda3a16caddb"}'></script><!-- End Cloudflare Web Analytics -->
+<!-- book-ask-ai:start -->
+<link rel="stylesheet" href="../ask-ai-assets/ask-ai.css">
+<script id="book-ask-ai-config" type="application/json">{"endpoint": "https://course-ask-ai.course-ask-ai-backend.workers.dev/ask", "book": "module_4", "bookTitle": "", "version": ""}</script>
+<script defer src="../ask-ai-assets/ask-ai.js"></script>
+<!-- book-ask-ai:end -->
+</body></html>

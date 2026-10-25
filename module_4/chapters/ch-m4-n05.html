@@ -1,0 +1,1522 @@
+<!DOCTYPE html>
+
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"><head>
+<meta charset="utf-8"/>
+<meta content="quarto-1.10.18" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>5  Triton and attention kernels – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta content="../" name="quarto:offset"/>
+<link href="../chapters/ch-m4-n06.html" rel="next"/>
+<link href="../chapters/ch-m4-n04.html" rel="prev"/>
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet"/>
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" id="quarto-text-highlighting-styles" rel="stylesheet"/>
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet"/>
+<link append-hash="true" data-mode="light" href="../site_libs/bootstrap/bootstrap-741cab1455972e99f328c2af765061c1.min.css" id="quarto-bootstrap" rel="stylesheet"/>
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+<link href="../styles.css" rel="stylesheet"/>
+<link data-reading-layout="true" href="../reading-layout/reading.css" rel="stylesheet"/><link data-m4-fold-ui="style" href="../html-folds/folds.css" rel="stylesheet"/><link data-map-style="" href="../map-viewer/viewer.css" rel="stylesheet"/><script data-map-script="" defer="" src="../map-viewer/viewer.js"></script>  <style id="book-image-preview-style">
+    img[data-book-image-preview] {
+      cursor: zoom-in;
+    }
+    img[data-book-image-preview]:focus {
+      outline: 3px solid rgba(15, 107, 120, 0.36);
+      outline-offset: 4px;
+    }
+    body.book-image-preview-open {
+      overflow: hidden;
+    }
+    .book-image-preview-overlay[hidden] {
+      display: none !important;
+    }
+    .book-image-preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .book-image-preview-backdrop {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      background: rgba(18, 28, 40, 0.76);
+      cursor: zoom-out;
+    }
+    .book-image-preview-dialog {
+      position: relative;
+      width: min(94vw, 1100px);
+      max-height: 94vh;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.36);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 24px 70px rgba(18, 28, 40, 0.34);
+    }
+    .book-image-preview-close {
+      display: block;
+      margin: 0 0 12px auto;
+      padding: 7px 12px;
+      border: 1px solid #d7e2e8;
+      border-radius: 6px;
+      background: #f5f8fa;
+      color: #1f2f44;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .book-image-preview-image {
+      display: block;
+      width: 100%;
+      max-height: calc(94vh - 74px);
+      object-fit: contain;
+      border-radius: 6px;
+      background: #eef6f7;
+    }
+  </style>
+  <style id="book-release-metadata-style">
+    .book-release-meta {
+      margin: 0.55rem 0 0.8rem;
+      color: #536273;
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+    .book-release-meta dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.12rem 0.5rem;
+      margin: 0;
+    }
+    .book-release-meta dt {
+      color: #24384d;
+      font-weight: 650;
+    }
+    .book-release-meta dd {
+      margin: 0;
+    }
+    .book-release-home {
+      display: inline-block;
+      color: #0f6b78;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .book-release-home:hover,
+    .book-release-home:focus {
+      text-decoration: underline;
+    }
+    .book-release-home-wrap {
+      margin: 0.55rem 0 0.8rem;
+    }
+    .book-release-meta-sidebar {
+      margin-top: 0.8rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid #d7e2e8;
+    }
+    .book-release-meta-front {
+      padding: 0.7rem 0.85rem;
+      border-left: 3px solid #0f6b78;
+      background: #eef6f7;
+      max-width: 34rem;
+    }
+  </style>
+</head>
+<body class="nav-sidebar floating quarto-light">
+<div id="quarto-search-results"></div>
+<header class="headroom fixed-top" id="quarto-header">
+<nav class="quarto-secondary-nav">
+<div class="container-fluid d-flex">
+<button aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="quarto-btn-toggle btn" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="button" type="button">
+<i class="bi bi-layout-text-sidebar-reverse"></i>
+</button>
+<nav aria-label="breadcrumb" class="quarto-page-breadcrumbs"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: GPU execution, measurement, and optimization</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n05.html"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></a></li></ol></nav>
+<a aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="flex-grow-1" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="navigation">
+</a>
+<button aria-label="Search" class="btn quarto-search-button" onclick="window.quartoOpenSearch();" type="button">
+<i class="bi bi-search"></i>
+</button>
+</div>
+</nav>
+</header>
+<!-- content -->
+<div class="quarto-container page-columns page-rows-contents page-layout-article" id="quarto-content">
+<!-- sidebar -->
+<nav class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto" id="quarto-sidebar">
+<div class="pt-lg-2 mt-2 text-left sidebar-header">
+<div class="sidebar-title mb-0 py-0">
+<a href="../">Advanced LLM Performance Engineering</a>
+</div>
+</div>
+<div class="mt-2 flex-shrink-0 align-items-center">
+<div class="sidebar-search">
+<div class="" id="quarto-search" title="Search"></div>
+</div>
+</div>
+<div class="book-release-home-wrap" data-book-release-location="sidebar-home">
+  <a class="book-release-home" href="../../">&larr; AI Systems Engineering</a>
+</div>
+    <div class="sidebar-menu-container">
+<ul class="list-unstyled mt-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../index.html">
+<span class="menu-text">Advanced LLM Performance Engineering</span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../frontmatter/ch-m4-index.html">
+<span class="menu-text">Introduction and Learning Path</span></a>
+</div>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-i.html">
+<span class="menu-text">Part I: Models, workload state, and GPU hardware</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-1" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n01.html">
+<span class="menu-text"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n02.html">
+<span class="menu-text"><span class="chapter-number">2</span>  <span class="chapter-title">Workload phases and live memory</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n03.html">
+<span class="menu-text"><span class="chapter-number">3</span>  <span class="chapter-title">GPU hardware and memory</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-ii.html">
+<span class="menu-text">Part II: GPU execution, measurement, and optimization</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-2" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-2">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n04.html">
+<span class="menu-text"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link active" href="../chapters/ch-m4-n05.html">
+<span class="menu-text"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n06.html">
+<span class="menu-text"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n07.html">
+<span class="menu-text"><span class="chapter-number">7</span>  <span class="chapter-title">Measurement, profiling and fair comparisons</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n08.html">
+<span class="menu-text"><span class="chapter-number">8</span>  <span class="chapter-title">Compilation and runtime</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iii.html">
+<span class="menu-text">Part III: Training and single-worker inference</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-3" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-3">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n10.html">
+<span class="menu-text"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n11.html">
+<span class="menu-text"><span class="chapter-number">10</span>  <span class="chapter-title">Inference phases and memory budgets</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n12.html">
+<span class="menu-text"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n13.html">
+<span class="menu-text"><span class="chapter-number">12</span>  <span class="chapter-title">Decode and KV-cache layout</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iv.html">
+<span class="menu-text">Part IV: Serving systems</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-4" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-4">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n14.html">
+<span class="menu-text"><span class="chapter-number">13</span>  <span class="chapter-title">Request scheduling and prefix reuse</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n15.html">
+<span class="menu-text"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n16.html">
+<span class="menu-text"><span class="chapter-number">15</span>  <span class="chapter-title">Serving measurement and stack selection</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-v.html">
+<span class="menu-text">Part V: Distributed execution</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-5" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-5">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n17.html">
+<span class="menu-text"><span class="chapter-number">16</span>  <span class="chapter-title">Collective data movement and its cost</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n18.html">
+<span class="menu-text"><span class="chapter-number">17</span>  <span class="chapter-title">Launching and measuring distributed work</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n19.html">
+<span class="menu-text"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n20.html">
+<span class="menu-text"><span class="chapter-number">19</span>  <span class="chapter-title">Tensor and sequence parallelism</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n21.html">
+<span class="menu-text"><span class="chapter-number">20</span>  <span class="chapter-title">Pipeline, expert and combined layouts</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n22.html">
+<span class="menu-text"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a aria-expanded="true" class="sidebar-item-text sidebar-link text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<span class="menu-text">Appendices</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-6">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/references.html">
+<span class="menu-text"><span class="chapter-number">A</span>  <span class="chapter-title">References</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/optional-labs.html">
+<span class="menu-text"><span class="chapter-number">B</span>  <span class="chapter-title">Optional Labs</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
+  <dl>
+    <dt>Publisher version</dt>
+    <dd>0.8.23</dd>
+    <dt>Released</dt>
+    <dd><time datetime="2026-10-25">2026-10-25</time></dd>
+  </dl>
+</section>
+</nav>
+<div class="quarto-sidebar-collapse-item" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" id="quarto-sidebar-glass"></div>
+<!-- margin-sidebar -->
+<div class="sidebar margin-sidebar" id="quarto-margin-sidebar">
+<nav class="toc-active" id="TOC" role="doc-toc">
+<h2 id="toc-title">Table of contents</h2>
+<ul>
+<li><a class="nav-link active" data-scroll-target="#sec-m4-c04-s01" href="#sec-m4-c04-s01" id="toc-sec-m4-c04-s01"><span class="header-section-number">5.1</span> GPU kernel path selection</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c04-s03" href="#sec-m4-c04-s03" id="toc-sec-m4-c04-s03"><span class="header-section-number">5.2</span> Triton program structure</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c04-s04" href="#sec-m4-c04-s04" id="toc-sec-m4-c04-s04"><span class="header-section-number">5.3</span> Mapping block tensor code to GPU work</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c04-s05" href="#sec-m4-c04-s05" id="toc-sec-m4-c04-s05"><span class="header-section-number">5.4</span> Triton memory movement</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c04-s09" href="#sec-m4-c04-s09" id="toc-sec-m4-c04-s09"><span class="header-section-number">5.5</span> Matrix-vector multiplication in Triton</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c04-s11" href="#sec-m4-c04-s11" id="toc-sec-m4-c04-s11"><span class="header-section-number">5.6</span> Attention computation in four tokens</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c04-s12" href="#sec-m4-c04-s12" id="toc-sec-m4-c04-s12"><span class="header-section-number">5.7</span> FlashAttention and attention-kernel libraries</a></li>
+</ul>
+</nav>
+</div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+<header class="quarto-title-block default" id="title-block-header"><nav aria-label="breadcrumb" class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-ii.html">Part II: GPU execution, measurement, and optimization</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n05.html"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span class="quarto-section-identifier" id="sec-ch-m4-n05"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span></h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+</header>
+<p>GPU kernels assign tensor work to many parallel program instances. A custom kernel makes that assignment explicit: it chooses which tile each instance reads, how boundary elements are masked, which values stay on chip, and where the result is stored. These choices can reduce memory traffic or expose more parallel work when an existing operation does not fit the workload.</p>
+<div alt="One program handles each GEMV row. Invalid last-tile reads are blocked and filled with zero; both inputs cast to FP32 before products and all-column accumulation. The original four-token attention produces about[0.670,0.500]. A separate two-tile example rescales numerator and denominator and matches full-row output[0.5,0.5]. A reference tolerance check is outside timing." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-n05-map">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-n05-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a aria-describedby="fig-m4-n05-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca" aria-label="Enlarge map" class="m4-map-link" data-map-viewer="" href="../assets/fig-m4-n05-map.png" rel="noopener" target="_blank"><img alt="One program handles each GEMV row. Invalid last-tile reads are blocked and filled with zero; both inputs cast to FP32 before products and all-column accumulation. The original four-token attention produces about[0.670,0.500]. A separate two-tile example rescales numerator and denominator and matches full-row output[0.5,0.5]. A reference tolerance check is outside timing." class="img-fluid figure-img" src="../assets/fig-m4-n05-map.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" /></a>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-n05-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 5.1: A Triton GEMV program maps tiles to masked loads, FP32 products and accumulation across all columns. Attention mixes value rows; online normalization gives mathematically equivalent attention with different memory use, while rounding may differ.
+</figcaption>
+</figure>
+</div>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong><code>Triton</code></strong></span> is a Python-based language and compiler for writing GPU kernels at a block-tensor level. Its main abstraction is a program instance that handles a tile of data and is lowered into GPU code. This tile-centered language and compiler design follows <em>Triton: An Intermediate Language and Compiler for Tiled Neural Network Computations</em><a class="footnote-ref" href="#fn1" id="fnref1" role="doc-noteref"><sup>1</sup></a>.</p>
+<p>Triton is useful when the hot operation is regular, the library kernel does not match the needed layout, or fusion can remove intermediate HBM traffic. Vendor GEMM kernels remain the usual baseline for standard matrix work, while distributed communication and request scheduling belong to their own software layers.</p>
+<p>A Triton kernel still obeys GPU constraints. Program IDs map to tiles. Block sizes shape parallelism and register pressure. Masks protect boundary loads. Strides define physical memory layout. Loads and stores still need coalescing and locality.</p>
+<p>The host launcher submits the matrix-vector kernel with a one-dimensional grid containing one program instance for each matrix row.</p>
+<div alt="The host launches M = 3 programs, one per row. Program r = 1 visits three column chunks of width 4 for N = 10. The picture shows the final chunk at start = 8. Columns 8, 9, 10 and 11 map to A offsets 18, 19, 20 and 21. Their mask values are true, true, false and false. Separate masked loads of A and x each feed an FP32 cast. The program multiplies the cast values and reduces each tile’s products to a scalar. One scalar accumulator is initialized to 0 once before the loop. It carries contributions from the earlier chunks into this last update. On the Done branch, the program stores one final scalar in y[1]. On the continue branch, it advances the column offsets. The bounds mask does not check whether the layout is valid." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-c04-f01">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c04-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img alt="The host launches M = 3 programs, one per row. Program r = 1 visits three column chunks of width 4 for N = 10. The picture shows the final chunk at start = 8. Columns 8, 9, 10 and 11 map to A offsets 18, 19, 20 and 21. Their mask values are true, true, false and false. Separate masked loads of A and x each feed an FP32 cast. The program multiplies the cast values and reduces each tile’s products to a scalar. One scalar accumulator is initialized to 0 once before the loop. It carries contributions from the earlier chunks into this last update. On the Done branch, the program stores one final scalar in y[1]. On the continue branch, it advances the column offsets. The bounds mask does not check whether the layout is valid." class="img-fluid figure-img" src="../assets/fig-m4-c04-f01.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" />
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c04-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 5.2: Program r = 1 handles row 1 of contiguous row-major matrix A with shape (3, 10). This snapshot shows start = 8, the last of three column chunks at a tile width of 4. The scalar accumulator already contains contributions from the earlier chunks. It was initialized to 0 once before the loop. In this final chunk, c &lt; N permits columns 8 and 9. Where the mask is false, neither input load reads memory. Each supplies 0 instead. The program casts both loaded operands to FP32 before multiplication. It reduces the products in each tile to a scalar. It stores y[r] once after all chunks finish.
+</figcaption>
+</figure>
+</div>
+<p>A program selects its row, walks through column chunks, masks only the final partial load, multiplies matching matrix and vector values, and reduces them into one scalar accumulator before one scalar store. Triton chooses lower-level thread and instruction mapping during compilation. Generated code and profiling are needed to confirm the resulting hardware behavior.</p>
+<p>The changes this chapter develops are to move fewer bytes, because fusion and tiling keep intermediate values on chip, and to keep the hardware busy, because block size affects how much parallel work reaches the SMs. The <a href="ch-m4-n07.html#sec-m4-n07-trace-interpretation">trace interpretation section</a> brings these mechanisms together with the other bottleneck classes after the kernel mechanisms are in place.</p>
+<p>A Triton kernel defines the addresses and arithmetic of one tensor operation. Changing the kernel can affect end-to-end latency and memory use, while serving and distributed software still control admission, cache allocation and communication policy.</p>
+<section class="level2" data-number="5.1" id="sec-m4-c04-s01">
+<h2 class="anchored" data-anchor-id="sec-m4-c04-s01" data-number="5.1"><span class="header-section-number">5.1</span> GPU kernel path selection</h2>
+<p>A PyTorch expression, a Triton kernel, and a CUDA C++ kernel reach GPU work through distinct roles. PyTorch expresses model operations. A compiler can transform those operations. Triton and CUDA C++ provide alternative source languages for a custom kernel. CUDA runtime or driver APIs submit the resulting work to the GPU.</p>
+<p>Kernel implementations differ by who writes them and where an engineer can make a useful change. The source form determines whether the first change belongs in custom kernel code, the captured graph, a library call, or the runtime launch sequence.</p>
+<p>This four-way classification locates the layer where a performance change belongs:</p>
+<ul>
+<li><strong>Hand-written Triton:</strong> A performance engineer or library author changes tile shape, masks, strides, reductions, launch grid, or autotuning. <span class="definition-term" data-custom-style="Definition Term"><strong>Autotuning</strong></span> benchmarks candidate kernel configurations and selects one for the target workload; it is optional. The result is a compiled GPU kernel launched through CUDA.</li>
+<li><strong>Compiler-generated Triton:</strong> TorchInductor or another compiler backend produces the kernel. The useful inputs to change are the source graph, dimensions, layout, fusion legality, and compiler settings.</li>
+<li><strong>CUDA C++ extension:</strong> A performance engineer or library author changes threads, blocks, shared memory, synchronization, and CUDA C++ integration. The result is a compiled GPU kernel.</li>
+<li><strong>Vendor library kernel:</strong> A vendor supplies the prebuilt kernel. The application changes the API choice, dimensions, dtype, layout, and supported backend path rather than the kernel source.</li>
+</ul>
+<p>A workload can launch all four forms over the same GPU tensors. The composition point is the framework graph or host launch sequence. A Triton source function does not inline arbitrary CUDA C++ or vendor-library kernel source.</p>
+<p>A manually written <code>@triton.jit</code> kernel is lowered through Triton intermediate representations and <span class="definition-term" data-custom-style="Definition Term"><strong>LLVM</strong></span> compiler tools toward NVIDIA Parallel Thread Execution (PTX) code. LLVM supplies reusable code optimization and generation components.</p>
+<p>PTX is an intermediate instruction-set representation, not the final device instruction stream. The NVIDIA driver still compiles or loads executable device code. This is the Triton kernel path, not the full PyTorch compiler stack.</p>
+<p>The lowering path changes who controls each optimization, but every route still produces GPU code that CUDA submits and executes. A hand-written Triton kernel exposes that work as program instances, offsets, masks, loads, reductions, and stores.</p>
+</section>
+<section class="level2" data-number="5.2" id="sec-m4-c04-s03">
+<h2 class="anchored" data-anchor-id="sec-m4-c04-s03" data-number="5.2"><span class="header-section-number">5.2</span> Triton program structure</h2>
+<p>A Triton program has a host-side launch and a device-side tile program. <span class="definition-term" data-custom-style="Definition Term"><strong>Just-in-time (JIT) compilation</strong></span> compiles the decorated function when it is first needed for a particular device and configuration. Python code allocates tensors, chooses the launch grid, and calls that compiled function. The Triton program instance then uses its program ID to decide which tile of memory it handles.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">The launch grid creates Triton program instances, and each program ID chooses a tile. Offsets choose elements within that tile, while masks prevent out-of-bounds access. Loads read valid values from GPU memory, reductions combine values, and stores write results. JIT compilation specializes the program for a device and configuration.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-24"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Triton program parts: launch grid, tile, pointers, and masks</span><ul>
+<li><strong class="m4-term-label"><code>@triton.jit</code>:</strong> Marks a Python function for Triton compilation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Program instance:</strong></span> One logical tile of work selected by the launch grid.</li>
+<li><strong class="m4-term-label"><code>tl.program_id</code>:</strong> Identifies which tile the current program instance handles.</li>
+<li><strong class="m4-term-label"><code>tl.arange</code> and offsets:</strong> Create vectorized positions inside the tile.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Block pointers and strides:</strong></span> Describe tiled memory regions, physical layout, and boundary behavior.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Masks:</strong></span> Prevent out-of-bounds loads and stores on partial tiles.</li>
+<li><strong class="m4-term-label"><code>tl.load</code> and <code>tl.store</code>:</strong> Move values between GPU memory and registers.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Reductions:</strong></span> Operations such as <code>tl.sum</code> combine values inside the tile.</li>
+</ul></div>
+<p>Those primitives describe the body of one program instance. Compilation adds a second set of concerns: when variants are created, which values are fixed at compile time, and whether the selected tile uses too many registers.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">Changes in device, dtype, compile-time constants, or tile size can produce new compiled variants. Larger tiles may improve reuse but consume more registers and leave room for fewer active programs. When temporary values exceed available registers, they can spill to CUDA local memory, often backed by device memory, adding traffic and stalls.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-25"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Triton compilation variants and register pressure</span><ul>
+<li><strong class="m4-term-label">JIT compilation:</strong> Triton compiles the decorated function when it is called for a particular device, dtype, and compile-time configuration. The first call can include compilation and autotuning overhead, so timing should separate warmup from steady state.</li>
+<li><strong class="m4-term-label"><code>tl.constexpr</code>:</strong> A compile-time parameter. Values such as tile size, loop bounds, or boolean feature flags can specialize generated code rather than being loaded as ordinary runtime tensor values.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Specialization:</strong></span> The compiler can generate different code for different constexpr values, shapes, strides, or selected autotune configurations. This is why one Triton function can produce several compiled kernel variants.</li>
+<li><strong class="m4-term-label">Register pressure:</strong> Large tiles, many temporaries, or unrolled loops can consume too many registers per program instance. More registers can reduce occupancy or spill temporary values to CUDA local memory, a per-thread address space commonly backed by device memory rather than on-chip storage.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Spilling:</strong></span> When values that should have stayed in registers are placed in CUDA local memory because register demand is too high. In profiler output, spilling often appears as unexpected device-memory traffic and stalls.</li>
+</ul></div>
+<p>A useful reading order is launch grid first, then program ID, then offsets, then loads, arithmetic, and stores. If performance is poor, inspect whether offsets are coalesced, masks are excessive, the tile is too small or too large, and the generated reduction incurs register spilling or unnecessary memory traffic.</p>
+</section>
+<section class="level2" data-number="5.3" id="sec-m4-c04-s04">
+<h2 class="anchored" data-anchor-id="sec-m4-c04-s04" data-number="5.3"><span class="header-section-number">5.3</span> Mapping block tensor code to GPU work</h2>
+<p>Mapping means assigning each Triton program instance to a tile of output data and then translating tile-relative positions into physical memory addresses. This is the bridge between readable block-tensor code and real GPU loads, arithmetic, and stores.</p>
+<p>Triton code is written as if each program operates on vectors or blocks. The compiler turns that block program into GPU instructions. PyTorch usually allocates input and output tensors before the kernel runs. The Triton kernel reads and writes those buffers.</p>
+<p>Good Triton kernels use tile sizes that expose enough parallelism without excessive register pressure. They keep hot values in registers, use masks only where necessary, and choose memory strides so adjacent lanes read adjacent data. Autotuning can search tile parameters, but the benchmark must match the real workload.</p>
+<p><strong>Example: Addresses and a partial tile:</strong> Take a contiguous row-major matrix <code>A</code> with shape <code>(3, 10)</code> and a tile width of 4. Using zero-based indices, program instance 1 handles row 1, the second row. Its final tile has column positions <code>[8, 9, 10, 11]</code>, giving element offsets <code>1 * 10 + cols = [18, 19, 20, 21]</code> from the start of <code>A</code>.</p>
+<p>The mask <code>cols &lt; 10</code> is <code>[True, True, False, False]</code>. A masked <code>tl.load</code> with <code>other=0</code> reads only offsets 18 and 19 and supplies zero for the other two positions. Columns 10 and 11 are outside this row; masking them prevents the tile from reading values belonging to the next row. This address calculation assumes the stated contiguous layout. A different layout needs its actual strides.</p>
+</section>
+<section class="level2" data-number="5.4" id="sec-m4-c04-s05">
+<h2 class="anchored" data-anchor-id="sec-m4-c04-s05" data-number="5.4"><span class="header-section-number">5.4</span> Triton memory movement</h2>
+<p>A Triton program controls memory movement inside one GPU kernel. It uses the same registers, on-chip storage, caches, L2, and HBM as a CUDA C++ kernel, while expressing the address calculation and tile schedule through Triton operations.</p>
+<p><strong>Moving tiled data:</strong> The first memory decision is which addresses each program instance touches. Loads and stores become efficient when adjacent lanes access adjacent useful data, masks cover only true boundaries, and block pointers describe the physical layout without unnecessary materialization.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-26"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Triton loads, stores, masks, and block pointers</span><ul>
+<li><strong class="m4-term-label"><code>tl.load</code>:</strong> Reads elements from GPU memory into values used by the program instance. Pointer arithmetic, dimensions, masks, and cache options determine the resulting transactions.</li>
+<li><strong class="m4-term-label"><code>tl.store</code>:</strong> Writes program results to GPU memory. Output layout and masks determine whether stores are contiguous and whether partial tiles waste traffic.</li>
+<li><strong class="m4-term-label">Mask:</strong> A lane-level validity condition for partial tiles or irregular boundaries. Correct masking protects memory safety. Excessive masking can reduce useful work.</li>
+<li><strong class="m4-term-label">Block pointer:</strong> A structured description of a tiled memory region, including dimensions, strides, offsets, block dimensions, and boundary behavior.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Program order:</strong></span> The mapping from program IDs to tiles. Reordering tile visits can increase L2 reuse without changing the mathematical result.</li>
+</ul></div>
+<p><strong>Cache and tile-order hints:</strong> Triton memory operations can express supported cache and eviction intent, while tile order creates the structural reuse that makes cache useful. Measurement should establish the reuse pattern before a hint is treated as an optimization.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-27"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Cache hints and tile-order choices</span><ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Cache modifier:</strong></span> A <code>tl.load</code> or <code>tl.store</code> option that requests supported lower-level cache behavior, such as cache-all, L2-oriented, streaming, or write-through behavior depending on the operation and backend.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Eviction policy:</strong></span> A replacement preference such as evict-first or evict-last where supported. It guides replacement behavior and does not guarantee residency.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Grouped tile order:</strong></span> A program-ID mapping that visits related output tiles close together so they can reuse matrix or activation data through L2.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Autotuned configuration:</strong></span> A compile-time choice of tile dimensions and of the <code>num_warps</code> and <code>num_stages</code> values, measured for the target range of tensor dimensions. In Triton, <code>num_warps</code> sets how many warps cooperate on one program instance, and <code>num_stages</code> sets how many stages the compiler uses when software-pipelining a loop.<a class="footnote-ref" href="#fn2" id="fnref2" role="doc-noteref"><sup>2</sup></a></li>
+</ul></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>One word, three meanings: stage</strong></p>
+<p><strong>Software-pipelining stage:</strong> <code>num_stages</code> selects the compiler’s requested software pipeline depth for eligible loops. The compiler may prepare a later iteration’s data while computing an earlier iteration. The resulting loads and overlap depend on the loop, backend, and GPU. This setting belongs inside one kernel and is not a measured count of outstanding memory requests.</p>
+<p><strong>Pipeline-parallel stage:</strong> a contiguous range of model layers. In plain pipeline parallelism, one device runs a stage (<a href="ch-m4-n21.html#sec-m4-n21-s01">Section 20.1</a>). With tensor parallelism, a group of devices shares that stage’s layer computations (<a href="ch-m4-n21.html#sec-m4-c13-s15">Section 20.3</a>).</p>
+<p><strong>ZeRO stage:</strong> a numbered level of state sharding, where stage 1 shards optimizer state, stage 2 adds gradients, and stage 3 adds parameters (<a href="ch-m4-n19.html#sec-m4-c13-s06">Section 18.4.2</a>). The number names how much is sharded, not a position in time.</p>
+</div>
+<p>Tiled movement first needs correct offsets, strides and masks. Tile dimensions and program order interact with memory traffic and register use, so measurements guide which to test. Cache hints address evidenced reuse or replacement behavior; they cannot repair unnecessary memory requests. The next comparison separates memory operations inside the kernel from transfers and allocation controlled by the host runtime.</p>
+<p><strong>CUDA and Triton responsibility map:</strong> The comparison below assigns each memory problem to the runtime or kernel layer that can change it. This prevents a host-transfer problem from being treated as tile code and prevents a coalescing problem from being treated as a runtime flag.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-50"><div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c04-t01">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" data-m4-fold-heading="1" id="tbl-m4-c04-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 5.1: CUDA and Triton memory-movement responsibilities.
+</figcaption>
+<div aria-describedby="tbl-m4-c04-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Memory issue</th>
+<th>CUDA/runtime responsibility</th>
+<th>Triton/kernel responsibility</th>
+<th>First diagnostic</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Host-device copy</td>
+<td>Placement calls, pinned buffers, copy APIs, streams, and copy engines</td>
+<td>Outside the Triton kernel body</td>
+<td>Timeline copy spans and synchronization</td>
+</tr>
+<tr class="even">
+<td>Kernel HBM traffic</td>
+<td>Selected CUDA, vendor, or generated kernel path</td>
+<td><code>tl.load</code>/<code>tl.store</code> addresses, masks, block pointers, and tile dimensions</td>
+<td>Bytes moved, sectors, and useful bandwidth</td>
+</tr>
+<tr class="odd">
+<td>Coalescing and stride</td>
+<td>CUDA thread indexing, layout, vector loads, or staging</td>
+<td>Strides, offsets, <code>tl.arange</code>, masks, and block layout</td>
+<td>Transactions per useful byte</td>
+</tr>
+<tr class="even">
+<td>L2 reuse</td>
+<td>Launch order, sequencing, and supported persistence controls</td>
+<td>Program-ID mapping, grouped ordering, and tile reuse</td>
+<td>Reuse distance and L2 traffic</td>
+</tr>
+<tr class="odd">
+<td>Peer or collective movement</td>
+<td>CUDA peer access and communication backends</td>
+<td>Outside an ordinary single-GPU Triton kernel</td>
+<td>Topology, transport logs, and transfer spans</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div></div>
+</section>
+<section class="level2" data-number="5.5" id="sec-m4-c04-s09">
+<h2 class="anchored" data-anchor-id="sec-m4-c04-s09" data-number="5.5"><span class="header-section-number">5.5</span> Matrix-vector multiplication in Triton</h2>
+<p>The following Triton matrix-vector multiplication (GEMV) kernel grounds the program structure in concrete code. GEMV is useful as an example because it exposes the memory-access questions that custom kernels often need to answer: which program instance owns each output element, whether adjacent lanes read adjacent memory, how partial tiles are masked, and where the reduction lives.</p>
+<p>In matrix-vector multiplication y = Ax, each program instance computes one element of the output vector y, corresponding to one row of the matrix A. The kernel loads elements of the matrix row and the vector x in blocks, multiplies them, and reduces the products. The point is not that every GEMV should be custom-written. The point is that this small kernel makes tile assignment, global-memory addresses, masks, reductions, and stores visible. <code>tl.load</code> reads values from device addresses into the program. Caches may satisfy some requests, so profiler counters are needed to measure L1, L2, and HBM traffic. <code>tl.store</code> writes the output through the device memory hierarchy.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">One program computes one output row by reading a contiguous row of A and the matching vector elements, accumulating in FP32, then storing one scalar. This example assumes row-major contiguous FP16 inputs and a separate FP32 output on one device. A transposed view needs explicit strides or a measured copy.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-28"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Example: Triton matrix-vector kernel</span><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Triton matrix-vector kernel</strong></p>
+<p>One program instance computes one output row. It walks across columns in <code>BLOCK</code>-sized chunks, masks the final partial chunk, accumulates products in FP32, and stores one scalar. The launcher supplies an <code>M</code>-program grid. Production integration includes correctness tests and block-size tuning.</p>
+<p><strong>Input contract:</strong> <code>A</code> is a contiguous row-major FP16 CUDA tensor of shape <code>(M, N)</code> with element strides <code>(N, 1)</code>. <code>x</code> is a contiguous FP16 vector of length <code>N</code>, and <code>y</code> is a separate contiguous FP32 output vector of length <code>M</code>, all on the same device. Thus <code>A[row, col]</code> lives at <code>A + row * N + col</code>, while <code>x[col]</code> and <code>y[row]</code> use unit strides. The host checks these conditions before launch. A transposed or sliced view can retain the expected shape while violating this address formula. Supporting such layouts requires explicit stride arguments or a contiguous copy whose cost is included when relevant. The boundary mask checks column bounds, not layout.</p>
+<p><strong>CUDA setup:</strong> Running this listing requires a supported NVIDIA GPU and driver, a CUDA-enabled <code>PyTorch</code> build, and a compatible <code>Triton</code> installation. Check <code>torch.cuda.is_available()</code> before allocating the inputs; a false result means this CUDA example cannot run in that environment. Record software and device versions using <a href="../appendices/references.html#sec-m4-app-a-s03">Appendix A.3, Compatibility checks</a>.</p>
+<div class="m4-contained-code-caption publisher-code-caption" data-custom-style="Code Caption" hidden="">
+<p><strong>Code example: Triton matrix-vector kernel</strong></p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c04-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c04-c01-1"><a aria-hidden="true" href="#lst-m4-c04-c01-1" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c04-c01-2"><a aria-hidden="true" href="#lst-m4-c04-c01-2" tabindex="-1"></a><span class="im">import</span> triton</span>
+<span id="lst-m4-c04-c01-3"><a aria-hidden="true" href="#lst-m4-c04-c01-3" tabindex="-1"></a><span class="im">import</span> triton.language <span class="im">as</span> tl</span>
+<span id="lst-m4-c04-c01-4"><a aria-hidden="true" href="#lst-m4-c04-c01-4" tabindex="-1"></a></span>
+<span id="lst-m4-c04-c01-5"><a aria-hidden="true" href="#lst-m4-c04-c01-5" tabindex="-1"></a><span class="at">@triton.jit</span></span>
+<span id="lst-m4-c04-c01-6"><a aria-hidden="true" href="#lst-m4-c04-c01-6" tabindex="-1"></a><span class="kw">def</span> gemv_kernel(A, x, y, M: tl.constexpr, N: tl.constexpr, BLOCK: tl.constexpr):</span>
+<span id="lst-m4-c04-c01-7"><a aria-hidden="true" href="#lst-m4-c04-c01-7" tabindex="-1"></a>    row <span class="op">=</span> tl.program_id(<span class="dv">0</span>)</span>
+<span id="lst-m4-c04-c01-8"><a aria-hidden="true" href="#lst-m4-c04-c01-8" tabindex="-1"></a>    offsets <span class="op">=</span> tl.arange(<span class="dv">0</span>, BLOCK)</span>
+<span id="lst-m4-c04-c01-9"><a aria-hidden="true" href="#lst-m4-c04-c01-9" tabindex="-1"></a>    acc <span class="op">=</span> tl.full((), <span class="fl">0.0</span>, tl.float32)</span>
+<span id="lst-m4-c04-c01-10"><a aria-hidden="true" href="#lst-m4-c04-c01-10" tabindex="-1"></a>    <span class="cf">for</span> start <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">0</span>, N, BLOCK):</span>
+<span id="lst-m4-c04-c01-11"><a aria-hidden="true" href="#lst-m4-c04-c01-11" tabindex="-1"></a>        cols <span class="op">=</span> start <span class="op">+</span> offsets</span>
+<span id="lst-m4-c04-c01-12"><a aria-hidden="true" href="#lst-m4-c04-c01-12" tabindex="-1"></a>        mask <span class="op">=</span> cols <span class="op">&lt;</span> N</span>
+<span id="lst-m4-c04-c01-13"><a aria-hidden="true" href="#lst-m4-c04-c01-13" tabindex="-1"></a>        a <span class="op">=</span> tl.load(A <span class="op">+</span> row <span class="op">*</span> N <span class="op">+</span> cols, mask<span class="op">=</span>mask, other<span class="op">=</span><span class="fl">0.0</span>)</span>
+<span id="lst-m4-c04-c01-14"><a aria-hidden="true" href="#lst-m4-c04-c01-14" tabindex="-1"></a>        xv <span class="op">=</span> tl.load(x <span class="op">+</span> cols, mask<span class="op">=</span>mask, other<span class="op">=</span><span class="fl">0.0</span>)</span>
+<span id="lst-m4-c04-c01-15"><a aria-hidden="true" href="#lst-m4-c04-c01-15" tabindex="-1"></a>        acc <span class="op">+=</span> tl.<span class="bu">sum</span>(a.to(tl.float32) <span class="op">*</span> xv.to(tl.float32), axis<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="lst-m4-c04-c01-16"><a aria-hidden="true" href="#lst-m4-c04-c01-16" tabindex="-1"></a>    tl.store(y <span class="op">+</span> row, acc)</span>
+<span id="lst-m4-c04-c01-17"><a aria-hidden="true" href="#lst-m4-c04-c01-17" tabindex="-1"></a></span>
+<span id="lst-m4-c04-c01-18"><a aria-hidden="true" href="#lst-m4-c04-c01-18" tabindex="-1"></a>M, N <span class="op">=</span> <span class="dv">4096</span>, <span class="dv">4096</span></span>
+<span id="lst-m4-c04-c01-19"><a aria-hidden="true" href="#lst-m4-c04-c01-19" tabindex="-1"></a>A <span class="op">=</span> torch.randn((M, N), device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float16)</span>
+<span id="lst-m4-c04-c01-20"><a aria-hidden="true" href="#lst-m4-c04-c01-20" tabindex="-1"></a>x <span class="op">=</span> torch.randn((N,), device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float16)</span>
+<span id="lst-m4-c04-c01-21"><a aria-hidden="true" href="#lst-m4-c04-c01-21" tabindex="-1"></a>y <span class="op">=</span> torch.empty((M,), device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float32)</span>
+<span id="lst-m4-c04-c01-22"><a aria-hidden="true" href="#lst-m4-c04-c01-22" tabindex="-1"></a><span class="cf">if</span> A.shape <span class="op">!=</span> (M, N) <span class="kw">or</span> x.shape <span class="op">!=</span> (N,) <span class="kw">or</span> y.shape <span class="op">!=</span> (M,):</span>
+<span id="lst-m4-c04-c01-23"><a aria-hidden="true" href="#lst-m4-c04-c01-23" tabindex="-1"></a>    <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"Expected A[M,N], x[N], and y[M]."</span>)</span>
+<span id="lst-m4-c04-c01-24"><a aria-hidden="true" href="#lst-m4-c04-c01-24" tabindex="-1"></a><span class="cf">if</span> A.stride() <span class="op">!=</span> (N, <span class="dv">1</span>) <span class="kw">or</span> x.stride() <span class="op">!=</span> (<span class="dv">1</span>,) <span class="kw">or</span> y.stride() <span class="op">!=</span> (<span class="dv">1</span>,):</span>
+<span id="lst-m4-c04-c01-25"><a aria-hidden="true" href="#lst-m4-c04-c01-25" tabindex="-1"></a>    <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"Kernel requires row-major A and unit-stride x/y."</span>)</span>
+<span id="lst-m4-c04-c01-26"><a aria-hidden="true" href="#lst-m4-c04-c01-26" tabindex="-1"></a><span class="cf">if</span> <span class="kw">not</span> (A.is_cuda <span class="kw">and</span> A.device <span class="op">==</span> x.device <span class="op">==</span> y.device):</span>
+<span id="lst-m4-c04-c01-27"><a aria-hidden="true" href="#lst-m4-c04-c01-27" tabindex="-1"></a>    <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"All tensors must share one CUDA device."</span>)</span>
+<span id="lst-m4-c04-c01-28"><a aria-hidden="true" href="#lst-m4-c04-c01-28" tabindex="-1"></a><span class="cf">if</span> A.dtype <span class="op">!=</span> torch.float16 <span class="kw">or</span> x.dtype <span class="op">!=</span> torch.float16 <span class="kw">or</span> y.dtype <span class="op">!=</span> torch.float32:</span>
+<span id="lst-m4-c04-c01-29"><a aria-hidden="true" href="#lst-m4-c04-c01-29" tabindex="-1"></a>    <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">"Expected FP16 inputs and FP32 output."</span>)</span>
+<span id="lst-m4-c04-c01-30"><a aria-hidden="true" href="#lst-m4-c04-c01-30" tabindex="-1"></a>grid <span class="op">=</span> (M,)</span>
+<span id="lst-m4-c04-c01-31"><a aria-hidden="true" href="#lst-m4-c04-c01-31" tabindex="-1"></a>gemv_kernel[grid](A, x, y, M, N, BLOCK<span class="op">=</span><span class="dv">1024</span>)</span>
+<span id="lst-m4-c04-c01-32"><a aria-hidden="true" href="#lst-m4-c04-c01-32" tabindex="-1"></a></span>
+<span id="lst-m4-c04-c01-33"><a aria-hidden="true" href="#lst-m4-c04-c01-33" tabindex="-1"></a>reference <span class="op">=</span> (A.double() <span class="op">@</span> x.double()).<span class="bu">float</span>()</span>
+<span id="lst-m4-c04-c01-34"><a aria-hidden="true" href="#lst-m4-c04-c01-34" tabindex="-1"></a>torch.testing.assert_close(y, reference, rtol<span class="op">=</span><span class="fl">1e-4</span>, atol<span class="op">=</span><span class="fl">1e-3</span>)</span></code></pre></div><button class="code-copy-button" title="Copy to Clipboard"><i class="bi"></i></button></div>
+<p>The launcher sets a one-dimensional grid with <code>M</code> program instances, one per matrix row. Each instance loads chunks of <code>BLOCK</code> columns, converts the input values to FP32 before multiplication, and reduces the products with <code>tl.sum</code>. With <code>N=4096</code> and <code>BLOCK=1024</code>, all four chunks are full and the load mask is always true. The mask protects the general case where <code>N</code> is not a multiple of <code>BLOCK</code>. The parameters <code>N</code> and <code>BLOCK</code> specialize the loop and tile size. <code>M</code> is unused inside the kernel and does not need to be <code>tl.constexpr</code>. The final <code>tl.store</code> writes one scalar to global memory, potentially through a cache rather than directly to HBM.</p>
+<p>The correctness check uses a wider FP64 PyTorch calculation and converts its result to the output’s FP32 dtype. It runs outside any timing interval. The example tolerances allow finite-precision reduction differences for this input scale. Investigate mismatches rather than widening tolerances merely to pass. Once correctness is established, a tile-size comparison must use the same inputs and completed-work timing boundary taught in the measurement chapter. Since GEMV has low arithmetic intensity, useful changes usually concern coalescing, tile size, register pressure, and parallel work rather than adding arithmetic.</p>
+</div></div>
+</section>
+<section class="level2" data-number="5.6" id="sec-m4-c04-s11">
+<h2 class="anchored" data-anchor-id="sec-m4-c04-s11" data-number="5.6"><span class="header-section-number">5.6</span> Attention computation in four tokens</h2>
+<p>This small attention trace connects the mathematical operation to the tensor shapes that a GPU kernel must load, multiply, normalize, and reduce. The trace uses the query at position four. Its causal mask permits the three earlier keys and the current key, so all four keys in this example remain valid and the mask does not change the scores shown below.</p>
+<p>The query represents the current position’s comparison vector. Each key supplies the vector it is compared with, and the dot product gives that key’s score. The corresponding value is the content vector to be mixed into the output. A high score therefore gives that value more weight. Here the key and value rows happen to contain the same numbers, but they have different roles and need not be equal in a model.</p>
+<p><strong>Softmax</strong> turns a row of scores into positive weights by exponentiating each score and dividing by the sum of those exponentials. For score <code>s_j</code>, its weight is <code>exp(s_j) / sum_i exp(s_i)</code>, where <code>i</code> ranges over permitted keys<a class="footnote-ref" href="#fn3" id="fnref3" role="doc-noteref"><sup>3</sup></a>. This is not division by the sum of the original scores. The attention rule forms query-key scores, scales them by the square root of the head dimension, applies softmax, and mixes the value vectors with those weights.</p>
+<p><span id="eq-m4-c04-e01"><span class="math display">\[
+\text{Attention} = \text{softmax}\left(\frac{Q K^T}{\sqrt{d_{\text{head}}}}\right) V
+\tag{5.1}\]</span></span></p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-75"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: Four-token attention</strong></p>
+<p>The symbols below fix the dimensions and values for one query position. Keeping the shapes explicit makes each row of the subsequent calculation traceable to a load, matrix operation, reduction, or weighted accumulation. This is a forward attention calculation with fixed inputs, no dropout, and no parameter update.</p>
+<ul>
+<li><strong>Q:</strong> One query row with dimensions 1 by 2: [1, 0].</li>
+<li><strong>K:</strong> Four key rows with dimensions 4 by 2: [1, 0], [0, 1], [1, 1], and [0, 0].</li>
+<li><strong>V:</strong> Four value rows with dimensions 4 by 2: [1, 0], [0, 1], [1, 1], and [0, 0].</li>
+<li><strong>Head dimension:</strong> The head dimension is 2, so the scaling factor is the square root of 2.</li>
+</ul>
+<p>With those inputs fixed, the table follows the computation in execution order and records both the intermediate value and the tensor dimensions at each step.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c04-t02">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c04-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 5.2: Four-token attention computation trace.
+</figcaption>
+<div aria-describedby="tbl-m4-c04-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Step</th>
+<th>Dimensions</th>
+<th>Value</th>
+<th>What the kernel is doing</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Query-key scores</strong></td>
+<td>(1 by 2)(2 by 4) -&gt; 1 by 4</td>
+<td>[1, 0, 1, 0]</td>
+<td>Loads one query row and four key rows, then performs dot products.</td>
+</tr>
+<tr class="even">
+<td><strong>Scale</strong></td>
+<td>1 by 4</td>
+<td>[0.707, 0.000, 0.707, 0.000]</td>
+<td>Divides by the square root of 2 before exponentiation to control softmax concentration.</td>
+</tr>
+<tr class="odd">
+<td><strong>Exponentiate</strong></td>
+<td>1 by 4</td>
+<td>[2.028, 1, 2.028, 1] approximately</td>
+<td>Applies exp to each scaled score.</td>
+</tr>
+<tr class="even">
+<td><strong>Sum</strong></td>
+<td>Scalar</td>
+<td>6.056 approximately</td>
+<td>Adds the four exponentials to form the shared denominator.</td>
+</tr>
+<tr class="odd">
+<td><strong>Normalize</strong></td>
+<td>1 by 4</td>
+<td>[0.335, 0.165, 0.335, 0.165]</td>
+<td>Divides each exponential by 6.056 to obtain weights that sum to one.</td>
+</tr>
+<tr class="even">
+<td><strong>Weighted values</strong></td>
+<td>(1 by 4)(4 by 2) -&gt; 1 by 2</td>
+<td>[0.670, 0.500]</td>
+<td>Reads value rows and accumulates the weighted output vector.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>For the first score, the query <code>[1, 0]</code> dotted with the first key <code>[1, 0]</code> gives <code>1*1 + 0*0 = 1</code>. The second key gives <code>1*0 + 0*1 = 0</code>; the third gives <code>1*1 + 0*1 = 1</code>; the zero key gives <code>0</code>. Thus the one-row query multiplied by the transposed four-row key matrix yields <code>[1, 0, 1, 0]</code>. Dividing each score by <code>sqrt(2)</code> produces approximately <code>[0.707, 0, 0.707, 0]</code> before softmax.</p>
+<p><span id="eq-m4-c04-e02"><span class="math display">\[
+Q K^T = [1, 0, 1, 0]
+\tag{5.2}\]</span></span></p>
+<p><span id="eq-m4-c04-e03"><span class="math display">\[
+\text{scaled scores} \approx [0.707, 0.000, 0.707, 0.000]
+\tag{5.3}\]</span></span></p>
+<p><span id="eq-m4-c04-e04"><span class="math display">\[
+\text{attention weights} \approx [0.335, 0.165, 0.335, 0.165]
+\tag{5.4}\]</span></span></p>
+<p><span id="eq-m4-c04-e05"><span class="math display">\[
+\text{attention output} \approx [0.670, 0.500]
+\tag{5.5}\]</span></span></p>
+<p>For the scaled scores, exponentiation gives approximately <code>[2.028, 1, 2.028, 1]</code>, whose sum is <code>6.056</code>. Division gives <code>[2.028/6.056, 1/6.056, 2.028/6.056, 1/6.056]</code>, or approximately <code>[0.335, 0.165, 0.335, 0.165]</code>. Using the displayed rounded weights, the first output coordinate is <code>0.335*1 + 0.165*0 + 0.335*1 + 0.165*0 = 0.670</code>. The second is <code>0.335*0 + 0.165*1 + 0.335*1 + 0.165*0 = 0.500</code>. The output is a weighted mixture of the value rows, not a selected key or a probability vector over features.</p>
+</div></div>
+<p>The computation exposes the performance distinction used later in the guide. The score matrix has one row in this trace, but for a prompt with T query positions it grows toward T x T. A tiled attention kernel keeps score tiles and softmax state on chip instead of writing the complete score matrix to HBM. The mathematical result stays the same. The memory path changes.</p>
+<p>This small attention calculation establishes the mathematical result that an optimized kernel must preserve. The next section shows how FlashAttention changes the movement and storage of intermediate values without changing the attention operation itself.</p>
+</section>
+<section class="level2" data-number="5.7" id="sec-m4-c04-s12">
+<h2 class="anchored" data-anchor-id="sec-m4-c04-s12" data-number="5.7"><span class="header-section-number">5.7</span> FlashAttention and attention-kernel libraries</h2>
+<p>The same locality ideas used in custom kernels appear in production attention kernels. <span class="definition-term" data-custom-style="Definition Term"><strong>FlashAttention</strong></span> is an IO-aware attention algorithm and kernel family. It evaluates the standard attention formula without materializing the full N-by-N attention matrix in HBM, streams query, key, and value tiles through on-chip resources, and maintains online softmax statistics. The result is mathematically equivalent to standard attention, while finite-precision evaluation order can change rounding. This IO-aware tiling claim follows <em>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness</em><a class="footnote-ref" href="#fn4" id="fnref4" role="doc-noteref"><sup>4</sup></a>.</p>
+<p>The bottleneck it solves is memory traffic. In standard attention, calculating softmax over query-key scores can write and reread an O(N²) matrix. FlashAttention reduces those HBM round trips by fusing the attention computation into tiled kernels. Later versions improve scheduling, parallelism, and hardware utilization rather than changing the definition of attention.</p>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Online softmax</strong></span> evaluates the normalization across successive key blocks while retaining a running maximum and sum. Stable full-row softmax first subtracts the largest score <code>m</code>: <code>p_j = exp(s_j - m) / sum_i exp(s_i - m)</code>. Multiplying numerator and denominator by the same <code>exp(-m)</code> leaves the ratio unchanged, while shifted scores are nonpositive and their exponentials cannot overflow.</p>
+<p>For one query row, let <code>s_j</code> be a scaled score and <code>v_j</code> its value vector. This explanation uses an <strong>unnormalized numerator</strong> <code>o = sum_j exp(s_j - m) * v_j</code> and denominator <code>l = sum_j exp(s_j - m)</code> over processed keys. The attention output is <code>o / l</code> only after the final block. This convention follows by multiplying the normalized output in FlashAttention Algorithm 1 by its running denominator<a class="footnote-ref" href="#fn5" id="fnref5" role="doc-noteref"><sup>5</sup></a>.</p>
+<p>The state starts at <code>m = -infinity</code>, <code>l = 0</code>, and a zero vector <code>o</code> with one entry per value feature. For each nonempty block of finite, permitted scores, the update is:</p>
+<ol type="1">
+<li><code>m_new = max(m, max(scores_in_block))</code> and <code>alpha = exp(m - m_new)</code>. On the first block <code>alpha = 0</code>.</li>
+<li>For each key in the block, <code>w_j = exp(s_j - m_new)</code>.</li>
+<li><code>l_new = alpha * l + sum_j w_j</code> and <code>o_new = alpha * o + sum_j w_j * v_j</code>, with these sums restricted to the new block.</li>
+<li>Replace <code>m, l, o</code> together with <code>m_new, l_new, o_new</code>.</li>
+</ol>
+<p>Rescaling works because <code>exp(s_j - m_new) = exp(m - m_new) * exp(s_j - m)</code> for every earlier key. Thus both stored sums remain expressed relative to the new maximum. Masked keys contribute nothing. An all-masked block is skipped, and a row with no permitted keys needs an explicit caller policy because <code>o / l</code> would divide by zero. The example below uses finite scores, at least one permitted key, and no dropout.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Online softmax across two blocks</strong></p>
+<p><strong>Inputs:</strong> Keep the four value rows from <a href="#sec-m4-c04-s11">the attention computation trace</a>, but use illustrative scaled scores <code>[0, 0, ln(2), ln(2)]</code>, where <code>ln(2)</code> is approximately <code>0.693</code>. Blocks contain keys 1-2 and 3-4. These scores are chosen to make the second block raise the maximum.</p>
+<p><strong>First block:</strong> Starting from zero sums, <code>m_new = 0</code>, <code>alpha = 0</code>, and the two exponential weights are <code>[1, 1]</code>. Therefore <code>l = 2</code> and <code>o = 1*[1,0] + 1*[0,1] = [1,1]</code>. This <code>o</code> is still a numerator.</p>
+<p><strong>Second block:</strong> The maximum rises from <code>0</code> to <code>ln(2)</code>, so <code>alpha = exp(-ln(2)) = 0.5</code>. The old state becomes <code>alpha*l = 1</code> and <code>alpha*o = [0.5,0.5]</code>. The new weights are <code>[1,1]</code>. They add <code>2</code> to the denominator and <code>1*[1,1] + 1*[0,0] = [1,1]</code> to the numerator. The new state is <code>m = ln(2)</code>, <code>l = 3</code>, <code>o = [1.5,1.5]</code>.</p>
+<p><strong>Final normalization and comparison:</strong> <code>o/l = [0.5,0.5]</code>. Full-row exponentials without shifting are <code>[1,1,2,2]</code>, sum to <code>6</code>, and give weights <code>[1/6,1/6,1/3,1/3]</code>. Their weighted value sum is also <code>[1/2,1/2]</code>. Rescaling the old numerator and denominator preserved the earlier keys’ contributions despite the higher second maximum. A GPU implementation can therefore discard each score tile after updating this state. Floating-point evaluation can still introduce rounding differences.</p>
+</div>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">Eligibility and speed still depend on dtype, mask, head dimension, sequence shape, and the selected kernel.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-29"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Attention kernel families: FlashAttention and xFormers</span><ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">FlashAttention-1:</strong></span> Uses tiled online softmax to evaluate the standard attention result up to floating-point rounding without materializing full score and probability matrices in HBM. Its additional activation storage is linear rather than quadratic in sequence length. IO saving depends on tile shape and available on-chip resources.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">FlashAttention-2:</strong></span> Improves work partitioning across thread blocks and warps, reduces non-matrix-multiplication work, and reduces shared-memory communication. Better sequence-length parallelism can raise occupancy and substantially improve speed over FlashAttention-1 for compatible shapes. These changes follow <em>FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning</em><a class="footnote-ref" href="#fn6" id="fnref6" role="doc-noteref"><sup>6</sup></a>.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">FlashAttention-3:</strong></span> Uses Hopper features to overlap movement and computation. Tensor Memory Accelerator (TMA) moves tensors asynchronously between global and shared memory. Warp specialization assigns different warps to data movement and computation. Interleaving matrix multiplication with softmax work adds another source of overlap. Its FP8 path is hardware-dependent and kernel-dependent rather than a generic property of every attention implementation. These Hopper techniques and the FP8 scope follow <em>FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-Precision</em><a class="footnote-ref" href="#fn7" id="fnref7" role="doc-noteref"><sup>7</sup></a>.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">xFormers attention kernels:</strong></span> An implementation family of optimized and memory-efficient attention paths. Eligibility and benefit depend on dtype, mask, head dimension, sequence dimensions, and the selected backend. The xFormers project documents memory-efficient exact attention through <code>xformers.ops.memory_efficient_attention</code> in <em>xFormers</em><a class="footnote-ref" href="#fn8" id="fnref8" role="doc-noteref"><sup>8</sup></a>.</li>
+</ul></div>
+<p>FlashAttention shows how a kernel can reduce HBM traffic without changing the mathematical attention result beyond floating-point ordering and rounding. The next question is whether that traffic reduction, arithmetic throughput, or launch behavior actually limits the measured workload. The <a href="ch-m4-n06.html">performance models</a> supply the bounds, and the <a href="ch-m4-n07.html">measurement chapter</a> supplies the profiler evidence needed to answer it.</p>
+</section>
+<section class="footnotes footnotes-end-of-document" data-m4-endnotes="1" id="footnotes" role="doc-endnotes"><h2 data-m4-endnotes-heading="1" data-m4-fold-ui="references-heading">References</h2><div data-m4-endnotes-body="1" data-m4-fold-created="endnotes-body" id="m4-endnotes-body">
+<hr/>
+<ol>
+<li id="fn1"><p>Tillet, P., Kung, H. T., &amp; Cox, D. (2019). <em>Triton: An Intermediate Language and Compiler for Tiled Neural Network Computations</em>. In Proceedings of MAPL 2019 (pp. 10-19). <a href="https://doi.org/10.1145/3315508.3329973">Triton paper (DOI)</a> (published 2019-06-22). Support: tile-centered language, LLVM-based IR, and tile-level optimization passes for GPU code. Limit: the guide’s modern Triton Python API differs from the 2019 C-based description; mapping and tuning choices still require validation on the intended workload.<a class="footnote-back" href="#fnref1" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>Triton project. <code>triton.Config</code>, Python API reference for the Triton main branch. <a href="https://triton-lang.org/main/python-api/generated/triton.Config.html"><code>triton.Config</code> API reference</a>. Support: <code>num_warps</code> is the number of warps used for the kernel, so that <code>num_warps=8</code> parallelizes each kernel instance across 8 x 32 = 256 threads, and <code>num_stages</code> is the number of stages the compiler uses when software-pipelining loops, described as mostly useful for matrix multiplication on SM80 and later GPUs. Limit: the useful values depend on the kernel, the shapes, and the GPU, so they are found by autotuning rather than read from the documentation.<a class="footnote-back" href="#fnref2" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p>Dao, T., Fu, D. Y., Ermon, S., Rudra, A., &amp; Re, C. (2022). <em>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness</em>. <a href="https://arxiv.org/abs/2205.14135">FlashAttention paper</a> (v1 2022-05-27; v2 2022-06-23). Support: tiling reduces HBM reads and writes, avoids materializing the full attention matrix, and keeps exact attention up to rounding. Limit: reported speedups are workload specific and IO saving depends on tile shape and on-chip resources.<a class="footnote-back" href="#fnref3" role="doc-backlink">↩︎</a></p></li>
+<li id="fn4"><p>Dao, T., Fu, D. Y., Ermon, S., Rudra, A., &amp; Re, C. (2022). <em>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness</em>. <a href="https://arxiv.org/abs/2205.14135">FlashAttention paper</a> (v1 2022-05-27; v2 2022-06-23). Support: tiling reduces HBM reads and writes, avoids materializing the full attention matrix, and keeps exact attention up to rounding. Limit: reported speedups are workload specific and IO saving depends on tile shape and on-chip resources.<a class="footnote-back" href="#fnref4" role="doc-backlink">↩︎</a></p></li>
+<li id="fn5"><p>Dao, T., Fu, D. Y., Ermon, S., Rudra, A., &amp; Re, C. (2022). <em>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness</em>. <a href="https://arxiv.org/abs/2205.14135">FlashAttention paper</a> (v1 2022-05-27; v2 2022-06-23). Support: tiling reduces HBM reads and writes, avoids materializing the full attention matrix, and keeps exact attention up to rounding. Limit: reported speedups are workload specific and IO saving depends on tile shape and on-chip resources.<a class="footnote-back" href="#fnref5" role="doc-backlink">↩︎</a></p></li>
+<li id="fn6"><p>Dao, T. (2023). <em>FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning</em>. <a href="https://arxiv.org/abs/2307.08691v1">FlashAttention-2 paper</a> (v1 2023-07-17). Support: reduced non-matmul work, parallelization across thread blocks, and warp-level work distribution that reduces shared-memory communication. Limit: speed and occupancy gains apply to compatible shapes and hardware, not every attention workload.<a class="footnote-back" href="#fnref6" role="doc-backlink">↩︎</a></p></li>
+<li id="fn7"><p>Shah, J., Bikshandi, G., Zhang, Y., Thakkar, V., Ramani, P., &amp; Dao, T. (2024). <em>FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-Precision</em>. <a href="https://arxiv.org/abs/2407.08608v2">FlashAttention-3 paper</a> (v1 2024-07-11; v2 2024-07-12). Support: Hopper TMA asynchrony, warp specialization, matmul-softmax interleaving, and hardware-dependent FP8 path. Limit: FP8 accuracy and speed claims are H100 and kernel specific, not generic attention properties.<a class="footnote-back" href="#fnref7" role="doc-backlink">↩︎</a></p></li>
+<li id="fn8"><p>Lefaudeux, B., Massa, F., et al. (2022). <em>xFormers: A modular and hackable Transformer modelling library</em>. <a href="https://github.com/facebookresearch/xformers">xFormers project</a>. Support: README documents memory-efficient exact attention through <code>xformers.ops.memory_efficient_attention</code> and states the library dispatches to other libraries and its own CUDA kernels where relevant; the ops documentation lists available memory-efficient attention implementations. Limit: supported dtype, mask, head dimension, and backend combinations change by version and build, so confirm with the installed build using <code>python -m xformers.info</code>.<a class="footnote-back" href="#fnref8" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</div></section>
+</main> <!-- /main -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const automaticLongContentFolding = false;
+  const referenceSections = document.querySelectorAll(
+    'main.content section.footnotes[role="doc-endnotes"]'
+  );
+
+  referenceSections.forEach((section) => {
+    if (section.closest("details.publisher-chapter-references")) return;
+
+    const details = document.createElement("details");
+    details.className = "publisher-chapter-references";
+    const summary = document.createElement("summary");
+    const count = section.querySelectorAll("ol > li").length;
+    summary.textContent = count ? `References (${count})` : "References";
+
+    section.parentNode.insertBefore(details, section);
+    details.append(summary, section);
+  });
+
+  const openFoldTarget = (target) => {
+    const details = target?.closest(
+      "details.publisher-chapter-references, details.publisher-long-content"
+    );
+    if (details) details.open = true;
+  };
+
+  const targetFromHash = (hash) => {
+    if (!hash || hash === "#") return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('a[href*="#"]');
+    if (!link) return;
+    let destination;
+    try {
+      destination = new URL(link.getAttribute("href") || "", location.href);
+    } catch (_error) {
+      return;
+    }
+    if (destination.href.split("#")[0] !== location.href.split("#")[0]) return;
+    openFoldTarget(targetFromHash(destination.hash));
+  });
+
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
+    if (control?.classList.contains("publisher-fold-never")) return "never";
+    if (control?.classList.contains("publisher-fold-always")) return "always";
+    if (control?.classList.contains("publisher-fold-open")) return "open";
+    const requested = control?.dataset.publisherFold || "auto";
+    return ["auto", "never", "always", "open"].includes(requested)
+      ? requested
+      : "auto";
+  };
+
+  const foldCandidate = (candidate, kind) => {
+    if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
+
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
+    if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
+    const minimumFoldHeight = 320;
+    const foldHeight = Math.max(
+      minimumFoldHeight,
+      Math.round(document.documentElement.clientHeight * 0.5)
+    );
+    if (mode === "auto" && candidate.getBoundingClientRect().height <= foldHeight) return;
+
+    const titleSource = kind === "table"
+      ? candidate.querySelector("figcaption, caption")
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
+    const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
+
+    const details = document.createElement("details");
+    details.className = `publisher-long-content publisher-long-${kind}`;
+    if (mode === "open") details.open = true;
+    const summary = document.createElement("summary");
+    if (titleSource && label) {
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
+    } else {
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
+    }
+    const body = document.createElement("div");
+    body.className = "publisher-fold-body";
+    if (titleSource) titleSource.classList.add("publisher-fold-title-source");
+
+    candidate.parentNode.insertBefore(details, candidate);
+    details.append(summary, body);
+    body.append(candidate);
+  };
+
+  const foldLongContent = () => {
+    if (!automaticLongContentFolding) return;
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
+    document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
+      const float = figure.parentElement?.classList.contains("quarto-float")
+        ? figure.parentElement
+        : figure;
+      foldCandidate(float, "table");
+    });
+    document.querySelectorAll("main.content table").forEach((table) => {
+      if (!table.closest("figure.quarto-float-tbl")) foldCandidate(table, "table");
+    });
+    openFoldTarget(targetFromHash(location.hash));
+  };
+
+  if (document.readyState === "complete") {
+    requestAnimationFrame(foldLongContent);
+  } else {
+    window.addEventListener("load", () => requestAnimationFrame(foldLongContent), {
+      once: true,
+    });
+  }
+
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
+  document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
+  const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
+  window.addEventListener("hashchange", openLocationTarget);
+  openLocationTarget();
+});
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+<div class="nav-page nav-page-previous">
+<a aria-label="CUDA execution and data movement" class="pagination-link" href="../chapters/ch-m4-n04.html">
+<i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></span>
+</a>
+</div>
+<div class="nav-page nav-page-next">
+<a aria-label="Performance models" class="pagination-link" href="../chapters/ch-m4-n06.html">
+<span class="nav-page-text"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></span> <i class="bi bi-arrow-right-short"></i>
+</a>
+</div>
+</nav>
+</div> <!-- /content -->
+<script data-m4-fold-ui="script" defer="defer" src="../html-folds/folds.js"></script>  <div class="book-image-preview-overlay" data-book-image-overlay hidden>
+    <button class="book-image-preview-backdrop" type="button" data-book-image-close aria-label="Close image preview"></button>
+    <div class="book-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview">
+      <button class="book-image-preview-close" type="button" data-book-image-close>Close</button>
+      <img class="book-image-preview-image" data-book-image-preview-img alt="">
+    </div>
+  </div>
+  <script id="book-image-preview-script">
+    (() => {
+      if (window.__bookImagePreviewReady) {
+        return;
+      }
+      window.__bookImagePreviewReady = true;
+
+      const overlay = document.querySelector("[data-book-image-overlay]");
+      const preview = document.querySelector("[data-book-image-preview-img]");
+      const closeButtons = document.querySelectorAll("[data-book-image-close]");
+      const closeButton = overlay ? overlay.querySelector(".book-image-preview-close") : null;
+      let restoreFocus = null;
+
+      if (!overlay || !preview) {
+        return;
+      }
+
+      function openPreview(image) {
+        restoreFocus = image;
+        preview.src = image.currentSrc || image.src;
+        preview.alt = image.alt || "";
+        overlay.hidden = false;
+        document.body.classList.add("book-image-preview-open");
+        if (closeButton) {
+          closeButton.focus();
+        }
+      }
+
+      function closePreview() {
+        if (overlay.hidden) {
+          return;
+        }
+        overlay.hidden = true;
+        preview.removeAttribute("src");
+        preview.alt = "";
+        document.body.classList.remove("book-image-preview-open");
+        if (restoreFocus) {
+          restoreFocus.focus();
+        }
+      }
+
+      document.querySelectorAll("img[data-book-image-preview]").forEach((image) => {
+        image.addEventListener("click", () => openPreview(image));
+        image.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPreview(image);
+          }
+        });
+      });
+      closeButtons.forEach((button) => {
+        button.addEventListener("click", closePreview);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!overlay.hidden && event.key === "Escape") {
+          closePreview();
+        }
+      });
+    })();
+  </script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "bf257544e13140429e7cbda3a16caddb"}'></script><!-- End Cloudflare Web Analytics -->
+<!-- book-ask-ai:start -->
+<link rel="stylesheet" href="../ask-ai-assets/ask-ai.css">
+<script id="book-ask-ai-config" type="application/json">{"endpoint": "https://course-ask-ai.course-ask-ai-backend.workers.dev/ask", "book": "module_4", "bookTitle": "", "version": ""}</script>
+<script defer src="../ask-ai-assets/ask-ai.js"></script>
+<!-- book-ask-ai:end -->
+</body></html>

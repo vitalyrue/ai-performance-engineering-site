@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"><head>
+<meta charset="utf-8"/>
+<meta content="quarto-1.10.18" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>1  Model operations and tensors – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta content="../" name="quarto:offset"/>
+<link href="../chapters/ch-m4-n02.html" rel="next"/>
+<link href="../parts/part-i.html" rel="prev"/>
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet"/>
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" id="quarto-text-highlighting-styles" rel="stylesheet"/>
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet"/>
+<link append-hash="true" data-mode="light" href="../site_libs/bootstrap/bootstrap-741cab1455972e99f328c2af765061c1.min.css" id="quarto-bootstrap" rel="stylesheet"/>
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+<link href="../styles.css" rel="stylesheet"/>
+<link data-reading-layout="true" href="../reading-layout/reading.css" rel="stylesheet"/><link data-m4-fold-ui="style" href="../html-folds/folds.css" rel="stylesheet"/>  <style id="book-image-preview-style">
+    img[data-book-image-preview] {
+      cursor: zoom-in;
+    }
+    img[data-book-image-preview]:focus {
+      outline: 3px solid rgba(15, 107, 120, 0.36);
+      outline-offset: 4px;
+    }
+    body.book-image-preview-open {
+      overflow: hidden;
+    }
+    .book-image-preview-overlay[hidden] {
+      display: none !important;
+    }
+    .book-image-preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .book-image-preview-backdrop {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      background: rgba(18, 28, 40, 0.76);
+      cursor: zoom-out;
+    }
+    .book-image-preview-dialog {
+      position: relative;
+      width: min(94vw, 1100px);
+      max-height: 94vh;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.36);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 24px 70px rgba(18, 28, 40, 0.34);
+    }
+    .book-image-preview-close {
+      display: block;
+      margin: 0 0 12px auto;
+      padding: 7px 12px;
+      border: 1px solid #d7e2e8;
+      border-radius: 6px;
+      background: #f5f8fa;
+      color: #1f2f44;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .book-image-preview-image {
+      display: block;
+      width: 100%;
+      max-height: calc(94vh - 74px);
+      object-fit: contain;
+      border-radius: 6px;
+      background: #eef6f7;
+    }
+  </style>
+  <style id="book-release-metadata-style">
+    .book-release-meta {
+      margin: 0.55rem 0 0.8rem;
+      color: #536273;
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+    .book-release-meta dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.12rem 0.5rem;
+      margin: 0;
+    }
+    .book-release-meta dt {
+      color: #24384d;
+      font-weight: 650;
+    }
+    .book-release-meta dd {
+      margin: 0;
+    }
+    .book-release-home {
+      display: inline-block;
+      color: #0f6b78;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .book-release-home:hover,
+    .book-release-home:focus {
+      text-decoration: underline;
+    }
+    .book-release-home-wrap {
+      margin: 0.55rem 0 0.8rem;
+    }
+    .book-release-meta-sidebar {
+      margin-top: 0.8rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid #d7e2e8;
+    }
+    .book-release-meta-front {
+      padding: 0.7rem 0.85rem;
+      border-left: 3px solid #0f6b78;
+      background: #eef6f7;
+      max-width: 34rem;
+    }
+  </style>
+</head>
+<body class="nav-sidebar floating quarto-light">
+<div id="quarto-search-results"></div>
+<header class="headroom fixed-top" id="quarto-header">
+<nav class="quarto-secondary-nav">
+<div class="container-fluid d-flex">
+<button aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="quarto-btn-toggle btn" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="button" type="button">
+<i class="bi bi-layout-text-sidebar-reverse"></i>
+</button>
+<nav aria-label="breadcrumb" class="quarto-page-breadcrumbs"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-i.html">Part I: Models, workload state, and GPU hardware</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n01.html"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></a></li></ol></nav>
+<a aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="flex-grow-1" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="navigation">
+</a>
+<button aria-label="Search" class="btn quarto-search-button" onclick="window.quartoOpenSearch();" type="button">
+<i class="bi bi-search"></i>
+</button>
+</div>
+</nav>
+</header>
+<!-- content -->
+<div class="quarto-container page-columns page-rows-contents page-layout-article" id="quarto-content">
+<!-- sidebar -->
+<nav class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto" id="quarto-sidebar">
+<div class="pt-lg-2 mt-2 text-left sidebar-header">
+<div class="sidebar-title mb-0 py-0">
+<a href="../">Advanced LLM Performance Engineering</a>
+</div>
+</div>
+<div class="mt-2 flex-shrink-0 align-items-center">
+<div class="sidebar-search">
+<div class="" id="quarto-search" title="Search"></div>
+</div>
+</div>
+<div class="book-release-home-wrap" data-book-release-location="sidebar-home">
+  <a class="book-release-home" href="../../">&larr; AI Systems Engineering</a>
+</div>
+    <div class="sidebar-menu-container">
+<ul class="list-unstyled mt-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../index.html">
+<span class="menu-text">Advanced LLM Performance Engineering</span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../frontmatter/ch-m4-index.html">
+<span class="menu-text">Introduction and Learning Path</span></a>
+</div>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-i.html">
+<span class="menu-text">Part I: Models, workload state, and GPU hardware</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-1" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link active" href="../chapters/ch-m4-n01.html">
+<span class="menu-text"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n02.html">
+<span class="menu-text"><span class="chapter-number">2</span>  <span class="chapter-title">Workload phases and live memory</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n03.html">
+<span class="menu-text"><span class="chapter-number">3</span>  <span class="chapter-title">GPU hardware and memory</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-ii.html">
+<span class="menu-text">Part II: GPU execution, measurement, and optimization</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-2" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-2">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n04.html">
+<span class="menu-text"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n05.html">
+<span class="menu-text"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n06.html">
+<span class="menu-text"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n07.html">
+<span class="menu-text"><span class="chapter-number">7</span>  <span class="chapter-title">Measurement, profiling and fair comparisons</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n08.html">
+<span class="menu-text"><span class="chapter-number">8</span>  <span class="chapter-title">Compilation and runtime</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iii.html">
+<span class="menu-text">Part III: Training and single-worker inference</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-3" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-3">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n10.html">
+<span class="menu-text"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n11.html">
+<span class="menu-text"><span class="chapter-number">10</span>  <span class="chapter-title">Inference phases and memory budgets</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n12.html">
+<span class="menu-text"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n13.html">
+<span class="menu-text"><span class="chapter-number">12</span>  <span class="chapter-title">Decode and KV-cache layout</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iv.html">
+<span class="menu-text">Part IV: Serving systems</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-4" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-4">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n14.html">
+<span class="menu-text"><span class="chapter-number">13</span>  <span class="chapter-title">Request scheduling and prefix reuse</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n15.html">
+<span class="menu-text"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n16.html">
+<span class="menu-text"><span class="chapter-number">15</span>  <span class="chapter-title">Serving measurement and stack selection</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-v.html">
+<span class="menu-text">Part V: Distributed execution</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-5" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-5">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n17.html">
+<span class="menu-text"><span class="chapter-number">16</span>  <span class="chapter-title">Collective data movement and its cost</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n18.html">
+<span class="menu-text"><span class="chapter-number">17</span>  <span class="chapter-title">Launching and measuring distributed work</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n19.html">
+<span class="menu-text"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n20.html">
+<span class="menu-text"><span class="chapter-number">19</span>  <span class="chapter-title">Tensor and sequence parallelism</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n21.html">
+<span class="menu-text"><span class="chapter-number">20</span>  <span class="chapter-title">Pipeline, expert and combined layouts</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n22.html">
+<span class="menu-text"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a aria-expanded="true" class="sidebar-item-text sidebar-link text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<span class="menu-text">Appendices</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-6">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/references.html">
+<span class="menu-text"><span class="chapter-number">A</span>  <span class="chapter-title">References</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/optional-labs.html">
+<span class="menu-text"><span class="chapter-number">B</span>  <span class="chapter-title">Optional Labs</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
+  <dl>
+    <dt>Publisher version</dt>
+    <dd>0.8.23</dd>
+    <dt>Released</dt>
+    <dd><time datetime="2026-10-25">2026-10-25</time></dd>
+  </dl>
+</section>
+</nav>
+<div class="quarto-sidebar-collapse-item" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" id="quarto-sidebar-glass"></div>
+<!-- margin-sidebar -->
+<div class="sidebar margin-sidebar" id="quarto-margin-sidebar">
+<nav class="toc-active" id="TOC" role="doc-toc">
+<h2 id="toc-title">Table of contents</h2>
+<ul>
+<li><a class="nav-link active" data-scroll-target="#sec-m4-c01-s09" href="#sec-m4-c01-s09" id="toc-sec-m4-c01-s09"><span class="header-section-number">1.1</span> The model behind the workload</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c01-s01" href="#sec-m4-c01-s01" id="toc-sec-m4-c01-s01"><span class="header-section-number">1.2</span> Tensors and workload state</a></li>
+</ul>
+</nav>
+</div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+<header class="quarto-title-block default" id="title-block-header"><nav aria-label="breadcrumb" class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-i.html">Part I: Models, workload state, and GPU hardware</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n01.html"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span class="quarto-section-identifier" id="sec-ch-m4-n01"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></span></h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+</header>
+<section class="level2" data-number="1.1" id="sec-m4-c01-s09">
+<h2 class="anchored" data-anchor-id="sec-m4-c01-s09" data-number="1.1"><span class="header-section-number">1.1</span> The model behind the workload</h2>
+<p>Producing text can be slow, and learning from examples can require more memory than using the resulting model. Explaining either cost starts with the computation and the numerical state it uses.</p>
+<p>A <span class="definition-term" data-custom-style="Definition Term"><strong>model</strong></span> is a computation with learned numerical values, called <span class="definition-term" data-custom-style="Definition Term"><strong>weights</strong></span> or parameters. A language model takes text as input and computes scores used to choose a continuation. A <span class="definition-term" data-custom-style="Definition Term"><strong>forward pass</strong></span> applies the model to an input to produce predictions. During <span class="definition-term" data-custom-style="Definition Term"><strong>inference</strong></span>, those parameters stay fixed while the model produces an output.</p>
+<p>During <span class="definition-term" data-custom-style="Definition Term"><strong>training</strong></span>, a <span class="definition-term" data-custom-style="Definition Term"><strong>loss</strong></span> measures disagreement between predictions and target answers and supplies the starting value for backward propagation. <span class="definition-term" data-custom-style="Definition Term"><strong>Backward propagation</strong></span> computes <span class="definition-term" data-custom-style="Definition Term"><strong>gradients</strong></span>, derivatives of that loss with respect to the parameters. An <span class="definition-term" data-custom-style="Definition Term"><strong>optimizer</strong></span> uses the gradients to update the parameters. During <span class="definition-term" data-custom-style="Definition Term"><strong>evaluation</strong></span>, predictions are compared with held-out reference answers to measure quality, without updating parameters. Transfers, communication, and serving controls support these operations. Locating a slow operation or a large stored object requires a picture of the computation, its supporting work, and their sizes before considering the hardware.</p>
+<div alt="Token IDs and a learned embedding table feed lookup. Hidden states pass through separately weighted layers, final RMSNorm and a vocabulary head. The last logits row feeds softmax and probability bars. A schematic weights symbol identifies fixed-weight inference. An expanded Llama 3 8B layer shows normalization and Q/K/V projections. Q and K rotate by position, and rotated K is retained. Causal weights mix V. Residual additions and per-token SwiGLU complete the layer. Training computes parameter gradients and updates weights. Evaluation compares held-out targets without updates. The illustrated 2 by 3 array a contains values 1–6. Its descriptor gives FP16 dtype and selected device cuda:0. The strided layout has shape (2, 3), strides (3, 1) and offset zero. Gradient tracking is off and autograd links are absent. Autograd links are optional metadata. The 3 by 2 transpose shares storage with strides (1, 3). The shown values illustrate a and are not the random x listing’s output. Model and generic CPU/GPU copy grids are schematic. The FP16 two-byte and FP32 four-byte cells are literal." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-n01-map">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-n01-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img alt="Token IDs and a learned embedding table feed lookup. Hidden states pass through separately weighted layers, final RMSNorm and a vocabulary head. The last logits row feeds softmax and probability bars. A schematic weights symbol identifies fixed-weight inference. An expanded Llama 3 8B layer shows normalization and Q/K/V projections. Q and K rotate by position, and rotated K is retained. Causal weights mix V. Residual additions and per-token SwiGLU complete the layer. Training computes parameter gradients and updates weights. Evaluation compares held-out targets without updates. The illustrated 2 by 3 array a contains values 1–6. Its descriptor gives FP16 dtype and selected device cuda:0. The strided layout has shape (2, 3), strides (3, 1) and offset zero. Gradient tracking is off and autograd links are absent. Autograd links are optional metadata. The 3 by 2 transpose shares storage with strides (1, 3). The shown values illustrate a and are not the random x listing’s output. Model and generic CPU/GPU copy grids are schematic. The FP16 two-byte and FP32 four-byte cells are literal." class="img-fluid figure-img" src="../assets/fig-m4-n01-map.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" />
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-n01-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 1.1: Learned matrices produce logits. Inference keeps weights fixed. Training computes gradients and updates weights. The illustrated array a and its transpose use values 1–6 and share storage. Its descriptor describes this illustration. These values are not the random x listing’s output. Model and generic CPU/GPU copy grids are schematic. The byte cells are literal.
+</figcaption>
+</figure>
+</div>
+<p>Text first becomes numbers. A <span class="definition-term" data-custom-style="Definition Term"><strong>tokenizer</strong></span> maps text to a sequence of <span class="definition-term" data-custom-style="Definition Term"><strong>token</strong></span> units from its <span class="definition-term" data-custom-style="Definition Term"><strong>vocabulary</strong></span>, the fixed collection it represents. A token can be a word, part of a word, punctuation, whitespace, a byte sequence, or a special control marker. Each unit is represented by an integer <span class="definition-term" data-custom-style="Definition Term"><strong>token ID</strong></span>, its position in that vocabulary. A language-model forward pass turns the sequence into scores for the next token. Llama 3 uses a vocabulary of about 128,000 tokens.<a class="footnote-ref" href="#fn1" id="fnref1" role="doc-noteref"><sup>1</sup></a> <a href="ch-m4-n11.html#sec-m4-c08-s01">Section 10.1</a> treats tokenizers and why the token count drives cost. From there, a Llama-style decoder-only language model applies the four stages below. Other model families can use different normalization and feed-forward choices.</p>
+<ol type="1">
+<li><strong>Embedding:</strong> Each token ID selects one row of an <span class="definition-term" data-custom-style="Definition Term"><strong>embedding table</strong></span> (a matrix holding one learned vector per vocabulary entry). The vector has <span class="math inline">\(d\)</span> numbers, the <span class="definition-term" data-custom-style="Definition Term"><strong>hidden width</strong></span> or model dimension. A sequence of <span class="math inline">\(T\)</span> tokens therefore becomes a <span class="math inline">\(T\times d\)</span> matrix, the <span class="definition-term" data-custom-style="Definition Term"><strong>hidden state</strong></span>.</li>
+<li><strong>Layers:</strong> The hidden state passes through <span class="math inline">\(L\)</span> structurally similar <span class="definition-term" data-custom-style="Definition Term"><strong>layers</strong></span>, also called transformer blocks, with separately learned weights. Each layer has two sub-layers, and each sub-layer follows the same pattern: normalize its input, transform it, and add the result back to the input.
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">A projection is a learned matrix operation. Three projections form queries, keys, and values. Attention compares queries with keys and mixes values from the current and earlier token positions, with no separate learned weights for that comparison and mixing. A fourth projection returns the mixed result to width <code>d</code>. The feed-forward multilayer perceptron (MLP) transforms each token independently using projections and a nonlinear function. In the Llama-style SwiGLU form, gate and up projections each expand hidden width <code>d</code> to intermediate width <code>d_ff</code>. The nonlinear gate result is multiplied element by element by the up result, then returned to <code>d</code> by the down projection. RMSNorm divides each token's vector by its root-mean-square magnitude, with a small stabilizing term, then applies learned per-feature scaling. Residual connections add each sub-layer's output to its input.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-46"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Inside a transformer layer: attention, feed-forward computation, and residual connections</span><ul>
+<li>The <span class="definition-term" data-custom-style="Definition Term"><strong>attention sub-layer</strong></span> is the part of a layer that combines information across permitted token positions. In this model, it first applies <span class="definition-term" data-custom-style="Definition Term"><strong>RMSNorm</strong></span>: it divides each token’s vector by its root-mean-square magnitude, with a small stabilizing term, then applies learned per-feature scaling. Three <span class="definition-term" data-custom-style="Definition Term"><strong>projections</strong></span> (multiplications by learned weight matrices) then produce a query, a key, and a value vector for every token. Llama applies <span class="definition-term" data-custom-style="Definition Term"><strong>rotary position embedding (RoPE)</strong></span>, a position-dependent rotation of queries and keys, before comparing them. Their comparison then depends on the tokens’ relative positions.<a class="footnote-ref" href="#fn2" id="fnref2" role="doc-noteref"><sup>2</sup></a> The rotated keys are retained for later decode steps. <span class="definition-term" data-custom-style="Definition Term"><strong>Attention</strong></span> compares each token’s query with the keys of the permitted positions and mixes the matching values. In a <span class="definition-term" data-custom-style="Definition Term"><strong>causal</strong></span> language model, a token may use only itself and earlier positions. The projected vectors are split into <span class="definition-term" data-custom-style="Definition Term"><strong>attention heads</strong></span>, separate attention calculations using head-sized query, key, and value vectors. Each projection reads the whole input vector, rather than just one slice of its features. Each head’s vectors have length <span class="math inline">\(d_h\)</span>, the <span class="definition-term" data-custom-style="Definition Term"><strong>head dimension</strong></span>. An output projection maps the result back to width <span class="math inline">\(d\)</span>. <a href="ch-m4-n05.html#sec-m4-c04-s11">Section 5.6</a> works through the attention arithmetic.</li>
+<li>The <span class="definition-term" data-custom-style="Definition Term"><strong>feed-forward sub-layer</strong></span> is the part that transforms each token’s vector independently, using the same learned matrices at every position. It applies another RMSNorm and then a <span class="definition-term" data-custom-style="Definition Term"><strong>multilayer perceptron (MLP)</strong></span> (a pair of large projections with a nonlinear function between them). Llama-style models use the <span class="definition-term" data-custom-style="Definition Term"><strong>SwiGLU</strong></span> form, which has three weight matrices.<a class="footnote-ref" href="#fn3" id="fnref3" role="doc-noteref"><sup>3</sup></a> Its gate and up projections each map the token’s vector from width <span class="math inline">\(d\)</span> to <span class="math inline">\(d_{ff}\)</span>. A nonlinear function transforms the gate result, which then multiplies the up result element by element. The down projection maps this combined <span class="math inline">\(d_{ff}\)</span> vector back to width <span class="math inline">\(d\)</span>.</li>
+<li>A <span class="definition-term" data-custom-style="Definition Term"><strong>residual connection</strong></span> (adding a sub-layer’s output to its input) follows each sub-layer, so the hidden state keeps its <span class="math inline">\(T\times d\)</span> shape from layer to layer.</li>
+</ul></div></li>
+<li><strong>Output:</strong> A final RMSNorm and the <span class="definition-term" data-custom-style="Definition Term"><strong>language-model head</strong></span> (a <span class="math inline">\(d\times V\)</span> projection, where <span class="math inline">\(V\)</span> is the vocabulary size) turn the hidden state into <span class="definition-term" data-custom-style="Definition Term"><strong>logits</strong></span>: one unnormalized score per vocabulary entry for each position.</li>
+<li><strong>Selection:</strong> A decoding rule turns the last position’s logits into the next token, as described at the end of this section.</li>
+</ol>
+<p>Most parameters, about 87 percent in the 8B example below, sit in stage 2’s learned matrices. Attention and MLP gate/up projections consume a <span class="math inline">\(T\times d\)</span> state. The MLP down projection consumes the <span class="math inline">\(T\times d_{ff}\)</span> intermediate and returns <span class="math inline">\(T\times d\)</span>. These matrix multiplications are the operations that GPU hardware (<a href="ch-m4-n03.html">Chapter 3</a>) and GPU libraries (<a href="ch-m4-n04.html">Chapter 4</a>) are built to accelerate. The query, key, value, and output projections have learned weights. Comparing queries with keys and using the resulting scores to combine values adds no separate learned matrix, but this work grows with sequence length. Decode also retains keys and values, which is why the KV cache receives separate treatment in <a href="ch-m4-n02.html#sec-m4-c01-s02">Section 2.1</a> and <a href="ch-m4-n11.html">Chapter 10</a> and <a href="ch-m4-n13.html">Chapter 12</a>.</p>
+<p>The final stage chooses one token from the logits. <span class="definition-term" data-custom-style="Definition Term"><strong>Softmax</strong></span> (exponentiating each score and dividing by the sum, so the scores become probabilities, <a href="ch-m4-n05.html#sec-m4-c04-s11">Section 5.6</a>) converts logits into a probability distribution over the vocabulary. A decoding rule then selects from it:<a class="footnote-ref" href="#fn4" id="fnref4" role="doc-noteref"><sup>4</sup></a></p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">Greedy decoding takes the highest-probability token. Temperature changes how concentrated the probabilities are. Top-k and top-p restrict which tokens can be sampled. Beam search tracks several continuations. Random sampling can change repeated outputs, and even greedy results can change when floating-point rounding flips a close choice.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-17"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Decoding options: greedy, temperature, top-k, top-p, and beam search</span><ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Greedy decoding</strong></span> picks the most probable token. It is deterministic in principle: the same prompt and the same arithmetic give the same output, although changes in batching or kernel choice can alter floating-point rounding enough to flip a close choice.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Temperature</strong></span> uses <span class="math inline">\(t&gt;0\)</span> to divide the logits before softmax. Values between 0 and 1 concentrate probability on likely tokens, and values above 1 spread it out. The formula requires positive temperature; greedy decoding is the separate highest-probability rule above, not evaluation of the formula at zero.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Top-k sampling</strong></span> draws from only the <span class="math inline">\(k\)</span> most probable tokens, using their probabilities renormalized to sum to one.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Top-p (nucleus) sampling</strong></span> orders tokens from highest to lowest probability, keeps the shortest prefix whose probabilities add up to at least <span class="math inline">\(p\)</span> for <span class="math inline">\(0&lt;p\leq1\)</span>, and samples after renormalizing that prefix.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Beam search</strong></span> keeps several candidate continuations at once and extends the most probable ones, so it runs several sequences per request.</li>
+</ul></div>
+<p>At each decode step, greedy or sampling selection chooses one next token per active sequence; beam search instead keeps several candidate continuations for one request. Selection is small next to the layers, but it can require sorting vocabulary scores or a round trip to the CPU. Random sampling can make repeated runs differ unless its random state and arithmetic are controlled. The <a href="ch-m4-n14.html">scheduling chapter</a> returns to its serving cost, and the <a href="ch-m4-n07.html#sec-m4-c11-s01">comparison method</a> to its effect on correctness checks.</p>
+<p>The number of parameters in a projection is its input width times its output width. For a layer, the total adds the four attention projections, the three SwiGLU projections, and the normalization weights. Multiplying that layer total by <span class="math inline">\(L\)</span> and adding the embedding and output matrices and final normalization weights gives the model total. Sharing a key and value head among several query heads is <span class="definition-term" data-custom-style="Definition Term"><strong>grouped-query attention</strong></span>: it narrows the key and value projections without reducing the number of query heads (<a href="ch-m4-n02.html#sec-m4-c01-s02">Section 2.1</a>).</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-01"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: Where the parameters of an 8B model sit</strong></p>
+<p><strong>Inputs:</strong> The published Llama 3 8B configuration has <span class="math inline">\(L=32\)</span> layers, <span class="math inline">\(d=4{,}096\)</span>, 32 query heads and 8 key-value heads with <span class="math inline">\(d_h=128\)</span>, an MLP width <span class="math inline">\(d_{ff}=14{,}336\)</span>, and a vocabulary of about 128,000 tokens.<a class="footnote-ref" href="#fn5" id="fnref5" role="doc-noteref"><sup>5</sup></a> Sharing each key and value head among four query heads means that the key and value projections produce <span class="math inline">\(8\times128=1{,}024\)</span> numbers per token instead of 4,096.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c01-t01">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c01-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 1.1: Parameters in one layer of the Llama 3 8B configuration.
+</figcaption>
+<div aria-describedby="tbl-m4-c01-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Weight matrix in one layer</th>
+<th>Shape</th>
+<th>Parameters</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Query projection</td>
+<td><span class="math inline">\(4{,}096\times4{,}096\)</span></td>
+<td>16,777,216</td>
+</tr>
+<tr class="even">
+<td>Key projection</td>
+<td><span class="math inline">\(4{,}096\times1{,}024\)</span></td>
+<td>4,194,304</td>
+</tr>
+<tr class="odd">
+<td>Value projection</td>
+<td><span class="math inline">\(4{,}096\times1{,}024\)</span></td>
+<td>4,194,304</td>
+</tr>
+<tr class="even">
+<td>Attention output projection</td>
+<td><span class="math inline">\(4{,}096\times4{,}096\)</span></td>
+<td>16,777,216</td>
+</tr>
+<tr class="odd">
+<td>MLP gate and up projections (two matrices)</td>
+<td><span class="math inline">\(4{,}096\times14{,}336\)</span> each</td>
+<td>117,440,512</td>
+</tr>
+<tr class="even">
+<td>MLP down projection</td>
+<td><span class="math inline">\(14{,}336\times4{,}096\)</span></td>
+<td>58,720,256</td>
+</tr>
+<tr class="odd">
+<td>Two RMSNorm weight vectors</td>
+<td><span class="math inline">\(4{,}096\)</span> each</td>
+<td>8,192</td>
+</tr>
+<tr class="even">
+<td><strong>Layer total</strong></td>
+<td></td>
+<td><strong>218,112,000</strong></td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p><strong>Whole model:</strong> The 32 layers hold <span class="math inline">\(32\times218{,}112{,}000=6{,}979{,}584{,}000\)</span> parameters. The embedding table and the language-model head each hold about <span class="math inline">\(128{,}000\times4{,}096=524{,}288{,}000\)</span> when they are separate matrices. The total is about 8.03 billion, consistent with the model’s name. A tied design reuses the embedding matrix for the output projection and would reduce this illustrative total by about 0.52 billion parameters.</p>
+<p><strong>Conclusion:</strong> About 81 percent of each layer’s parameters sit in the MLP, and nearly all the rest in the four attention projections. Every generated token uses these dense projection matrices. Their stored size provides a first estimate of weight traffic for a small decode step when the weights exceed cache capacity and must be read from HBM. A batch can reuse each loaded weight across its token rows (<a href="ch-m4-n06.html#sec-m4-c02-s08">Section 6.2</a>).</p>
+</div></div>
+<p>The next section turns from these mathematical parts to the stored arrays that a measurement actually records.</p>
+</section>
+<section class="level2" data-number="1.2" id="sec-m4-c01-s01">
+<h2 class="anchored" data-anchor-id="sec-m4-c01-s01" data-number="1.2"><span class="header-section-number">1.2</span> Tensors and workload state</h2>
+<p><a href="#sec-m4-c01-s09">Section 1.1</a> named the model’s parts in mathematical terms. A performance measurement records the same parts as stored arrays: how many bytes each occupies, where it lives, and how its elements are laid out. Parameters, activations, gradients, logits, loss, and KV cache each carry a distinct storage and lifetime cost.</p>
+<p>A <span class="definition-term" data-custom-style="Definition Term"><strong>tensor</strong></span> has a mathematical meaning and a physical storage description at the same time. Mathematically, it is a scalar, vector, matrix, or higher-dimensional array used in the model computation. Physically, it is a descriptor over storage: shape, dtype, strides, device, layout, storage offset, and sometimes gradient metadata. Performance depends on both descriptions. The PyTorch 2.4 documentation in <em>Tensor Attributes</em> describes dtype, device, layout, strided storage, and stride semantics used in this chapter.<a class="footnote-ref" href="#fn6" id="fnref6" role="doc-noteref"><sup>6</sup></a></p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Mathematical tensor:</strong></span> The array used in an operation, such as a vector of token embeddings, a matrix of weights, or a batch of logits.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Tensor storage:</strong></span> The underlying bytes allocated on CPU memory, GPU <span class="definition-term" data-custom-style="Definition Term"><strong>High Bandwidth Memory (HBM)</strong></span> (a memory type used as main memory by GPUs such as H100, <a href="ch-m4-n03.html#sec-m4-c02-s03">Section 3.2</a>), <span class="definition-term" data-custom-style="Definition Term"><strong>pinned host memory</strong></span> (CPU memory locked in place so the GPU can copy it directly, <a href="ch-m4-n03.html#sec-m4-c02-s06">Section 3.5</a>), or another device-visible memory tier.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Shape:</strong></span> The logical dimensions of the tensor. Shape controls matrix sizes, attention dimensions, batch sizes, and whether an operation can use an efficient <span class="definition-term" data-custom-style="Definition Term"><strong>kernel</strong></span> (a function that runs on the GPU, <a href="ch-m4-n03.html#sec-m4-c02-s02">Section 3.1</a>).</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Dtype:</strong></span> The numeric representation, such as FP32, BF16, FP16, FP8, INT8, or INT4 (32-bit, 16-bit, 8-bit, and 4-bit floating-point and integer formats, <a href="ch-m4-n10.html#sec-m4-c07-s04">Section 9.4</a>). Dtype controls bytes per element and can change which kernels are legal or fast.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Device:</strong></span> Where the tensor lives, such as CPU memory or <code>cuda:0</code>. Device placement controls which implementation PyTorch dispatches (selects and calls) and determines whether hidden transfers are needed.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Strides and layout:</strong></span> The mapping from logical indices to storage offsets. A stride gives the number of stored elements skipped when one index increases by one. For a contiguous row-major <code>2 x 3</code> tensor with storage offset zero, strides <code>(3, 1)</code> place element <code>(i, j)</code> at offset <code>3*i + j</code> from its storage start: one row step skips three elements and one column step skips one. Contiguous here means that the logical row-major order occupies consecutive storage positions; a transpose can keep the same values while changing that mapping.</li>
+<li><strong class="m4-term-label">Autograd metadata:</strong> Training-time metadata used by PyTorch <span class="definition-term" data-custom-style="Definition Term"><strong>autograd</strong></span> (its automatic-differentiation engine) to know which operations produced a tensor and how to compute gradients.</li>
+</ul>
+<p>This distinction explains several later performance issues. A transpose can be mathematically cheap while creating a non-contiguous view. A dtype change can halve memory traffic while selecting a different kernel path. A tensor’s device determines whether a copy is required. Autograd metadata can extend a tensor’s lifetime through backward propagation.</p>
+<p>PyTorch is the Python framework used in the examples. <code>torch.Tensor</code> holds data and its shape, dtype, device, and stride metadata. <code>torch.nn</code> supplies model layers; <code>torch.autograd</code> records operations needed for gradients; <code>torch.optim</code> supplies parameter update rules. Later chapters introduce the measurement, compiler, and distributed interfaces when they are first used.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Inspecting tensor identity</strong></p>
+<p>This example requires <code>PyTorch</code> and an available NVIDIA GPU usable through <span class="definition-term" data-custom-style="Definition Term"><strong>Compute Unified Device Architecture (CUDA)</strong></span>, NVIDIA’s GPU programming platform (<a href="ch-m4-n04.html">Chapter 4</a>). For the contiguous <code>2 x 3</code> FP16 tensor below, expect shape <code>(2, 3)</code>, dtype <code>torch.float16</code>, device <code>cuda:0</code> or another selected CUDA device, stride <code>(3, 1)</code>, <code>True</code> for contiguity, and <code>12 bytes</code> of tensor payload. The device label can vary with the selected GPU.</p>
+<p><code>import torch</code> loads the <code>PyTorch</code> library. <code>torch.randn(2, 3, ...)</code> calls its tensor-creation function to make a random two-by-three tensor. <code>device=</code> and <code>dtype=</code> are Python keyword arguments: they pass values by parameter name. <code>x.shape</code>, <code>x.dtype</code>, and <code>x.device</code> read properties. Names followed by parentheses, such as <code>x.stride()</code>, call methods; <code>numel()</code> gives the element count and <code>element_size()</code> the bytes per element.</p>
+<div class="m4-contained-code-caption publisher-code-caption" data-custom-style="Code Caption" hidden="">
+<p><strong>Code example: Inspecting tensor identity</strong></p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c01-1"><a aria-hidden="true" href="#lst-m4-c01-c01-1" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c01-c01-2"><a aria-hidden="true" href="#lst-m4-c01-c01-2" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c01-3"><a aria-hidden="true" href="#lst-m4-c01-c01-3" tabindex="-1"></a>x <span class="op">=</span> torch.randn(<span class="dv">2</span>, <span class="dv">3</span>, device<span class="op">=</span><span class="st">"cuda"</span>, dtype<span class="op">=</span>torch.float16)</span>
+<span id="lst-m4-c01-c01-4"><a aria-hidden="true" href="#lst-m4-c01-c01-4" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c01-5"><a aria-hidden="true" href="#lst-m4-c01-c01-5" tabindex="-1"></a><span class="bu">print</span>(x.shape)</span>
+<span id="lst-m4-c01-c01-6"><a aria-hidden="true" href="#lst-m4-c01-c01-6" tabindex="-1"></a><span class="bu">print</span>(x.dtype)</span>
+<span id="lst-m4-c01-c01-7"><a aria-hidden="true" href="#lst-m4-c01-c01-7" tabindex="-1"></a><span class="bu">print</span>(x.device)</span>
+<span id="lst-m4-c01-c01-8"><a aria-hidden="true" href="#lst-m4-c01-c01-8" tabindex="-1"></a><span class="bu">print</span>(x.stride())</span>
+<span id="lst-m4-c01-c01-9"><a aria-hidden="true" href="#lst-m4-c01-c01-9" tabindex="-1"></a><span class="bu">print</span>(x.is_contiguous())</span>
+<span id="lst-m4-c01-c01-10"><a aria-hidden="true" href="#lst-m4-c01-c01-10" tabindex="-1"></a><span class="bu">print</span>(x.numel() <span class="op">*</span> x.element_size(), <span class="st">"bytes"</span>)</span></code></pre></div><button class="code-copy-button" title="Copy to Clipboard"><i class="bi"></i></button></div>
+<p><strong>Conclusion:</strong> The trace separates the logical <code>2 x 3</code> FP16 array from its physical storage. Its six values occupy 12 bytes, while its stride and device determine later kernel and transfer consequences.</p>
+</div>
+<p>The next chapter follows the persistent and temporary model objects that use this storage. Their overlapping lifetimes, rather than their mathematical names alone, determine peak memory and data movement.</p>
+</section>
+<section class="footnotes footnotes-end-of-document" data-m4-endnotes="1" id="footnotes" role="doc-endnotes"><h2 data-m4-endnotes-heading="1" data-m4-fold-ui="references-heading">References</h2><div data-m4-endnotes-body="1" data-m4-fold-created="endnotes-body" id="m4-endnotes-body">
+<hr/>
+<ol>
+<li id="fn1"><p>Grattafiori, A., et al. (2024). <em>The Llama 3 Herd of Models</em>. <a href="https://arxiv.org/abs/2407.21783">arXiv:2407.21783</a> (v1 2024-07-31, v3 2024-11-23). Table 3 lists the 8B model with 32 layers, model dimension 4,096, FFN dimension 14,336, 32 attention heads, 8 key/value heads, SwiGLU activation, and a 128,000-token vocabulary. Limit: the per-matrix parameter counts in Section 1.1 are derived from these dimensions, and the separate embedding and output matrices are inferred from the approximate 8B total.<a class="footnote-back" href="#fnref1" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>Touvron, H., et al. (2023). <em>LLaMA: Open and Efficient Foundation Language Models</em>. <a href="https://arxiv.org/abs/2302.13971">arXiv:2302.13971</a>. Section 2.2 describes normalizing the input of each transformer sub-layer with RMSNorm, the SwiGLU feed-forward activation, and rotary positional embeddings. Limit: other model families place normalization or choose activations differently.<a class="footnote-back" href="#fnref2" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p>Touvron, H., et al. (2023). <em>LLaMA: Open and Efficient Foundation Language Models</em>. <a href="https://arxiv.org/abs/2302.13971">arXiv:2302.13971</a>. Section 2.2 describes normalizing the input of each transformer sub-layer with RMSNorm, the SwiGLU feed-forward activation, and rotary positional embeddings. Limit: other model families place normalization or choose activations differently.<a class="footnote-back" href="#fnref3" role="doc-backlink">↩︎</a></p></li>
+<li id="fn4"><p>Holtzman, A., Buys, J., Du, L., Forbes, M., &amp; Choi, Y. (2020). <em>The Curious Case of Neural Text Degeneration</em>. ICLR 2020. <a href="https://arxiv.org/abs/1904.09751">arXiv:1904.09751</a>. Defines the top-p vocabulary as the smallest set whose cumulative probability is at least p, and describes top-k sampling, temperature applied to logits before softmax, and beam search. Limit: the paper evaluates text quality, and the performance remarks in Section 1.1 are explanations added by this guide, rather than findings reported by the paper.<a class="footnote-back" href="#fnref4" role="doc-backlink">↩︎</a></p></li>
+<li id="fn5"><p>Grattafiori, A., et al. (2024). <em>The Llama 3 Herd of Models</em>. <a href="https://arxiv.org/abs/2407.21783">arXiv:2407.21783</a> (v1 2024-07-31, v3 2024-11-23). Table 3 lists the 8B model with 32 layers, model dimension 4,096, FFN dimension 14,336, 32 attention heads, 8 key/value heads, SwiGLU activation, and a 128,000-token vocabulary. Limit: the per-matrix parameter counts in Section 1.1 are derived from these dimensions, and the separate embedding and output matrices are inferred from the approximate 8B total.<a class="footnote-back" href="#fnref5" role="doc-backlink">↩︎</a></p></li>
+<li id="fn6"><p>PyTorch. (2024). <em>Tensor Attributes</em> (PyTorch 2.4 documentation). <a href="https://docs.pytorch.org/docs/2.4/tensor_attributes.html">PyTorch 2.4 tensor attributes</a>. Support: defines torch.dtype, torch.device, torch.layout, strided storage, and stride examples used for the shape, dtype, device, strides, and layout claim. Limit: allocator behavior, gradient metadata lifetime, and performance effects are explanations added by this guide, rather than claims from Tensor Attributes.<a class="footnote-back" href="#fnref6" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</div></section>
+</main> <!-- /main -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const automaticLongContentFolding = false;
+  const referenceSections = document.querySelectorAll(
+    'main.content section.footnotes[role="doc-endnotes"]'
+  );
+
+  referenceSections.forEach((section) => {
+    if (section.closest("details.publisher-chapter-references")) return;
+
+    const details = document.createElement("details");
+    details.className = "publisher-chapter-references";
+    const summary = document.createElement("summary");
+    const count = section.querySelectorAll("ol > li").length;
+    summary.textContent = count ? `References (${count})` : "References";
+
+    section.parentNode.insertBefore(details, section);
+    details.append(summary, section);
+  });
+
+  const openFoldTarget = (target) => {
+    const details = target?.closest(
+      "details.publisher-chapter-references, details.publisher-long-content"
+    );
+    if (details) details.open = true;
+  };
+
+  const targetFromHash = (hash) => {
+    if (!hash || hash === "#") return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('a[href*="#"]');
+    if (!link) return;
+    let destination;
+    try {
+      destination = new URL(link.getAttribute("href") || "", location.href);
+    } catch (_error) {
+      return;
+    }
+    if (destination.href.split("#")[0] !== location.href.split("#")[0]) return;
+    openFoldTarget(targetFromHash(destination.hash));
+  });
+
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
+    if (control?.classList.contains("publisher-fold-never")) return "never";
+    if (control?.classList.contains("publisher-fold-always")) return "always";
+    if (control?.classList.contains("publisher-fold-open")) return "open";
+    const requested = control?.dataset.publisherFold || "auto";
+    return ["auto", "never", "always", "open"].includes(requested)
+      ? requested
+      : "auto";
+  };
+
+  const foldCandidate = (candidate, kind) => {
+    if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
+
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
+    if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
+    const minimumFoldHeight = 320;
+    const foldHeight = Math.max(
+      minimumFoldHeight,
+      Math.round(document.documentElement.clientHeight * 0.5)
+    );
+    if (mode === "auto" && candidate.getBoundingClientRect().height <= foldHeight) return;
+
+    const titleSource = kind === "table"
+      ? candidate.querySelector("figcaption, caption")
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
+    const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
+
+    const details = document.createElement("details");
+    details.className = `publisher-long-content publisher-long-${kind}`;
+    if (mode === "open") details.open = true;
+    const summary = document.createElement("summary");
+    if (titleSource && label) {
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
+    } else {
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
+    }
+    const body = document.createElement("div");
+    body.className = "publisher-fold-body";
+    if (titleSource) titleSource.classList.add("publisher-fold-title-source");
+
+    candidate.parentNode.insertBefore(details, candidate);
+    details.append(summary, body);
+    body.append(candidate);
+  };
+
+  const foldLongContent = () => {
+    if (!automaticLongContentFolding) return;
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
+    document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
+      const float = figure.parentElement?.classList.contains("quarto-float")
+        ? figure.parentElement
+        : figure;
+      foldCandidate(float, "table");
+    });
+    document.querySelectorAll("main.content table").forEach((table) => {
+      if (!table.closest("figure.quarto-float-tbl")) foldCandidate(table, "table");
+    });
+    openFoldTarget(targetFromHash(location.hash));
+  };
+
+  if (document.readyState === "complete") {
+    requestAnimationFrame(foldLongContent);
+  } else {
+    window.addEventListener("load", () => requestAnimationFrame(foldLongContent), {
+      once: true,
+    });
+  }
+
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
+  document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
+  const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
+  window.addEventListener("hashchange", openLocationTarget);
+  openLocationTarget();
+});
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+<div class="nav-page nav-page-previous">
+<a aria-label="Part I: Models, workload state, and GPU hardware" class="pagination-link" href="../parts/part-i.html">
+<i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part I: Models, workload state, and GPU hardware</span>
+</a>
+</div>
+<div class="nav-page nav-page-next">
+<a aria-label="Workload phases and live memory" class="pagination-link" href="../chapters/ch-m4-n02.html">
+<span class="nav-page-text"><span class="chapter-number">2</span>  <span class="chapter-title">Workload phases and live memory</span></span> <i class="bi bi-arrow-right-short"></i>
+</a>
+</div>
+</nav>
+</div> <!-- /content -->
+<script data-m4-fold-ui="script" defer="defer" src="../html-folds/folds.js"></script>  <div class="book-image-preview-overlay" data-book-image-overlay hidden>
+    <button class="book-image-preview-backdrop" type="button" data-book-image-close aria-label="Close image preview"></button>
+    <div class="book-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview">
+      <button class="book-image-preview-close" type="button" data-book-image-close>Close</button>
+      <img class="book-image-preview-image" data-book-image-preview-img alt="">
+    </div>
+  </div>
+  <script id="book-image-preview-script">
+    (() => {
+      if (window.__bookImagePreviewReady) {
+        return;
+      }
+      window.__bookImagePreviewReady = true;
+
+      const overlay = document.querySelector("[data-book-image-overlay]");
+      const preview = document.querySelector("[data-book-image-preview-img]");
+      const closeButtons = document.querySelectorAll("[data-book-image-close]");
+      const closeButton = overlay ? overlay.querySelector(".book-image-preview-close") : null;
+      let restoreFocus = null;
+
+      if (!overlay || !preview) {
+        return;
+      }
+
+      function openPreview(image) {
+        restoreFocus = image;
+        preview.src = image.currentSrc || image.src;
+        preview.alt = image.alt || "";
+        overlay.hidden = false;
+        document.body.classList.add("book-image-preview-open");
+        if (closeButton) {
+          closeButton.focus();
+        }
+      }
+
+      function closePreview() {
+        if (overlay.hidden) {
+          return;
+        }
+        overlay.hidden = true;
+        preview.removeAttribute("src");
+        preview.alt = "";
+        document.body.classList.remove("book-image-preview-open");
+        if (restoreFocus) {
+          restoreFocus.focus();
+        }
+      }
+
+      document.querySelectorAll("img[data-book-image-preview]").forEach((image) => {
+        image.addEventListener("click", () => openPreview(image));
+        image.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPreview(image);
+          }
+        });
+      });
+      closeButtons.forEach((button) => {
+        button.addEventListener("click", closePreview);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!overlay.hidden && event.key === "Escape") {
+          closePreview();
+        }
+      });
+    })();
+  </script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "bf257544e13140429e7cbda3a16caddb"}'></script><!-- End Cloudflare Web Analytics -->
+<!-- book-ask-ai:start -->
+<link rel="stylesheet" href="../ask-ai-assets/ask-ai.css">
+<script id="book-ask-ai-config" type="application/json">{"endpoint": "https://course-ask-ai.course-ask-ai-backend.workers.dev/ask", "book": "module_4", "bookTitle": "", "version": ""}</script>
+<script defer src="../ask-ai-assets/ask-ai.js"></script>
+<!-- book-ask-ai:end -->
+</body></html>

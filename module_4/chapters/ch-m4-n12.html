@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"><head>
+<meta charset="utf-8"/>
+<meta content="quarto-1.10.18" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>11  Model compression for inference – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta content="../" name="quarto:offset"/>
+<link href="../chapters/ch-m4-n13.html" rel="next"/>
+<link href="../chapters/ch-m4-n11.html" rel="prev"/>
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet"/>
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" id="quarto-text-highlighting-styles" rel="stylesheet"/>
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet"/>
+<link append-hash="true" data-mode="light" href="../site_libs/bootstrap/bootstrap-741cab1455972e99f328c2af765061c1.min.css" id="quarto-bootstrap" rel="stylesheet"/>
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+<link href="../styles.css" rel="stylesheet"/>
+<link data-reading-layout="true" href="../reading-layout/reading.css" rel="stylesheet"/><link data-m4-fold-ui="style" href="../html-folds/folds.css" rel="stylesheet"/><link data-map-style="" href="../map-viewer/viewer.css" rel="stylesheet"/><script data-map-script="" defer="" src="../map-viewer/viewer.js"></script>  <style id="book-image-preview-style">
+    img[data-book-image-preview] {
+      cursor: zoom-in;
+    }
+    img[data-book-image-preview]:focus {
+      outline: 3px solid rgba(15, 107, 120, 0.36);
+      outline-offset: 4px;
+    }
+    body.book-image-preview-open {
+      overflow: hidden;
+    }
+    .book-image-preview-overlay[hidden] {
+      display: none !important;
+    }
+    .book-image-preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .book-image-preview-backdrop {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      background: rgba(18, 28, 40, 0.76);
+      cursor: zoom-out;
+    }
+    .book-image-preview-dialog {
+      position: relative;
+      width: min(94vw, 1100px);
+      max-height: 94vh;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.36);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 24px 70px rgba(18, 28, 40, 0.34);
+    }
+    .book-image-preview-close {
+      display: block;
+      margin: 0 0 12px auto;
+      padding: 7px 12px;
+      border: 1px solid #d7e2e8;
+      border-radius: 6px;
+      background: #f5f8fa;
+      color: #1f2f44;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .book-image-preview-image {
+      display: block;
+      width: 100%;
+      max-height: calc(94vh - 74px);
+      object-fit: contain;
+      border-radius: 6px;
+      background: #eef6f7;
+    }
+  </style>
+  <style id="book-release-metadata-style">
+    .book-release-meta {
+      margin: 0.55rem 0 0.8rem;
+      color: #536273;
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+    .book-release-meta dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.12rem 0.5rem;
+      margin: 0;
+    }
+    .book-release-meta dt {
+      color: #24384d;
+      font-weight: 650;
+    }
+    .book-release-meta dd {
+      margin: 0;
+    }
+    .book-release-home {
+      display: inline-block;
+      color: #0f6b78;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .book-release-home:hover,
+    .book-release-home:focus {
+      text-decoration: underline;
+    }
+    .book-release-home-wrap {
+      margin: 0.55rem 0 0.8rem;
+    }
+    .book-release-meta-sidebar {
+      margin-top: 0.8rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid #d7e2e8;
+    }
+    .book-release-meta-front {
+      padding: 0.7rem 0.85rem;
+      border-left: 3px solid #0f6b78;
+      background: #eef6f7;
+      max-width: 34rem;
+    }
+  </style>
+</head>
+<body class="nav-sidebar floating quarto-light">
+<div id="quarto-search-results"></div>
+<header class="headroom fixed-top" id="quarto-header">
+<nav class="quarto-secondary-nav">
+<div class="container-fluid d-flex">
+<button aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="quarto-btn-toggle btn" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="button" type="button">
+<i class="bi bi-layout-text-sidebar-reverse"></i>
+</button>
+<nav aria-label="breadcrumb" class="quarto-page-breadcrumbs"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-iii.html">Part III: Training and single-worker inference</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n12.html"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></a></li></ol></nav>
+<a aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="flex-grow-1" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="navigation">
+</a>
+<button aria-label="Search" class="btn quarto-search-button" onclick="window.quartoOpenSearch();" type="button">
+<i class="bi bi-search"></i>
+</button>
+</div>
+</nav>
+</header>
+<!-- content -->
+<div class="quarto-container page-columns page-rows-contents page-layout-article" id="quarto-content">
+<!-- sidebar -->
+<nav class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto" id="quarto-sidebar">
+<div class="pt-lg-2 mt-2 text-left sidebar-header">
+<div class="sidebar-title mb-0 py-0">
+<a href="../">Advanced LLM Performance Engineering</a>
+</div>
+</div>
+<div class="mt-2 flex-shrink-0 align-items-center">
+<div class="sidebar-search">
+<div class="" id="quarto-search" title="Search"></div>
+</div>
+</div>
+<div class="book-release-home-wrap" data-book-release-location="sidebar-home">
+  <a class="book-release-home" href="../../">&larr; AI Systems Engineering</a>
+</div>
+    <div class="sidebar-menu-container">
+<ul class="list-unstyled mt-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../index.html">
+<span class="menu-text">Advanced LLM Performance Engineering</span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../frontmatter/ch-m4-index.html">
+<span class="menu-text">Introduction and Learning Path</span></a>
+</div>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-i.html">
+<span class="menu-text">Part I: Models, workload state, and GPU hardware</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-1" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n01.html">
+<span class="menu-text"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n02.html">
+<span class="menu-text"><span class="chapter-number">2</span>  <span class="chapter-title">Workload phases and live memory</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n03.html">
+<span class="menu-text"><span class="chapter-number">3</span>  <span class="chapter-title">GPU hardware and memory</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-ii.html">
+<span class="menu-text">Part II: GPU execution, measurement, and optimization</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-2" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-2">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n04.html">
+<span class="menu-text"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n05.html">
+<span class="menu-text"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n06.html">
+<span class="menu-text"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n07.html">
+<span class="menu-text"><span class="chapter-number">7</span>  <span class="chapter-title">Measurement, profiling and fair comparisons</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n08.html">
+<span class="menu-text"><span class="chapter-number">8</span>  <span class="chapter-title">Compilation and runtime</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iii.html">
+<span class="menu-text">Part III: Training and single-worker inference</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-3" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-3">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n10.html">
+<span class="menu-text"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n11.html">
+<span class="menu-text"><span class="chapter-number">10</span>  <span class="chapter-title">Inference phases and memory budgets</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link active" href="../chapters/ch-m4-n12.html">
+<span class="menu-text"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n13.html">
+<span class="menu-text"><span class="chapter-number">12</span>  <span class="chapter-title">Decode and KV-cache layout</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iv.html">
+<span class="menu-text">Part IV: Serving systems</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-4" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-4">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n14.html">
+<span class="menu-text"><span class="chapter-number">13</span>  <span class="chapter-title">Request scheduling and prefix reuse</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n15.html">
+<span class="menu-text"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n16.html">
+<span class="menu-text"><span class="chapter-number">15</span>  <span class="chapter-title">Serving measurement and stack selection</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-v.html">
+<span class="menu-text">Part V: Distributed execution</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-5" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-5">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n17.html">
+<span class="menu-text"><span class="chapter-number">16</span>  <span class="chapter-title">Collective data movement and its cost</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n18.html">
+<span class="menu-text"><span class="chapter-number">17</span>  <span class="chapter-title">Launching and measuring distributed work</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n19.html">
+<span class="menu-text"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n20.html">
+<span class="menu-text"><span class="chapter-number">19</span>  <span class="chapter-title">Tensor and sequence parallelism</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n21.html">
+<span class="menu-text"><span class="chapter-number">20</span>  <span class="chapter-title">Pipeline, expert and combined layouts</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n22.html">
+<span class="menu-text"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a aria-expanded="true" class="sidebar-item-text sidebar-link text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<span class="menu-text">Appendices</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-6">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/references.html">
+<span class="menu-text"><span class="chapter-number">A</span>  <span class="chapter-title">References</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/optional-labs.html">
+<span class="menu-text"><span class="chapter-number">B</span>  <span class="chapter-title">Optional Labs</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
+  <dl>
+    <dt>Publisher version</dt>
+    <dd>0.8.23</dd>
+    <dt>Released</dt>
+    <dd><time datetime="2026-10-25">2026-10-25</time></dd>
+  </dl>
+</section>
+</nav>
+<div class="quarto-sidebar-collapse-item" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" id="quarto-sidebar-glass"></div>
+<!-- margin-sidebar -->
+<div class="sidebar margin-sidebar" id="quarto-margin-sidebar">
+<nav class="toc-active" id="TOC" role="doc-toc">
+<h2 id="toc-title">Table of contents</h2>
+<ul>
+<li><a class="nav-link active" data-scroll-target="#sec-m4-c07-s05" href="#sec-m4-c07-s05" id="toc-sec-m4-c07-s05"><span class="header-section-number">11.1</span> Deployment quantization</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c07-s06" href="#sec-m4-c07-s06" id="toc-sec-m4-c07-s06"><span class="header-section-number">11.2</span> Quantization methods</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c07-s07" href="#sec-m4-c07-s07" id="toc-sec-m4-c07-s07"><span class="header-section-number">11.3</span> Quantization libraries and kernel support</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c07-s08" href="#sec-m4-c07-s08" id="toc-sec-m4-c07-s08"><span class="header-section-number">11.4</span> Calibration, PTQ and QAT</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c08-s11" href="#sec-m4-c08-s11" id="toc-sec-m4-c08-s11"><span class="header-section-number">11.5</span> Pruning and structured sparsity</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c08-s12" href="#sec-m4-c08-s12" id="toc-sec-m4-c08-s12"><span class="header-section-number">11.6</span> Distillation</a></li>
+</ul>
+</nav>
+</div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+<header class="quarto-title-block default" id="title-block-header"><nav aria-label="breadcrumb" class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-iii.html">Part III: Training and single-worker inference</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n12.html"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span class="quarto-section-identifier" id="sec-ch-m4-n12"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></span></h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+</header>
+<p><a href="ch-m4-n11.html#sec-m4-c08-s07">Section 10.4</a> and <a href="ch-m4-n11.html#sec-m4-c08-s09">Section 10.6</a> estimated storage for model weights and the KV cache of active requests. Per-step traffic depends on which weights and cache entries the executed operations access and which reads reuse cached data. <a href="ch-m4-n06.html#sec-m4-c02-s08">Section 6.2</a> showed why a small decode step can be limited by moving those bytes. <span class="definition-term" data-custom-style="Definition Term"><strong>Model compression</strong></span> reduces them. Its four families differ in what they change and in what they cost:</p>
+<div alt="Weights, activations and KV history have different storage roles. An affine code path reconstructs an approximate value. GPTQ corrects later weights using calibration correlations; AWQ pairs channel scaling with inverse input scaling before quantization. Separate scenes show libraries and fused kernels, calibration and PTQ/QAT, sparse formats and teacher/student training." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-n12-map">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-n12-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a aria-describedby="fig-m4-n12-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca" aria-label="Enlarge map" class="m4-map-link" data-map-viewer="" href="../assets/fig-m4-n12-map.png" rel="noopener" target="_blank"><img alt="Weights, activations and KV history have different storage roles. An affine code path reconstructs an approximate value. GPTQ corrects later weights using calibration correlations; AWQ pairs channel scaling with inverse input scaling before quantization. Separate scenes show libraries and fused kernels, calibration and PTQ/QAT, sparse formats and teacher/student training." class="img-fluid figure-img" src="../assets/fig-m4-n12-map.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" /></a>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-n12-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 11.1: Compression changes stored values, matrix structure, or the model itself. Calibration and compatible kernels determine whether fewer bytes or operations help while preserving the required task quality.
+</figcaption>
+</figure>
+</div>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c08-t05">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c08-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 11.1: The four model-compression families compared.
+</figcaption>
+<div aria-describedby="tbl-m4-c08-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<thead>
+<tr class="header">
+<th>Family</th>
+<th>What changes</th>
+<th>Main saving</th>
+<th>Main cost</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Quantization</td>
+<td>The number format of stored weights, activations, or KV cache</td>
+<td>Fewer bytes per value</td>
+<td>Rounding error, and the kernels must read the compact format</td>
+<td><a href="#sec-m4-c07-s05">Section 11.1</a> to <a href="#sec-m4-c07-s08">Section 11.4</a></td>
+</tr>
+<tr class="even">
+<td>Pruning and sparsity</td>
+<td>Selected weights become zero; whole structures can shrink dense tensors, while a sparse path can skip other zeros</td>
+<td>Fewer bytes or multiplications when dense tensors shrink or sparse storage and kernels skip zeros</td>
+<td>Accuracy loss, and a speedup only for supported sparsity patterns</td>
+<td><a href="#sec-m4-c08-s11">Section 11.5</a></td>
+</tr>
+<tr class="odd">
+<td>Distillation</td>
+<td>A smaller model is trained to imitate a larger one</td>
+<td>Fewer parameters in total</td>
+<td>A separate training run, and the result is a different model</td>
+<td><a href="#sec-m4-c08-s12">Section 11.6</a></td>
+</tr>
+<tr class="even">
+<td>Architectural reduction</td>
+<td>The model is designed to store less state, as with grouped-query or sliding-window attention</td>
+<td>A smaller KV cache</td>
+<td>Requires a compatible architecture, training or adaptation</td>
+<td><a href="ch-m4-n11.html#sec-m4-c08-s09">Section 10.6</a>, <a href="ch-m4-n13.html#sec-m4-c09-s08">Section 12.7</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>A smaller representation improves execution only when the runtime reduces the limiting work or memory traffic, or admits useful work that previously did not fit. Low-bit kernels may dequantize values inside the computation without materializing a full wider tensor. Expanding a compact checkpoint into full 16-bit tensors before each matrix multiplication can erase the traffic saving, so file size alone does not establish a speedup. Every family can change the model’s outputs, so each needs a quality check on the intended workload (<a href="#sec-m4-c07-s08">Section 11.4</a>).</p>
+<section class="level2" data-number="11.1" id="sec-m4-c07-s05">
+<h2 class="anchored" data-anchor-id="sec-m4-c07-s05" data-number="11.1"><span class="header-section-number">11.1</span> Deployment quantization</h2>
+<p>Deployment quantization starts with an already-trained model and changes how selected tensors are represented at inference time. It is useful when the measured bottleneck is weight or cache bytes, memory capacity, or a hardware path that efficiently consumes the compact representation.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">Weight quantization cuts persistent model bytes. Activation quantization changes intermediate tensors. KV-cache quantization cuts serving state that grows with requests and context. Scales and dequantization add work, so a smaller representation helps latency only when the selected kernels use it efficiently and quality remains acceptable.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-36"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Quantization targets: weights, activations, and KV cache</span><ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Weight quantization:</strong></span> Stores model parameters in fewer bits. It mainly targets persistent weight memory and repeated weight reads during inference.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Activation quantization:</strong></span> Stores or computes intermediate tensors in lower precision. It can reduce traffic between operations, but it is more sensitive to calibration because activation distributions vary with data.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">KV-cache quantization:</strong></span> Stores attention keys and values in fewer bits during serving. It targets the dynamic memory object that grows with active requests and context length.</li>
+<li><strong class="m4-term-label">Dequantization:</strong> Conversion from a compact representation back to a wider representation for computation. If dequantization is expensive or happens too early, the latency benefit can disappear.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Scale metadata:</strong></span> Extra values that map low-precision integers or floating formats back to approximate real values. Group size and scale placement affect both quality and kernel cost.</li>
+</ul></div>
+<p>Affine integer quantization stores an integer code <span class="math inline">\(q\)</span> for a real value <span class="math inline">\(x\)</span>. The positive scale <span class="math inline">\(s\)</span> sets the size of a quantization step. The integer zero point <span class="math inline">\(z\)</span> is the code that represents the real value zero. Clipping limits the code to the target format’s range <span class="math inline">\([q_{\min},q_{\max}]\)</span>, for example <span class="math inline">\([-128,127]\)</span> for a signed 8-bit integer. The runtime later reconstructs an approximate wider value when a kernel needs it:</p>
+<p><span id="eq-m4-c07-e06"><span class="math display">\[
+q = \text{clip}\left(\text{round}\left(\frac{x}{s}\right) + z, q_{min}, q_{max}\right)
+\tag{11.1}\]</span></span></p>
+<p><span id="eq-m4-c07-e07"><span class="math display">\[
+\text{dequantized } x = s \times (q - z)
+\tag{11.2}\]</span></span></p>
+<p>Calibration chooses quantization parameters from tensors drawn from the expected workload.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong>Calibration set:</strong></span> Prompts, activations, or layer inputs drawn from the expected workload and used to estimate value ranges.</li>
+</ul>
+<p>The numerical trace in <a href="#sec-m4-c07-s08">Section 11.4</a> follows observed values through scale selection, rounding, clipping, and reconstruction using these two mappings.</p>
+<p>The stored code is smaller, but the end-to-end gain depends on where the second mapping occurs. A fused low-bit matrix kernel can unpack codes, apply scales, and accumulate without first materializing a full FP16 or BF16 tensor. A separate early dequantization pass can give back much of the saved memory traffic.</p>
+<p>When a workload is memory-bound (<a href="ch-m4-n06.html#sec-m4-c02-s08">Section 6.2</a>), reducing bytes moved can be more valuable than reducing arithmetic. Evaluate whether the hot path avoids reading, writing, or transferring the wider representation.</p>
+</section>
+<section class="level2" data-number="11.2" id="sec-m4-c07-s06">
+<h2 class="anchored" data-anchor-id="sec-m4-c07-s06" data-number="11.2"><span class="header-section-number">11.2</span> Quantization methods</h2>
+<p>Weight-only quantization is usually the simplest inference path: it shrinks parameters while leaving activations in a higher precision. Activation quantization is more intrusive because activation distributions vary by layer, token, and workload. Key-value cache quantization targets long-context serving capacity and decode bandwidth, but it can affect attention quality and needs engine support.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">GPTQ:</strong></span> A post-training weight quantization algorithm that uses calibration inputs to limit the change in each layer’s output<a class="footnote-ref" href="#fn1" id="fnref1" role="doc-noteref"><sup>1</sup></a>. It is commonly used for low-bit inference checkpoints when compatible kernels exist.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">AWQ:</strong></span> Activation-aware Weight Quantization. It rescales input channels and their corresponding weight columns before low-bit weight quantization to reduce output error on the expected workload<a class="footnote-ref" href="#fn2" id="fnref2" role="doc-noteref"><sup>2</sup></a>. An input channel is one coordinate of a layer’s input vector. The matching weight column contains the weights that multiply that coordinate.</li>
+<li><strong class="m4-term-label">FP8 and KV-cache quantization:</strong> FP8 targets lower-precision tensor and cache storage with hardware/runtime support. KV-cache quantization reduces long-context memory pressure but can introduce dequantization cost and attention-quality risk.</li>
+</ul>
+<p>Both weight methods use layer inputs from calibration data, rather than judging each weight in isolation. Write those input vectors as the columns of <span class="math inline">\(X\)</span>, and the original weight matrix as <span class="math inline">\(W\)</span>. The original layer output is <span class="math inline">\(WX\)</span>. A reconstructed low-bit weight matrix <span class="math inline">\(\hat W\)</span> should make <span class="math inline">\(\hat W X\)</span> close to <span class="math inline">\(WX\)</span> on those inputs.</p>
+<p>GPTQ uses correlations between input channels to estimate how changes in weights affect this output error. This is the role of the paper’s second-order information. As weights are rounded in a chosen order, GPTQ adjusts weights not yet quantized to partly compensate for the rounding error already introduced.<a class="footnote-ref" href="#fn3" id="fnref3" role="doc-noteref"><sup>3</sup></a></p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Compensating for one rounded weight</strong></p>
+<p><strong>Inputs:</strong> One calibration input is <span class="math inline">\(x=(1,1)\)</span>, and one output row has weights <span class="math inline">\((0.6,0.6)\)</span>. Its original output is <span class="math inline">\(0.6+0.6=1.2\)</span>. Assume the first weight is rounded to <span class="math inline">\(1\)</span> while the second has not yet been quantized.</p>
+<p><strong>Intermediate change:</strong> Leaving the second weight at <span class="math inline">\(0.6\)</span> would give <span class="math inline">\(1.6\)</span>. Reducing it to <span class="math inline">\(0.2\)</span> restores <span class="math inline">\(1.2\)</span> for this input.</p>
+<p><strong>Conclusion:</strong> An unquantized weight can compensate for an earlier rounding error. The second weight still needs quantization, so this intermediate correction does not promise zero final error. GPTQ uses many calibration inputs and their correlations, not this one-input adjustment rule.</p>
+</div>
+<p>AWQ instead searches for positive input-channel scale factors from calibration activations. Let <span class="math inline">\(D\)</span> be a diagonal matrix containing those factors. Scaling weight columns to <span class="math inline">\(WD\)</span> and inversely scaling the inputs gives <span class="math inline">\((WD)(D^{-1}x)=Wx\)</span> before quantization. AWQ then quantizes the transformed weights and checks which factors reduce output error on the calibration data.<a class="footnote-ref" href="#fn4" id="fnref4" role="doc-noteref"><sup>4</sup></a> This paired transform changes the effect of rounding. It does not keep all important weights in a wider format, and its channel factors are distinct from the integer reconstruction scales of <a href="#sec-m4-c07-s05">Section 11.1</a>.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Why activation size matters to weight error</strong></p>
+<p><strong>Inputs:</strong> For one output row, input channels have values <span class="math inline">\((10,1)\)</span>. Suppose quantization changes each corresponding weight by <span class="math inline">\(0.1\)</span>.</p>
+<p><strong>Output effect:</strong> The two weight errors contribute <span class="math inline">\(10\times0.1=1\)</span> and <span class="math inline">\(1\times0.1=0.1\)</span> to output error. Equal weight errors therefore matter differently on these inputs.</p>
+<p><strong>Conclusion:</strong> Calibration activations identify channels whose weight errors have a large output effect. AWQ tests channel scaling to reduce that effect on the workload. This calculation explains the motivation, not a complete AWQ scale-search procedure or a guaranteed quality improvement.</p>
+</div>
+<p>AWQ and GPTQ are method families, not runtime guarantees. Their checkpoints reduce weight bandwidth only through the kernel paths described in <a href="#sec-m4-c07-s07">Section 11.3</a>.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c07-t05">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 11.2: Quantization methods as performance techniques.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Mechanism</th>
+<th>What it helps</th>
+<th>What still must be checked</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>GPTQ</td>
+<td>Uses calibration data and approximate second-order reconstruction to choose low-bit weights with lower layer-output error than naive rounding</td>
+<td>Weight-only low-bit inference when parameter reads or model fit are the bottleneck</td>
+<td>Quantization time, compatible kernels, quality on prompts from the expected workload, and whether dequantization stays fused</td>
+</tr>
+<tr class="even">
+<td>AWQ</td>
+<td>Uses calibration activations from the expected workload to find important channels and protects them through activation-aware scaling before low-bit weight quantization</td>
+<td>Hardware-friendly weight-only inference where a small set of important channels drives error</td>
+<td>Calibration domain, packed-weight layout, kernel support, and whether activation outliers shift in production</td>
+</tr>
+<tr class="odd">
+<td>FP8 path</td>
+<td>Stores or computes selected tensors in FP8 with scaling factors and wider accumulation where required</td>
+<td>Bandwidth, tensor-core throughput, activation or KV-cache footprint on supported accelerators</td>
+<td>Scaling granularity, amax handling, supported operations, and numerical quality</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section class="level2" data-number="11.3" id="sec-m4-c07-s07">
+<h2 class="anchored" data-anchor-id="sec-m4-c07-s07" data-number="11.3"><span class="header-section-number">11.3</span> Quantization libraries and kernel support</h2>
+<p>A quantization method becomes a runnable performance path through a library and compatible kernels.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label"><code>bitsandbytes</code>:</strong></span> A low-precision training and inference library with quantized optimizer and weight paths<a class="footnote-ref" href="#fn5" id="fnref5" role="doc-noteref"><sup>5</sup></a>. Its benefit depends on the selected model, format, GPU, and kernel support.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label"><code>torchao</code>:</strong></span> PyTorch-native quantization and sparsity tooling that integrates supported low-precision representations with PyTorch models and execution paths<a class="footnote-ref" href="#fn6" id="fnref6" role="doc-noteref"><sup>6</sup></a>.</li>
+<li><strong class="m4-term-label">Implementation support:</strong> The concrete combination of packed layout, scale granularity, dequantization strategy, matrix kernel, GPU architecture, and runtime version that turns a small checkpoint into a fast execution path.</li>
+<li><strong class="m4-term-label">Measurements:</strong> Checkpoint size demonstrates storage compression. End-to-end latency, throughput, peak memory, and quality demonstrate whether the implementation helps the workload.</li>
+</ul>
+<p>Library names serve as implementation examples rather than definitions of quantization. GPTQ, AWQ, FP8, INT8, and INT4 describe methods or formats. Bitsandbytes and torchao provide selected software paths for them.</p>
+</section>
+<section class="level2" data-number="11.4" id="sec-m4-c07-s08">
+<h2 class="anchored" data-anchor-id="sec-m4-c07-s08" data-number="11.4"><span class="header-section-number">11.4</span> Calibration, PTQ and QAT</h2>
+<p>Hardware support determines whether the GPU and runtime have fast kernels for the chosen format. Offline calibration is needed by static activation quantization and methods such as GPTQ or AWQ. Dynamic activation quantization derives ranges during execution, and some weight-only methods use weight statistics without a separate workload calibration run<a class="footnote-ref" href="#fn7" id="fnref7" role="doc-noteref"><sup>7</sup></a>.</p>
+<ul>
+<li><strong class="m4-term-label">Scale:</strong> A multiplier that maps low-precision stored values back to approximate real values. Scales can be per tensor, per channel, per group, or more specialized depending on the method.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Clipping range:</strong></span> A selected numeric range that limits outliers before quantization. Aggressive clipping can improve average reconstruction but harm rare important values.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Per-channel or per-group quantization:</strong></span> Uses separate scales for smaller tensor groups. This usually improves quality relative to one global scale, but increases metadata and kernel complexity.</li>
+<li><strong class="m4-term-label">Weight-only calibration:</strong> Focuses on parameter tensors and workload-derived activations used by methods such as GPTQ or AWQ.</li>
+<li><strong class="m4-term-label">Activation and KV-cache calibration:</strong> Targets runtime tensors whose distributions depend on prompts, sequence length, layer, and model behavior. Mistakes here can produce quality loss that a simple file-size check does not reveal.</li>
+</ul>
+<p>Two deployment paths differ in when low-precision behavior enters the model lifecycle. The third entry is the gradient approximation that the second path depends on:</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Post-Training Quantization (PTQ):</strong></span> Converts an already-trained model for lower-precision deployment. For a calibrated static path, a run records weight or activation ranges from the expected workload, derives scales and zero points, and packs the selected tensors. Dynamic and weight-only paths can obtain their parameters differently. All paths need quality and runtime checks.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Quantization-Aware Training (QAT):</strong></span> Trains with fake quantization and dequantization operations in the forward pass, so model updates see an approximation of the error introduced by the deployed representation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Straight-Through Estimator (STE):</strong></span> A backward-pass approximation used for a rounding-like fake-quantization operation. It substitutes a usable derivative estimate so gradient-based optimization can continue.</li>
+</ul>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-82"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: From calibration values to integer codes</strong></p>
+<p><strong>Inputs and policy:</strong> A toy inference activation tensor supplies calibration values <span class="math inline">\([-2,-0.6,0,1.4,5]\)</span>. To expose the arithmetic, allow just eight integer codes, <span class="math inline">\(q_{\min}=0\)</span> through <span class="math inline">\(q_{\max}=7\)</span>. This is a teaching code range, not a claim about a deployed three-bit kernel. Apply the affine min/max policy documented by PyTorch’s <code>MinMaxObserver</code>: <span class="math inline">\(s=(x_{\max}-x_{\min})/(q_{\max}-q_{\min})\)</span> and <span class="math inline">\(z=q_{\min}-\operatorname{round}(x_{\min}/s)\)</span><a class="footnote-ref" href="#fn8" id="fnref8" role="doc-noteref"><sup>8</sup></a>. The observed interval already includes zero. Round to nearest, with halfway ties going to the even integer, then clip the code to <span class="math inline">\([0,7]\)</span> and reconstruct <span class="math inline">\(\hat x=s(q-z)\)</span><a class="footnote-ref" href="#fn9" id="fnref9" role="doc-noteref"><sup>9</sup></a>.</p>
+<p><strong>Calibration:</strong> The observed minimum is <span class="math inline">\(-2\)</span> and maximum is <span class="math inline">\(5\)</span>, so <span class="math inline">\(s=(5-(-2))/(7-0)=1\)</span> and <span class="math inline">\(z=0-\operatorname{round}(-2/1)=2\)</span>. Zero therefore receives code <span class="math inline">\(2\)</span>. The last row below adds a later value of <span class="math inline">\(12\)</span> while keeping the calibrated scale fixed. Signed error means <span class="math inline">\(\hat x-x\)</span>.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c08-t06">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c08-t06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 11.3: Quantization of calibration values with the scale held fixed.
+</figcaption>
+<div aria-describedby="tbl-m4-c08-t06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 16%"/>
+<col style="width: 16%"/>
+<col style="width: 16%"/>
+<col style="width: 16%"/>
+<col style="width: 16%"/>
+<col style="width: 16%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Input <span class="math inline">\(x\)</span></th>
+<th><span class="math inline">\(x/s\)</span></th>
+<th>Rounded value plus <span class="math inline">\(z\)</span></th>
+<th>Clipped code <span class="math inline">\(q\)</span></th>
+<th>Reconstruction <span class="math inline">\(\hat x\)</span></th>
+<th>Error</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">\(-2\)</span></td>
+<td><span class="math inline">\(-2\)</span></td>
+<td><span class="math inline">\(0\)</span></td>
+<td><span class="math inline">\(0\)</span></td>
+<td><span class="math inline">\(-2\)</span></td>
+<td><span class="math inline">\(0\)</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(-0.6\)</span></td>
+<td><span class="math inline">\(-0.6\)</span></td>
+<td><span class="math inline">\(1\)</span></td>
+<td><span class="math inline">\(1\)</span></td>
+<td><span class="math inline">\(-1\)</span></td>
+<td><span class="math inline">\(-0.4\)</span></td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(0\)</span></td>
+<td><span class="math inline">\(0\)</span></td>
+<td><span class="math inline">\(2\)</span></td>
+<td><span class="math inline">\(2\)</span></td>
+<td><span class="math inline">\(0\)</span></td>
+<td><span class="math inline">\(0\)</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(1.4\)</span></td>
+<td><span class="math inline">\(1.4\)</span></td>
+<td><span class="math inline">\(3\)</span></td>
+<td><span class="math inline">\(3\)</span></td>
+<td><span class="math inline">\(1\)</span></td>
+<td><span class="math inline">\(-0.4\)</span></td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\(5\)</span></td>
+<td><span class="math inline">\(5\)</span></td>
+<td><span class="math inline">\(7\)</span></td>
+<td><span class="math inline">\(7\)</span></td>
+<td><span class="math inline">\(5\)</span></td>
+<td><span class="math inline">\(0\)</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\(12\)</span></td>
+<td><span class="math inline">\(12\)</span></td>
+<td><span class="math inline">\(14\)</span></td>
+<td><span class="math inline">\(7\)</span></td>
+<td><span class="math inline">\(5\)</span></td>
+<td><span class="math inline">\(-7\)</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p><strong>Outlier trade-off:</strong> Recalibrating with <span class="math inline">\(12\)</span> included expands the interval to <span class="math inline">\([-2,12]\)</span>, giving <span class="math inline">\(s=14/7=2\)</span> and <span class="math inline">\(z=0-\operatorname{round}(-1)=1\)</span>. The outlier now reconstructs exactly: code <span class="math inline">\(7\)</span> gives <span class="math inline">\(2(7-1)=12\)</span>. But <span class="math inline">\(-0.6\)</span> now reconstructs as <span class="math inline">\(0\)</span> and <span class="math inline">\(1.4\)</span> as <span class="math inline">\(2\)</span>, with errors <span class="math inline">\(+0.6\)</span> in both cases. The former endpoint <span class="math inline">\(5\)</span> maps through <span class="math inline">\(5/2=2.5\)</span>, rounded to <span class="math inline">\(2\)</span>, to code <span class="math inline">\(3\)</span> and reconstruction <span class="math inline">\(4\)</span>. Accommodating the outlier doubled the step size for every value sharing this scale.</p>
+<p><strong>Conclusion:</strong> Keeping the original range preserves finer spacing but clips the outlier. Expanding it protects the outlier while increasing some smaller-value errors. Separate groups can fit different ranges at the cost of more scale metadata and kernel work. These arithmetic errors do not determine task quality by themselves. This example implements neither GPTQ nor AWQ, FP8 scaling, or every PTQ calibration recipe.</p>
+</div></div>
+<p>During QAT, the forward pass applies <span class="math inline">\(\operatorname{fake\_quant}(x)\)</span>, a simulation of the chosen deployment quantization. Rounding has zero derivative between its jumps and is not differentiable at the jumps, so its true derivative cannot provide the usual learning signal. A clipped STE instead passes the incoming gradient through inside a chosen representable interval and blocks it outside. For the affine mapping above, use <span class="math inline">\(x_{\min}=s(q_{\min}-z)\)</span> and <span class="math inline">\(x_{\max}=s(q_{\max}-z)\)</span>. The following is a backward approximation, not the true derivative of quantization. Implementations may differ at the clipping boundaries:</p>
+<p><span id="eq-m4-c07-e08"><span class="math display">\[
+\text{STE backward rule: } \frac{\partial \text{fake-quant}(x)}{\partial x} = 1 \text{ if } x \in [x_{min}, x_{max}] \text{ else } 0
+\tag{11.3}\]</span></span></p>
+<p>Here ∂ fake_quant(x) / ∂x means the rate of change assigned to the fake-quantization operator with respect to its input x. The equality defines the surrogate gradient used by backward propagation. It does not claim that the true derivative of rounding is one.</p>
+<p>Calibrated PTQ adds an offline calibration step and may lose quality at low bit widths. QAT spends training compute to adapt the model to the deployed representation. Compare quality on requests drawn from the expected workload, then measure whether the selected engine uses the packed format in its hot kernels.</p>
+<p>Quality is measured on the task, not on the tensors. Three checks are common, and each detects a different kind of damage. <span class="definition-term" data-custom-style="Definition Term"><strong>Perplexity</strong></span> (the exponential of the average per-token cross-entropy loss on held-out text, where lower is better) detects broad damage to the model’s predictions cheaply. Task accuracy on a fixed evaluation set, such as a public benchmark or a sample of production prompts with reference answers, detects damage that a small perplexity change can hide. A side-by-side comparison with the uncompressed model on the same prompts under greedy decoding shows how often, and where, the generated tokens diverge. The comparison holds prompts, tokenizer, and decoding settings fixed. It also records hardware, runtime, batch, and kernel choices, and repeats the uncompressed run to check execution variation. Differences beyond that variation are evidence of a change from the compressed execution path. Any change in kernel arithmetic is reported alongside the representation change.</p>
+<p>Group size is the number of values that share one quantization scale. A smaller group allows separate scales to fit local values, but adds scale metadata and indexing work. It does not guarantee lower tensor error or better task quality: calibration, rounding, and the selected group size still need comparison on the workload.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c07-t06">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 11.4: Group quantization trade-offs.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Group-size choice</th>
+<th>Quality effect</th>
+<th>Runtime effect</th>
+<th>When it is attractive</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Small groups</td>
+<td>Can improve local reconstruction when separate scales better fit the values. The result depends on calibration and rounding.</td>
+<td>More scale reads, more metadata, and more complex packing or dequantization</td>
+<td>Accuracy is fragile and kernels are designed for that grouping</td>
+</tr>
+<tr class="even">
+<td>Large groups</td>
+<td>More values share a scale, so outliers can waste quantization range</td>
+<td>Less metadata and simpler memory access</td>
+<td>Bandwidth or metadata overhead dominates and quality remains acceptable</td>
+</tr>
+<tr class="odd">
+<td>Per-channel groups</td>
+<td>Fits channel-level activation or weight ranges</td>
+<td>Works well when kernels can load scales along the channel dimension efficiently</td>
+<td>Linear layers where channel statistics are stable enough under calibration</td>
+</tr>
+<tr class="even">
+<td>Per-block groups</td>
+<td>Fits local blocks rather than whole tensors</td>
+<td>Can align with tile layouts, but only if the backend expects that layout</td>
+<td>FP8 or INT4 paths with block-scaled kernels</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Poor calibration can preserve speed while harming quality. Poor hardware or kernel support can preserve quality while failing to improve latency.</p>
+</section>
+<section class="level2" data-number="11.5" id="sec-m4-c08-s11">
+<h2 class="anchored" data-anchor-id="sec-m4-c08-s11" data-number="11.5"><span class="header-section-number">11.5</span> Pruning and structured sparsity</h2>
+<p>Quantization keeps every weight but stores it in fewer bits. <span class="definition-term" data-custom-style="Definition Term"><strong>Pruning</strong></span> instead sets chosen weights to zero. Savings require either smaller dense tensors after whole structures are removed, or a sparse format and matching kernel that skip the zeros. Whether the zeros save time depends on where they fall, because GPU matrix kernels process regular tiles and gain nothing from zeros they cannot skip.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Unstructured sparsity</strong></span>: any individual weights may be zero. It allows more freedom to choose which weights to remove than a fixed structured pattern, but accuracy depends on the pruning method and model. Dense GPU kernels cannot skip scattered zeros. The saving then requires a compressed storage format and specialized sparse kernels.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Structured sparsity</strong></span>: whole rows, columns, attention heads, or blocks are removed. Removing complete channels or heads can produce smaller dense matrices after dependent tensors are resized. Removing isolated blocks instead needs a compatible block-sparse kernel. The quality cost depends on which structures are removed and any later adaptation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Semi-structured 2:4 sparsity</strong></span>: in every group of four consecutive weights, at most two are nonzero. The compressed format stores the two kept values plus a 2-bit position index for each. Supported 2:4 Sparse Tensor Core operations on the cited Ampere design can offer up to twice the corresponding dense arithmetic peak.<a class="footnote-ref" href="#fn10" id="fnref10" role="doc-noteref"><sup>10</sup></a> Later devices, dtypes, kernel shapes, and actual latency need their own check.</li>
+</ul>
+<p>Retraining a model with billions of parameters after pruning is expensive, so the methods below prune once, after training. SparseGPT prunes GPT-family models to at least 50 percent unstructured sparsity in one pass without retraining, reaches 60 percent on its largest models with a small perplexity increase, and extends to 2:4 and 4:8 patterns.<a class="footnote-ref" href="#fn11" id="fnref11" role="doc-noteref"><sup>11</sup></a> Wanda removes the weights with the smallest magnitude multiplied by the L2 norm of the corresponding input feature across calibration tokens, comparing weights within each output row, also without retraining or weight updates, and is evaluated for unstructured, 4:8, and 2:4 sparsity.<a class="footnote-ref" href="#fn12" id="fnref12" role="doc-noteref"><sup>12</sup></a></p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">For the illustrative 4,096-by-4,096 BF16 projection, 2:4 storage including position metadata is about 18.9 MB, or 56 percent of the dense bytes. The ideal bandwidth floor improves by about 1.8 times. Supported sparse math has an ideal two-times peak. Neither ratio predicts latency, and quality after pruning must be measured.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-37"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Example: 2:4 sparsity in one projection</span><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: What 2:4 sparsity saves in one projection</strong></p>
+<p><strong>Inputs:</strong> The <span class="math inline">\(4{,}096\times4{,}096\)</span> BF16 projection of <a href="ch-m4-n06.html#sec-m4-c02-s08">Section 6.2</a>, whose dense weights occupy <span class="math inline">\(2\times16{,}777{,}216=33{,}554{,}432\)</span> bytes, is pruned to the 2:4 pattern.</p>
+<p><strong>Storage:</strong> Half the weights remain: <span class="math inline">\(8{,}388{,}608\)</span> values at 2 bytes, or <span class="math inline">\(16{,}777{,}216\)</span> bytes. Each kept value adds 2 bits of position metadata, <span class="math inline">\(8{,}388{,}608\times2/8=2{,}097{,}152\)</span> bytes. The total is <span class="math inline">\(18{,}874{,}368\)</span> bytes, 56 percent of the dense size.</p>
+<p><strong>Time:</strong> For one row, the bandwidth-only model gives a time floor of about <span class="math inline">\(18.9\text{ MB}/3.35\text{ TB/s}\approx5.6\)</span> microseconds instead of 10.0, a 1.8-times ratio between these ideal floors. For a large batch that saturates compatible Sparse Tensor Cores, the doubled math peak permits an ideal 2-times arithmetic gain. Neither ratio predicts measured latency, which also includes kernel efficiency and overhead.</p>
+<p><strong>Conclusion:</strong> In the memory-bound regime 2:4 sparsity helps the way quantization does, by moving fewer bytes. In the compute-bound regime it helps by skipping multiplications. Both gains require a kernel that reads the 2:4 format, and both come after half of the weights have been removed, so model quality must be measured as in <a href="#sec-m4-c07-s08">Section 11.4</a>.</p>
+</div></div>
+</section>
+<section class="level2" data-number="11.6" id="sec-m4-c08-s12">
+<h2 class="anchored" data-anchor-id="sec-m4-c08-s12" data-number="11.6"><span class="header-section-number">11.6</span> Distillation</h2>
+<p>Quantization and pruning shrink an existing model. <span class="definition-term" data-custom-style="Definition Term"><strong>Knowledge distillation</strong></span> trains a different, smaller one. A small <span class="definition-term" data-custom-style="Definition Term"><strong>student</strong></span> model is trained to reproduce the output distribution of a larger <span class="definition-term" data-custom-style="Definition Term"><strong>teacher</strong></span> model. Hinton et al. train on the teacher’s class probabilities, softened by raising the softmax temperature, as soft targets, and use the same temperature for the student.<a class="footnote-ref" href="#fn13" id="fnref13" role="doc-noteref"><sup>13</sup></a> For a language model the targets are the teacher’s next-token distributions at each position, which carry more information per example than the single correct token.</p>
+<p>The student’s serving cost follows its own size. Using model size as a rough count of participating dense-projection weights (<a href="ch-m4-n06.html#sec-m4-n06-model-work">Section 6.6</a>), an 8B student of a 70B teacher needs about <span class="math inline">\(2\times8\times10^9=16\)</span> GFLOP per generated token instead of 140 GFLOP. BF16 storage for 8 billion and 70 billion parameters is 16 GB and 140 GB. If a simplified decode model assumes one HBM read of each byte budget per step, the student’s modeled weight traffic is lower by a factor of 8.75. Actual traffic depends on the tensors accessed and their cache reuse. When teacher distributions are computed on demand during student training, each training token needs a teacher forward pass (<span class="math inline">\(2\times70\times10^9=140\)</span> GFLOP) as well as the student’s forward and backward passes (<span class="math inline">\(6\times8\times10^9=48\)</span> GFLOP), about 3.9 times the arithmetic of training the student alone on the same tokens. Precomputing teacher targets can amortize repeated teacher passes, at the cost of storing and reading those targets. These estimates count dense parameter arithmetic and omit attention-score work and runtime overhead.</p>
+<p>Unlike quantization, distillation cannot be adjusted at deployment time. The student is a new model with its own quality profile, so it is evaluated on the target tasks like any other model. A distilled student can also serve as the draft model for speculative decoding (<a href="ch-m4-n15.html#sec-m4-c10-s11">Section 14.1</a>), where its agreement with the teacher sets the acceptance rate.</p>
+<p>The weight and KV estimates in <a href="ch-m4-n11.html">Chapter 10</a> describe the memory a planned request set needs; the compression methods here can reduce parts of that total. These estimates do not determine where each request’s state is placed or how attention kernels find it. <a href="ch-m4-n13.html">Chapter 12</a> follows that layout: token order stays logical while physical blocks are allocated, reused and read at different addresses.</p>
+</section>
+<section class="footnotes footnotes-end-of-document" data-m4-endnotes="1" id="footnotes" role="doc-endnotes"><h2 data-m4-endnotes-heading="1" data-m4-fold-ui="references-heading">References</h2><div data-m4-endnotes-body="1" data-m4-fold-created="endnotes-body" id="m4-endnotes-body">
+<hr/>
+<ol>
+<li id="fn1"><p>Frantar, E., Ashkboos, S., Hoefler, T., &amp; Alistarh, D. (2023). <em>GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers</em>. arXiv:2210.17323. <a href="https://arxiv.org/abs/2210.17323">GPTQ paper</a>. Supports one shot post-training quantization with approximate second-order reconstruction to 3 to 4 bits, with speedups from reduced memory movement. Limit: the paper focuses on weight only generative inference and states no computational reduction and no activation quantization.<a class="footnote-back" href="#fnref1" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>Lin, J., et al. (2024). <em>AWQ: Activation-aware Weight Quantization for On-Device LLM Compression and Acceleration</em>. In Proceedings of MLSys 2024. arXiv:2306.00978. <a href="https://arxiv.org/abs/2306.00978">AWQ paper</a>. Supports selecting salient weight channels from activation magnitude and protecting them with per-channel scaling fitted on calibration activations, without backpropagation. Limit: the gain needs a compatible 4-bit packing and fused kernel path; checkpoint size alone does not prove latency improvement.<a class="footnote-back" href="#fnref2" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p>Frantar, E., Ashkboos, S., Hoefler, T., &amp; Alistarh, D. (2023). <em>GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers</em>. arXiv:2210.17323. <a href="https://arxiv.org/abs/2210.17323">GPTQ paper</a>. Supports one shot post-training quantization with approximate second-order reconstruction to 3 to 4 bits, with speedups from reduced memory movement. Limit: the paper focuses on weight only generative inference and states no computational reduction and no activation quantization.<a class="footnote-back" href="#fnref3" role="doc-backlink">↩︎</a></p></li>
+<li id="fn4"><p>Lin, J., et al. (2024). <em>AWQ: Activation-aware Weight Quantization for On-Device LLM Compression and Acceleration</em>. In Proceedings of MLSys 2024. arXiv:2306.00978. <a href="https://arxiv.org/abs/2306.00978">AWQ paper</a>. Supports selecting salient weight channels from activation magnitude and protecting them with per-channel scaling fitted on calibration activations, without backpropagation. Limit: the gain needs a compatible 4-bit packing and fused kernel path; checkpoint size alone does not prove latency improvement.<a class="footnote-back" href="#fnref4" role="doc-backlink">↩︎</a></p></li>
+<li id="fn5"><p>bitsandbytes-foundation. (n.d.). <em>bitsandbytes</em> README. <a href="https://github.com/bitsandbytes-foundation/bitsandbytes">bitsandbytes README</a>. Supports three versioned paths: 8-bit optimizers with block-wise quantization, LLM.int8 with vector-wise quantization plus 16-bit outlier handling, and QLoRA 4-bit with frozen base plus trainable LoRA adapters, with primitives through Linear8bitLt, Linear4bit, and the optim module. Limit: Python 3.10 plus PyTorch 2.4 plus accelerator support tables vary by release; the chapter keeps benefit claims conditional on the installed combination.<a class="footnote-back" href="#fnref5" role="doc-backlink">↩︎</a></p></li>
+<li id="fn6"><p>PyTorch. (torchao stable documentation, created Mar 25, 2026). <em>Welcome to the torchao Documentation</em>. <a href="https://docs.pytorch.org/ao/stable/index.html">torchao documentation</a>. Supports torchao as PyTorch-native quantization and sparsity tooling where quantize_ converts linear module weights in place under a config such as Int4WeightOnlyConfig, with kernel and packing choices that differ by device. Limit: configs, packing formats, and the version compatibility table change by release; consult the installed torchao reference before assuming a path exists.<a class="footnote-back" href="#fnref6" role="doc-backlink">↩︎</a></p></li>
+<li id="fn7"><p>Subramanian, S., Saroufim, M., &amp; Zhang, J. (2022). <em>Practical Quantization in PyTorch</em>. PyTorch. <a href="https://pytorch.org/blog/quantization-in-practice/">Practical Quantization in PyTorch</a>. Distinguishes static calibration from dynamic activation quantization and weight-only paths. Its API examples and backend support describe the publication period, not current deployment compatibility.<a class="footnote-back" href="#fnref7" role="doc-backlink">↩︎</a></p></li>
+<li id="fn8"><p>PyTorch. (2.14 documentation). <em>MinMaxObserver</em>. <a href="https://docs.pytorch.org/docs/2.14/generated/torch.ao.quantization.observer.MinMaxObserver.html">PyTorch MinMaxObserver documentation</a>. Supports affine scale and zero-point selection from observed extrema. Limit: the example’s eight-code interval is a teaching choice; it does not establish a packed three-bit deployment path or an optimal calibration range.<a class="footnote-back" href="#fnref8" role="doc-backlink">↩︎</a></p></li>
+<li id="fn9"><p>PyTorch. (2.14 documentation). <em>torch.fake_quantize_per_tensor_affine</em>. <a href="https://docs.pytorch.org/docs/2.14/generated/torch.fake_quantize_per_tensor_affine.html">PyTorch affine fake-quantization documentation</a>. Documents rounding, clipping to the integer interval, and reconstruction with scale and zero point. Limit: fake quantization returns floating-point values and does not demonstrate packed storage or faster inference. The worked calculation explicitly uses nearest-even rounding.<a class="footnote-back" href="#fnref9" role="doc-backlink">↩︎</a></p></li>
+<li id="fn10"><p>Mishra, A., Albericio Latorre, J., Pool, J., Stosic, D., Stosic, D., Venkatesh, G., Yu, C., &amp; Micikevicius, P. (2021). <em>Accelerating Sparse Deep Neural Networks</em>. <a href="https://arxiv.org/abs/2104.08378">arXiv:2104.08378</a>. Supports the 2:4 pattern with two nonzero values stored per group of four, 2-bit metadata per nonzero value, and Sparse Tensor Cores on the NVIDIA Ampere architecture with twice the math throughput of dense matrix units. Limit: end-to-end gains depend on the share of time in sparse matrix multiplications and on accuracy recovery, which the worked example does not measure.<a class="footnote-back" href="#fnref10" role="doc-backlink">↩︎</a></p></li>
+<li id="fn11"><p>Frantar, E., &amp; Alistarh, D. (2023). <em>SparseGPT: Massive Language Models Can be Accurately Pruned in One-Shot</em>. ICML 2023. <a href="https://arxiv.org/abs/2301.00774">arXiv:2301.00774</a>. Supports one-shot pruning of GPT-family models to at least 50 percent sparsity without retraining, 60 percent unstructured sparsity on OPT-175B and BLOOM-176B with negligible perplexity increase, and generalization to 2:4 and 4:8 patterns. Limit: speedups require kernels for the chosen sparsity pattern.<a class="footnote-back" href="#fnref11" role="doc-backlink">↩︎</a></p></li>
+<li id="fn12"><p>Sun, M., Liu, Z., Bair, A., &amp; Kolter, J. Z. (2024). <em>A Simple and Effective Pruning Approach for Large Language Models</em>. ICLR 2024. <a href="https://arxiv.org/abs/2306.11695">arXiv:2306.11695</a>. Supports Wanda’s criterion of weight magnitude multiplied by the input feature’s L2 norm across calibration tokens, applied per output row without retraining or weight update, evaluated for unstructured, 4:8, and 2:4 sparsity. Limit: reported quality depends on model family and sparsity level.<a class="footnote-back" href="#fnref12" role="doc-backlink">↩︎</a></p></li>
+<li id="fn13"><p>Hinton, G., Vinyals, O., &amp; Dean, J. (2015). <em>Distilling the Knowledge in a Neural Network</em>. <a href="https://arxiv.org/abs/1503.02531">arXiv:1503.02531</a>. Supports training a small model on the class probabilities of a larger model as soft targets, produced by raising the softmax temperature, with the same temperature used for the small model. Limit: the paper studies classification and speech models. <a href="#sec-m4-c08-s12">Section 11.6</a> applies distillation to next-token prediction and derives the illustrative cost estimates.<a class="footnote-back" href="#fnref13" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</div></section>
+</main> <!-- /main -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const automaticLongContentFolding = false;
+  const referenceSections = document.querySelectorAll(
+    'main.content section.footnotes[role="doc-endnotes"]'
+  );
+
+  referenceSections.forEach((section) => {
+    if (section.closest("details.publisher-chapter-references")) return;
+
+    const details = document.createElement("details");
+    details.className = "publisher-chapter-references";
+    const summary = document.createElement("summary");
+    const count = section.querySelectorAll("ol > li").length;
+    summary.textContent = count ? `References (${count})` : "References";
+
+    section.parentNode.insertBefore(details, section);
+    details.append(summary, section);
+  });
+
+  const openFoldTarget = (target) => {
+    const details = target?.closest(
+      "details.publisher-chapter-references, details.publisher-long-content"
+    );
+    if (details) details.open = true;
+  };
+
+  const targetFromHash = (hash) => {
+    if (!hash || hash === "#") return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('a[href*="#"]');
+    if (!link) return;
+    let destination;
+    try {
+      destination = new URL(link.getAttribute("href") || "", location.href);
+    } catch (_error) {
+      return;
+    }
+    if (destination.href.split("#")[0] !== location.href.split("#")[0]) return;
+    openFoldTarget(targetFromHash(destination.hash));
+  });
+
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
+    if (control?.classList.contains("publisher-fold-never")) return "never";
+    if (control?.classList.contains("publisher-fold-always")) return "always";
+    if (control?.classList.contains("publisher-fold-open")) return "open";
+    const requested = control?.dataset.publisherFold || "auto";
+    return ["auto", "never", "always", "open"].includes(requested)
+      ? requested
+      : "auto";
+  };
+
+  const foldCandidate = (candidate, kind) => {
+    if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
+
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
+    if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
+    const minimumFoldHeight = 320;
+    const foldHeight = Math.max(
+      minimumFoldHeight,
+      Math.round(document.documentElement.clientHeight * 0.5)
+    );
+    if (mode === "auto" && candidate.getBoundingClientRect().height <= foldHeight) return;
+
+    const titleSource = kind === "table"
+      ? candidate.querySelector("figcaption, caption")
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
+    const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
+
+    const details = document.createElement("details");
+    details.className = `publisher-long-content publisher-long-${kind}`;
+    if (mode === "open") details.open = true;
+    const summary = document.createElement("summary");
+    if (titleSource && label) {
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
+    } else {
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
+    }
+    const body = document.createElement("div");
+    body.className = "publisher-fold-body";
+    if (titleSource) titleSource.classList.add("publisher-fold-title-source");
+
+    candidate.parentNode.insertBefore(details, candidate);
+    details.append(summary, body);
+    body.append(candidate);
+  };
+
+  const foldLongContent = () => {
+    if (!automaticLongContentFolding) return;
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
+    document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
+      const float = figure.parentElement?.classList.contains("quarto-float")
+        ? figure.parentElement
+        : figure;
+      foldCandidate(float, "table");
+    });
+    document.querySelectorAll("main.content table").forEach((table) => {
+      if (!table.closest("figure.quarto-float-tbl")) foldCandidate(table, "table");
+    });
+    openFoldTarget(targetFromHash(location.hash));
+  };
+
+  if (document.readyState === "complete") {
+    requestAnimationFrame(foldLongContent);
+  } else {
+    window.addEventListener("load", () => requestAnimationFrame(foldLongContent), {
+      once: true,
+    });
+  }
+
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
+  document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
+  const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
+  window.addEventListener("hashchange", openLocationTarget);
+  openLocationTarget();
+});
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+<div class="nav-page nav-page-previous">
+<a aria-label="Inference phases and memory budgets" class="pagination-link" href="../chapters/ch-m4-n11.html">
+<i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">10</span>  <span class="chapter-title">Inference phases and memory budgets</span></span>
+</a>
+</div>
+<div class="nav-page nav-page-next">
+<a aria-label="Decode and KV-cache layout" class="pagination-link" href="../chapters/ch-m4-n13.html">
+<span class="nav-page-text"><span class="chapter-number">12</span>  <span class="chapter-title">Decode and KV-cache layout</span></span> <i class="bi bi-arrow-right-short"></i>
+</a>
+</div>
+</nav>
+</div> <!-- /content -->
+<script data-m4-fold-ui="script" defer="defer" src="../html-folds/folds.js"></script>  <div class="book-image-preview-overlay" data-book-image-overlay hidden>
+    <button class="book-image-preview-backdrop" type="button" data-book-image-close aria-label="Close image preview"></button>
+    <div class="book-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview">
+      <button class="book-image-preview-close" type="button" data-book-image-close>Close</button>
+      <img class="book-image-preview-image" data-book-image-preview-img alt="">
+    </div>
+  </div>
+  <script id="book-image-preview-script">
+    (() => {
+      if (window.__bookImagePreviewReady) {
+        return;
+      }
+      window.__bookImagePreviewReady = true;
+
+      const overlay = document.querySelector("[data-book-image-overlay]");
+      const preview = document.querySelector("[data-book-image-preview-img]");
+      const closeButtons = document.querySelectorAll("[data-book-image-close]");
+      const closeButton = overlay ? overlay.querySelector(".book-image-preview-close") : null;
+      let restoreFocus = null;
+
+      if (!overlay || !preview) {
+        return;
+      }
+
+      function openPreview(image) {
+        restoreFocus = image;
+        preview.src = image.currentSrc || image.src;
+        preview.alt = image.alt || "";
+        overlay.hidden = false;
+        document.body.classList.add("book-image-preview-open");
+        if (closeButton) {
+          closeButton.focus();
+        }
+      }
+
+      function closePreview() {
+        if (overlay.hidden) {
+          return;
+        }
+        overlay.hidden = true;
+        preview.removeAttribute("src");
+        preview.alt = "";
+        document.body.classList.remove("book-image-preview-open");
+        if (restoreFocus) {
+          restoreFocus.focus();
+        }
+      }
+
+      document.querySelectorAll("img[data-book-image-preview]").forEach((image) => {
+        image.addEventListener("click", () => openPreview(image));
+        image.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPreview(image);
+          }
+        });
+      });
+      closeButtons.forEach((button) => {
+        button.addEventListener("click", closePreview);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!overlay.hidden && event.key === "Escape") {
+          closePreview();
+        }
+      });
+    })();
+  </script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "bf257544e13140429e7cbda3a16caddb"}'></script><!-- End Cloudflare Web Analytics -->
+<!-- book-ask-ai:start -->
+<link rel="stylesheet" href="../ask-ai-assets/ask-ai.css">
+<script id="book-ask-ai-config" type="application/json">{"endpoint": "https://course-ask-ai.course-ask-ai-backend.workers.dev/ask", "book": "module_4", "bookTitle": "", "version": ""}</script>
+<script defer src="../ask-ai-assets/ask-ai.js"></script>
+<!-- book-ask-ai:end -->
+</body></html>

@@ -1,0 +1,1699 @@
+<!DOCTYPE html>
+
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"><head>
+<meta charset="utf-8"/>
+<meta content="quarto-1.10.18" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>9  Training state and precision – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta content="../" name="quarto:offset"/>
+<link href="../chapters/ch-m4-n11.html" rel="next"/>
+<link href="../parts/part-iii.html" rel="prev"/>
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet"/>
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" id="quarto-text-highlighting-styles" rel="stylesheet"/>
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet"/>
+<link append-hash="true" data-mode="light" href="../site_libs/bootstrap/bootstrap-741cab1455972e99f328c2af765061c1.min.css" id="quarto-bootstrap" rel="stylesheet"/>
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+<link href="../styles.css" rel="stylesheet"/>
+<link data-reading-layout="true" href="../reading-layout/reading.css" rel="stylesheet"/><link data-m4-fold-ui="style" href="../html-folds/folds.css" rel="stylesheet"/><link data-map-style="" href="../map-viewer/viewer.css" rel="stylesheet"/><script data-map-script="" defer="" src="../map-viewer/viewer.js"></script>  <style id="book-image-preview-style">
+    img[data-book-image-preview] {
+      cursor: zoom-in;
+    }
+    img[data-book-image-preview]:focus {
+      outline: 3px solid rgba(15, 107, 120, 0.36);
+      outline-offset: 4px;
+    }
+    body.book-image-preview-open {
+      overflow: hidden;
+    }
+    .book-image-preview-overlay[hidden] {
+      display: none !important;
+    }
+    .book-image-preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .book-image-preview-backdrop {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      background: rgba(18, 28, 40, 0.76);
+      cursor: zoom-out;
+    }
+    .book-image-preview-dialog {
+      position: relative;
+      width: min(94vw, 1100px);
+      max-height: 94vh;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.36);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 24px 70px rgba(18, 28, 40, 0.34);
+    }
+    .book-image-preview-close {
+      display: block;
+      margin: 0 0 12px auto;
+      padding: 7px 12px;
+      border: 1px solid #d7e2e8;
+      border-radius: 6px;
+      background: #f5f8fa;
+      color: #1f2f44;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .book-image-preview-image {
+      display: block;
+      width: 100%;
+      max-height: calc(94vh - 74px);
+      object-fit: contain;
+      border-radius: 6px;
+      background: #eef6f7;
+    }
+  </style>
+  <style id="book-release-metadata-style">
+    .book-release-meta {
+      margin: 0.55rem 0 0.8rem;
+      color: #536273;
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+    .book-release-meta dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.12rem 0.5rem;
+      margin: 0;
+    }
+    .book-release-meta dt {
+      color: #24384d;
+      font-weight: 650;
+    }
+    .book-release-meta dd {
+      margin: 0;
+    }
+    .book-release-home {
+      display: inline-block;
+      color: #0f6b78;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .book-release-home:hover,
+    .book-release-home:focus {
+      text-decoration: underline;
+    }
+    .book-release-home-wrap {
+      margin: 0.55rem 0 0.8rem;
+    }
+    .book-release-meta-sidebar {
+      margin-top: 0.8rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid #d7e2e8;
+    }
+    .book-release-meta-front {
+      padding: 0.7rem 0.85rem;
+      border-left: 3px solid #0f6b78;
+      background: #eef6f7;
+      max-width: 34rem;
+    }
+  </style>
+</head>
+<body class="nav-sidebar floating quarto-light">
+<div id="quarto-search-results"></div>
+<header class="headroom fixed-top" id="quarto-header">
+<nav class="quarto-secondary-nav">
+<div class="container-fluid d-flex">
+<button aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="quarto-btn-toggle btn" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="button" type="button">
+<i class="bi bi-layout-text-sidebar-reverse"></i>
+</button>
+<nav aria-label="breadcrumb" class="quarto-page-breadcrumbs"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-iii.html">Part III: Training and single-worker inference</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n10.html"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></a></li></ol></nav>
+<a aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="flex-grow-1" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="navigation">
+</a>
+<button aria-label="Search" class="btn quarto-search-button" onclick="window.quartoOpenSearch();" type="button">
+<i class="bi bi-search"></i>
+</button>
+</div>
+</nav>
+</header>
+<!-- content -->
+<div class="quarto-container page-columns page-rows-contents page-layout-article" id="quarto-content">
+<!-- sidebar -->
+<nav class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto" id="quarto-sidebar">
+<div class="pt-lg-2 mt-2 text-left sidebar-header">
+<div class="sidebar-title mb-0 py-0">
+<a href="../">Advanced LLM Performance Engineering</a>
+</div>
+</div>
+<div class="mt-2 flex-shrink-0 align-items-center">
+<div class="sidebar-search">
+<div class="" id="quarto-search" title="Search"></div>
+</div>
+</div>
+<div class="book-release-home-wrap" data-book-release-location="sidebar-home">
+  <a class="book-release-home" href="../../">&larr; AI Systems Engineering</a>
+</div>
+    <div class="sidebar-menu-container">
+<ul class="list-unstyled mt-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../index.html">
+<span class="menu-text">Advanced LLM Performance Engineering</span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../frontmatter/ch-m4-index.html">
+<span class="menu-text">Introduction and Learning Path</span></a>
+</div>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-i.html">
+<span class="menu-text">Part I: Models, workload state, and GPU hardware</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-1" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n01.html">
+<span class="menu-text"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n02.html">
+<span class="menu-text"><span class="chapter-number">2</span>  <span class="chapter-title">Workload phases and live memory</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n03.html">
+<span class="menu-text"><span class="chapter-number">3</span>  <span class="chapter-title">GPU hardware and memory</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-ii.html">
+<span class="menu-text">Part II: GPU execution, measurement, and optimization</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-2" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-2">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n04.html">
+<span class="menu-text"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n05.html">
+<span class="menu-text"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n06.html">
+<span class="menu-text"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n07.html">
+<span class="menu-text"><span class="chapter-number">7</span>  <span class="chapter-title">Measurement, profiling and fair comparisons</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n08.html">
+<span class="menu-text"><span class="chapter-number">8</span>  <span class="chapter-title">Compilation and runtime</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iii.html">
+<span class="menu-text">Part III: Training and single-worker inference</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-3" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-3">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link active" href="../chapters/ch-m4-n10.html">
+<span class="menu-text"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n11.html">
+<span class="menu-text"><span class="chapter-number">10</span>  <span class="chapter-title">Inference phases and memory budgets</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n12.html">
+<span class="menu-text"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n13.html">
+<span class="menu-text"><span class="chapter-number">12</span>  <span class="chapter-title">Decode and KV-cache layout</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iv.html">
+<span class="menu-text">Part IV: Serving systems</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-4" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-4">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n14.html">
+<span class="menu-text"><span class="chapter-number">13</span>  <span class="chapter-title">Request scheduling and prefix reuse</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n15.html">
+<span class="menu-text"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n16.html">
+<span class="menu-text"><span class="chapter-number">15</span>  <span class="chapter-title">Serving measurement and stack selection</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-v.html">
+<span class="menu-text">Part V: Distributed execution</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-5" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-5">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n17.html">
+<span class="menu-text"><span class="chapter-number">16</span>  <span class="chapter-title">Collective data movement and its cost</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n18.html">
+<span class="menu-text"><span class="chapter-number">17</span>  <span class="chapter-title">Launching and measuring distributed work</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n19.html">
+<span class="menu-text"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n20.html">
+<span class="menu-text"><span class="chapter-number">19</span>  <span class="chapter-title">Tensor and sequence parallelism</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n21.html">
+<span class="menu-text"><span class="chapter-number">20</span>  <span class="chapter-title">Pipeline, expert and combined layouts</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n22.html">
+<span class="menu-text"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a aria-expanded="true" class="sidebar-item-text sidebar-link text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<span class="menu-text">Appendices</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-6">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/references.html">
+<span class="menu-text"><span class="chapter-number">A</span>  <span class="chapter-title">References</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/optional-labs.html">
+<span class="menu-text"><span class="chapter-number">B</span>  <span class="chapter-title">Optional Labs</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
+  <dl>
+    <dt>Publisher version</dt>
+    <dd>0.8.23</dd>
+    <dt>Released</dt>
+    <dd><time datetime="2026-10-25">2026-10-25</time></dd>
+  </dl>
+</section>
+</nav>
+<div class="quarto-sidebar-collapse-item" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" id="quarto-sidebar-glass"></div>
+<!-- margin-sidebar -->
+<div class="sidebar margin-sidebar" id="quarto-margin-sidebar">
+<nav class="toc-active" id="TOC" role="doc-toc">
+<h2 id="toc-title">Table of contents</h2>
+<ul>
+<li><a class="nav-link active" data-scroll-target="#sec-m4-c07-s01" href="#sec-m4-c07-s01" id="toc-sec-m4-c07-s01"><span class="header-section-number">9.1</span> Training step time and throughput</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c07-s02" href="#sec-m4-c07-s02" id="toc-sec-m4-c07-s02"><span class="header-section-number">9.2</span> Training state and memory</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c07-s03" href="#sec-m4-c07-s03" id="toc-sec-m4-c07-s03"><span class="header-section-number">9.3</span> Feeding data and applying updates</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c07-s04" href="#sec-m4-c07-s04" id="toc-sec-m4-c07-s04"><span class="header-section-number">9.4</span> Precision formats and PyTorch backend controls</a></li>
+</ul>
+</nav>
+</div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+<header class="quarto-title-block default" id="title-block-header"><nav aria-label="breadcrumb" class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-iii.html">Part III: Training and single-worker inference</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n10.html"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span class="quarto-section-identifier" id="sec-ch-m4-n10"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></span></h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+</header>
+<p>The earlier chapters established how one GPU receives work, moves tensor data, and exposes compute, memory, and launch limits. Training applies those mechanisms to a repeated parameter-update step whose live state includes activations, gradients, optimizer buffers, and the parameters being changed.</p>
+<div alt="A complete training update links batch preparation, forward activations, loss, backward gradients and optimizer moments to changed parameters. Smaller micro-batches accumulate weighted gradients before one update; separate scenes compare activation recomputation, frozen adapters and safe mixed-precision updates." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-n10-map">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-n10-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a aria-describedby="fig-m4-n10-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca" aria-label="Enlarge map" class="m4-map-link" data-map-viewer="" href="../assets/fig-m4-n10-map.png" rel="noopener" target="_blank"><img alt="A complete training update links batch preparation, forward activations, loss, backward gradients and optimizer moments to changed parameters. Smaller micro-batches accumulate weighted gradients before one update; separate scenes compare activation recomputation, frozen adapters and safe mixed-precision updates." class="img-fluid figure-img" src="../assets/fig-m4-n10-map.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" /></a>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-n10-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 9.1: Training phases create and consume different live tensors. Memory changes target particular objects, while accumulation and mixed precision must preserve a valid parameter update.
+</figcaption>
+</figure>
+</div>
+<p>Training precision controls the number formats of forward, backward, accumulation, and optimizer updates while the model is learning. It is a different decision from deployment quantization, which changes how an already trained model stores and executes tensors during inference. <a href="ch-m4-n12.html">Chapter 11</a> treats deployment quantization after the inference workload has been introduced.</p>
+<p>Step time gives the total duration of one comparable update, but it does not locate the delay. A CPU/GPU profile or timeline shows whether the critical path contains input preparation, transfer, forward work, backward work, optimizer work, communication, or an uncovered gap. The tensors live during those phases set the memory limit, and the numeric formats used for forward, backward, accumulation, and the optimizer affect both traffic and numerical stability.</p>
+<p>A training step reads parameters and input data, saves selected activations for backward propagation, produces gradients, and updates parameters with optimizer state.</p>
+<div alt="Input features and parameters feed forward scores. Targets join the scores at a scalar loss. Selected saved values and the loss lead to backward, which writes gradients. Adam reads gradients, parameters and the initialized first and second moments. It writes updated values of those three persistent objects for the next cycle. The primed symbols show versions of state, not extra allocations." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-c07-f01">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c07-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img alt="Input features and parameters feed forward scores. Targets join the scores at a scalar loss. Selected saved values and the loss lead to backward, which writes gradients. Adam reads gradients, parameters and the initialized first and second moments. It writes updated values of those three persistent objects for the next cycle. The primed symbols show versions of state, not extra allocations." class="img-fluid figure-img" src="../assets/fig-m4-c07-f01.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" />
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c07-f01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 9.2: A repeated update starts with initialized Adam moments. Forward saves selected values and backward writes gradients. Adam reads parameters, gradients and both moments, then writes their next values. Primed symbols mark state versions.
+</figcaption>
+</figure>
+</div>
+<p>Mixed precision can reduce traffic or use faster hardware paths, but some values may require wider accumulation or master state. The result must preserve stable learning and acceptable model quality, not only reduce step time.</p>
+<section class="level2" data-number="9.1" id="sec-m4-c07-s01">
+<h2 class="anchored" data-anchor-id="sec-m4-c07-s01" data-number="9.1"><span class="header-section-number">9.1</span> Training step time and throughput</h2>
+<p>Training performance is the cost of repeating one parameter-update step. A batch is prepared and transferred, the model runs forward, backward propagation produces gradients, and the optimizer updates parameters. The slowest region or the uncovered gap between regions limits how many tokens can be trained per second.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-79"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: One complete synthetic update</strong></p>
+<p>This small classifier first shows the update itself. It uses 64 feature rows with 128 values each and one integer class label from 0 to 15 per row. <code>Linear(128,16)</code> returns 16 raw class scores per row; <code>CrossEntropyLoss</code> compares them with the labels and returns one scalar. The selected device is a CUDA GPU when available, otherwise the CPU. The CPU run teaches the sequence but does not measure GPU speed.</p>
+<div class="m4-contained-code-caption publisher-code-caption" data-custom-style="Code Caption" hidden="">
+<p><strong>Code example: Complete synthetic classifier update</strong></p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-n10-c01"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-n10-c01-1"><a aria-hidden="true" href="#lst-m4-n10-c01-1" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-n10-c01-2"><a aria-hidden="true" href="#lst-m4-n10-c01-2" tabindex="-1"></a></span>
+<span id="lst-m4-n10-c01-3"><a aria-hidden="true" href="#lst-m4-n10-c01-3" tabindex="-1"></a>torch.manual_seed(<span class="dv">0</span>)</span>
+<span id="lst-m4-n10-c01-4"><a aria-hidden="true" href="#lst-m4-n10-c01-4" tabindex="-1"></a>device <span class="op">=</span> torch.device(<span class="st">"cuda"</span> <span class="cf">if</span> torch.cuda.is_available() <span class="cf">else</span> <span class="st">"cpu"</span>)</span>
+<span id="lst-m4-n10-c01-5"><a aria-hidden="true" href="#lst-m4-n10-c01-5" tabindex="-1"></a>features <span class="op">=</span> torch.randn(<span class="dv">64</span>, <span class="dv">128</span>, device<span class="op">=</span>device)</span>
+<span id="lst-m4-n10-c01-6"><a aria-hidden="true" href="#lst-m4-n10-c01-6" tabindex="-1"></a>labels <span class="op">=</span> torch.randint(<span class="dv">0</span>, <span class="dv">16</span>, (<span class="dv">64</span>,), device<span class="op">=</span>device)</span>
+<span id="lst-m4-n10-c01-7"><a aria-hidden="true" href="#lst-m4-n10-c01-7" tabindex="-1"></a>model <span class="op">=</span> torch.nn.Linear(<span class="dv">128</span>, <span class="dv">16</span>).to(device).train()</span>
+<span id="lst-m4-n10-c01-8"><a aria-hidden="true" href="#lst-m4-n10-c01-8" tabindex="-1"></a>loss_fn <span class="op">=</span> torch.nn.CrossEntropyLoss()</span>
+<span id="lst-m4-n10-c01-9"><a aria-hidden="true" href="#lst-m4-n10-c01-9" tabindex="-1"></a>optimizer <span class="op">=</span> torch.optim.AdamW(model.parameters(), lr<span class="op">=</span><span class="fl">1e-3</span>)</span>
+<span id="lst-m4-n10-c01-10"><a aria-hidden="true" href="#lst-m4-n10-c01-10" tabindex="-1"></a>before <span class="op">=</span> [p.detach().clone() <span class="cf">for</span> p <span class="kw">in</span> model.parameters()]</span>
+<span id="lst-m4-n10-c01-11"><a aria-hidden="true" href="#lst-m4-n10-c01-11" tabindex="-1"></a></span>
+<span id="lst-m4-n10-c01-12"><a aria-hidden="true" href="#lst-m4-n10-c01-12" tabindex="-1"></a><span class="kw">def</span> train_step():</span>
+<span id="lst-m4-n10-c01-13"><a aria-hidden="true" href="#lst-m4-n10-c01-13" tabindex="-1"></a>    optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-n10-c01-14"><a aria-hidden="true" href="#lst-m4-n10-c01-14" tabindex="-1"></a>    scores <span class="op">=</span> model(features)</span>
+<span id="lst-m4-n10-c01-15"><a aria-hidden="true" href="#lst-m4-n10-c01-15" tabindex="-1"></a>    loss <span class="op">=</span> loss_fn(scores, labels)</span>
+<span id="lst-m4-n10-c01-16"><a aria-hidden="true" href="#lst-m4-n10-c01-16" tabindex="-1"></a>    loss.backward()</span>
+<span id="lst-m4-n10-c01-17"><a aria-hidden="true" href="#lst-m4-n10-c01-17" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> torch.isfinite(loss).item() <span class="kw">or</span> <span class="kw">not</span> <span class="bu">all</span>(</span>
+<span id="lst-m4-n10-c01-18"><a aria-hidden="true" href="#lst-m4-n10-c01-18" tabindex="-1"></a>        p.grad <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span> <span class="kw">and</span> torch.isfinite(p.grad).<span class="bu">all</span>().item()</span>
+<span id="lst-m4-n10-c01-19"><a aria-hidden="true" href="#lst-m4-n10-c01-19" tabindex="-1"></a>        <span class="cf">for</span> p <span class="kw">in</span> model.parameters()</span>
+<span id="lst-m4-n10-c01-20"><a aria-hidden="true" href="#lst-m4-n10-c01-20" tabindex="-1"></a>    ):</span>
+<span id="lst-m4-n10-c01-21"><a aria-hidden="true" href="#lst-m4-n10-c01-21" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">RuntimeError</span>(<span class="st">"Non-finite loss or gradient"</span>)</span>
+<span id="lst-m4-n10-c01-22"><a aria-hidden="true" href="#lst-m4-n10-c01-22" tabindex="-1"></a>    optimizer.step()</span>
+<span id="lst-m4-n10-c01-23"><a aria-hidden="true" href="#lst-m4-n10-c01-23" tabindex="-1"></a>    <span class="cf">return</span> loss.detach()</span>
+<span id="lst-m4-n10-c01-24"><a aria-hidden="true" href="#lst-m4-n10-c01-24" tabindex="-1"></a></span>
+<span id="lst-m4-n10-c01-25"><a aria-hidden="true" href="#lst-m4-n10-c01-25" tabindex="-1"></a>loss <span class="op">=</span> train_step()</span>
+<span id="lst-m4-n10-c01-26"><a aria-hidden="true" href="#lst-m4-n10-c01-26" tabindex="-1"></a>changed <span class="op">=</span> <span class="bu">any</span>(</span>
+<span id="lst-m4-n10-c01-27"><a aria-hidden="true" href="#lst-m4-n10-c01-27" tabindex="-1"></a>    <span class="kw">not</span> torch.equal(old, new.detach())</span>
+<span id="lst-m4-n10-c01-28"><a aria-hidden="true" href="#lst-m4-n10-c01-28" tabindex="-1"></a>    <span class="cf">for</span> old, new <span class="kw">in</span> <span class="bu">zip</span>(before, model.parameters())</span>
+<span id="lst-m4-n10-c01-29"><a aria-hidden="true" href="#lst-m4-n10-c01-29" tabindex="-1"></a>)</span>
+<span id="lst-m4-n10-c01-30"><a aria-hidden="true" href="#lst-m4-n10-c01-30" tabindex="-1"></a><span class="cf">if</span> <span class="kw">not</span> changed <span class="kw">or</span> <span class="kw">not</span> <span class="bu">all</span>(torch.isfinite(p).<span class="bu">all</span>().item() <span class="cf">for</span> p <span class="kw">in</span> model.parameters()):</span>
+<span id="lst-m4-n10-c01-31"><a aria-hidden="true" href="#lst-m4-n10-c01-31" tabindex="-1"></a>    <span class="cf">raise</span> <span class="pp">RuntimeError</span>(<span class="st">"Update did not produce finite changed parameters"</span>)</span>
+<span id="lst-m4-n10-c01-32"><a aria-hidden="true" href="#lst-m4-n10-c01-32" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"complete finite update; parameters changed"</span>)</span></code></pre></div><button class="code-copy-button" title="Copy to Clipboard"><i class="bi"></i></button></div>
+<p><code>zero_grad</code> clears gradients from any earlier update. The forward call makes scores, the loss supplies a scalar for <code>backward</code>, and <code>backward</code> writes parameter gradients. <code>AdamW.step</code> then changes the parameters using those gradients and its persistent optimizer state. The checks show only that this synthetic update had finite loss, gradients and parameters, and changed at least one parameter. Random features and labels do not show learning quality or convergence. The fixture creates its data on the selected device; a real input path can add batch retrieval and transfer after this update is understood.</p>
+</div></div>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Step time:</strong></span> Elapsed time from the start of one training step to the start of the next comparable step after warmup. It includes data delivery, GPU work, optimizer work, and any communication that remains exposed.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Global batch:</strong></span> All examples consumed before one optimizer update. On one GPU it is the total number of examples accumulated before the update. A <span class="definition-term" data-custom-style="Definition Term"><strong>Micro-batch</strong></span> contains the examples processed by one forward and backward pass (<a href="#sec-m4-c07-s03">Section 9.3</a>). With equally sized micro-batches, this equals micro-batch size times accumulation steps. A <span class="definition-term" data-custom-style="Definition Term"><strong>Replica</strong></span> is a complete copy of the model parameters. In the one-process-per-GPU data-parallel setup here, each rank holds one replica on its GPU. Global batch sums the actual example counts processed before the update across all data-parallel replicas. Multiplication by the replica count is valid when their per-update example counts match.</li>
+<li><strong class="m4-term-label">Training throughput:</strong> Useful training tokens or examples completed per second. It must be reported with global batch, sequence length, precision, and the quality or convergence condition.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Exposed tail:</strong></span> Work that remains after useful overlapping work has finished. For a single GPU it can be an input, optimizer, or synchronization delay. In distributed training it often includes unfinished communication.</li>
+</ul>
+<p><span id="eq-m4-c07-e01"><span class="math display">\[
+\text{training step time} \approx \text{data pipeline} + \text{input transfer} + \text{forward} + \text{backward} + \text{optimizer} + \text{exposed communication}
+\tag{9.1}\]</span></span></p>
+<p>To use this sum when phases overlap, count only each phase’s exposed contribution to the update interval, so no interval is counted twice. Summing the full durations is appropriate only for a serialized step. Input transfer can overlap with prior GPU work, and later distributed sections show how communication can overlap backward propagation. The useful diagnosis is the part that remains on the critical path after available overlap is accounted for.</p>
+<p>The table below maps visible step symptoms to the first measurement that separates likely causes. It is a starting diagnosis, not a claim that one symptom has only one explanation.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c07-t01">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 9.1: Training-step symptoms and first measurements.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Visible step symptom</th>
+<th>Likely live object or gap</th>
+<th>First measurement</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>GPU idle before forward</td>
+<td>CPU batch preparation, storage reads, tokenization, or host-to-device transfer</td>
+<td>Timeline with data-loader work, copy events, and the first GPU kernel</td>
+</tr>
+<tr class="even">
+<td>Peak memory rises through forward</td>
+<td>Saved activations and temporary attention or workspace tensors</td>
+<td>Peak allocated/reserved memory plus activation-lifetime inspection</td>
+</tr>
+<tr class="odd">
+<td>Backward dominates step time</td>
+<td>Gradient kernels, activation reads, or unfused reductions</td>
+<td>Kernel timeline and arithmetic-intensity or memory-traffic counters</td>
+</tr>
+<tr class="even">
+<td>Update is unexpectedly expensive</td>
+<td>Optimizer moments, parameter writes, or many small update kernels</td>
+<td>Optimizer-region timing and memory-traffic profiling</td>
+</tr>
+<tr class="odd">
+<td>Step ends with a long wait</td>
+<td>Uncovered input, synchronization, or distributed communication</td>
+<td>Timeline showing the final CPU/GPU or rank-to-rank dependency</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Use the complete update above as the first workload for the symptom table. Its forward and loss, backward, and optimizer operations run in that order. This fixture creates features and labels on the selected device, so it has no input-transfer phase; add retrieval and transfer when diagnosing a real input path. The earlier <a href="ch-m4-n07.html#sec-m4-c05-s07">profiler method</a> separates CPU submission from GPU kernels and copies. A Python phase label times the host code inside it; on CUDA, that duration alone does not measure completion of the submitted GPU work.</p>
+<p>Measure complete update time in a separate run without profiler instrumentation. Warm the same update path, synchronize the selected CUDA device before and after a monotonic wall-clock interval, and divide by the number of completed updates. Include batch retrieval and transfer when they are part of the step being compared. Use the same interval, input policy, and output checks for baseline and candidate, as taught in the <a href="ch-m4-n07.html#sec-m4-c11-s01">measurement workflow</a>. On CPU, device synchronization is unnecessary.</p>
+<p>A stream is an ordered queue of GPU work (<a href="ch-m4-n04.html#sec-m4-c03-s08">Section 4.4</a>). Work in different streams may overlap when dependencies and hardware permit it. GEMM means General Matrix-Matrix Multiplication, the operation used for large projections (<a href="ch-m4-n04.html#sec-m4-c03-s11">Section 4.7</a>). Fusion combines operations into one kernel, which can remove intermediate memory traffic and launches (<a href="ch-m4-n08.html#sec-m4-c04-s10">Section 8.7</a>). Distributed training may communicate <span class="definition-term" data-custom-style="Definition Term"><strong>gradient buckets</strong></span>, groups of gradients sent together, while backward computation continues.</p>
+<p>The symptom table identifies where to measure first, but the limiting term is the work or gap that remains on the critical path after overlap. The next question is which parameters, activations, gradients, and optimizer buffers are live together and set the memory ceiling.</p>
+</section>
+<section class="level2" data-number="9.2" id="sec-m4-c07-s02">
+<h2 class="anchored" data-anchor-id="sec-m4-c07-s02" data-number="9.2"><span class="header-section-number">9.2</span> Training state and memory</h2>
+<p>Training usually keeps more live state than a weight-only inference baseline because a step holds gradients, optimizer buffers, and saved activations alongside parameters. A serving process can still exceed that baseline when long-lived KV cache, request state, and workspaces consume substantial memory.</p>
+<p><strong>State held during training</strong></p>
+<ul>
+<li><strong class="m4-term-label">Parameters:</strong> Learned values read during forward and updated by the optimizer. They persist across steps.</li>
+<li><strong class="m4-term-label">Gradients:</strong> Derivatives produced during backward and consumed by the optimizer. Their values are step-specific. Their storage may be retained and zeroed, or released and recreated when gradients are set to <code>None</code>, such as with <code>zero_grad(set_to_none=True)</code>. Their footprint is often parameter-sized before sharding, accumulation strategy or reduced-precision storage changes it.</li>
+<li><strong class="m4-term-label">Optimizer state:</strong> Persistent update buffers such as Adam’s first and second moments.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Saved activations:</strong></span> Forward intermediates kept only until backward has used them. Their size grows with micro-batch and sequence length.</li>
+</ul>
+<p>During the optimizer step, Adam-style updates read parameters, gradients, first moments, and second moments, then write updated state. That traffic can limit the step even when the forward pass is limited by matrix arithmetic.</p>
+<div alt="Five columns show before forward, forward and loss, backward, optimizer and the next update. Parameter and moment bands continue through every phase. Saved forward references span forward and backward use. Current-step gradient values span backward and the optimizer. Explicit clearing removes old gradient values before the next forward pass. Gradient storage may be zeroed and reused or released and recreated." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-c07-lifetimes">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c07-lifetimes-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img alt="Five columns show before forward, forward and loss, backward, optimizer and the next update. Parameter and moment bands continue through every phase. Saved forward references span forward and backward use. Current-step gradient values span backward and the optimizer. Explicit clearing removes old gradient values before the next forward pass. Gradient storage may be zeroed and reused or released and recreated." class="img-fluid figure-img" src="../assets/fig-m4-c07-lifetimes.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" />
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c07-lifetimes-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 9.3: Parameters and initialized Adam moments persist across phases. Backward reads selected saved references. Gradient values are cleared before the next forward pass. These bands show live values and references, not bytes or phase durations.
+</figcaption>
+</figure>
+</div>
+<p><strong>Techniques that reduce different parts of that state</strong></p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Activation checkpointing:</strong></span> Saves fewer activations and recomputes selected forward regions during backward.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Low-Rank Adaptation (LoRA):</strong></span> Freezes the base parameters and trains small adapter matrices, reducing trainable parameters, gradients, and optimizer state but not the required activations<a class="footnote-ref" href="#fn1" id="fnref1" role="doc-noteref"><sup>1</sup></a>.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Quantized Low-Rank Adaptation (QLoRA):</strong></span> Also stores the frozen base model in a quantized form. <span class="definition-term" data-custom-style="Definition Term"><strong>Dequantization</strong></span> converts the stored low-bit values back to 16-bit for computation (<a href="ch-m4-n12.html#sec-m4-c07-s05">Section 11.1</a>); QLoRA requires compatible kernels for this conversion.</li>
+</ul>
+<p>LoRA and QLoRA change which parameter tensors receive gradients. Activation checkpointing changes which forward tensors remain live. They solve different parts of the memory budget and can be combined when both trainable state and saved activations are limiting the step.</p>
+<p>The first-order activation estimate separates linear saved tensors from a quadratic attention term. Let <code>n_hidden</code> count the retained hidden-sized tensors and <code>n_score</code> count the retained attention-score-like tensors in one layer. Those counts depend on the layer implementation, backward algorithm, and recomputation policy:</p>
+<p><span id="eq-m4-c07-e02"><span class="math display">\[
+\text{activation elements per layer} \approx n_{\text{hidden}} B T d + n_{\text{score}} B H T^2
+\tag{9.2}\]</span></span></p>
+<p><span id="eq-m4-c07-e03"><span class="math display">\[
+\text{activation bytes} \approx b L (n_{\text{hidden}} B T d + n_{\text{score}} B H T^2)
+\tag{9.3}\]</span></span></p>
+<p>Here B is the micro-batch size, T the sequence length, d the hidden dimension, H the attention-head count, b the bytes stored per element, L the layer count, <code>n_hidden</code> the retained hidden-sized tensor count, and <code>n_score</code> the retained attention-score-like tensor count. The formula exposes scaling. Measure the actual retained tensors to determine the runtime’s peak memory.</p>
+<p>For a GPT-2 Large-style coarse estimate, set <code>n_hidden = 16</code>, <code>n_score = 1</code>, and use 36 layers, hidden dimension 1,280, 20 heads, sequence length 1,024, batch one, and two-byte activation storage. The linear and quadratic terms are then each about 21 million elements. Together they require about 84 MB decimal per layer and about 3.0 GB decimal across 36 layers in this first-order model. Increasing the batch to 32 raises the same estimate to about 97 GB decimal before optimizer state, workspaces, and allocator headroom.</p>
+<p>The following choices reduce different live objects. They should be selected from the memory account, not treated as interchangeable capacity fixes.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c07-t02">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 9.2: Training memory levers by the state object they reduce.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<thead>
+<tr class="header">
+<th>Memory lever</th>
+<th>Object reduced</th>
+<th>Main cost or condition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Activation checkpointing</td>
+<td>Saved activations</td>
+<td>Recomputes selected forward regions during backward and increases step compute</td>
+</tr>
+<tr class="even">
+<td>Smaller micro-batch with accumulation</td>
+<td>Saved activations live for one micro-batch at a time</td>
+<td>More, smaller passes may lower GPU efficiency; weight losses as in <a href="#sec-m4-c07-s03">Section 9.3</a> and take one optimizer step per global batch; keep any rule that changes the learning rate (the optimizer’s step size) after the same update counts, passes through the data, or metric checks in both runs; batch-dependent operations or randomness may still differ</td>
+</tr>
+<tr class="odd">
+<td>BF16/FP16 or supported FP8 path</td>
+<td>Saved activations actually stored in the lower-precision format (<a href="#sec-m4-c07-s04">Section 9.4</a>); gradients or state only if their storage format also changes</td>
+<td>Requires compatible kernels and stable numerics; FP32 master parameters and optimizer buffers can offset storage savings</td>
+</tr>
+<tr class="even">
+<td>FlashAttention-style attention</td>
+<td>Materialized attention-score-like tensors</td>
+<td>Applies only when the selected attention kernel and dimensions are supported</td>
+</tr>
+<tr class="odd">
+<td>State sharding</td>
+<td>Per-rank parameters, gradients, or optimizer state</td>
+<td>Introduces collectives and is developed after the communication foundations in <a href="ch-m4-n17.html#sec-ch-m4-n17">Chapter 16</a> and <a href="ch-m4-n18.html#sec-ch-m4-n18">Chapter 17</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>Activation memory and model-state memory are separate constraints. A sharding strategy can make a model fit while activations still exceed capacity. Checkpointing can lower activations while optimizer buffers remain the limiting state. A useful memory report names the largest live object at peak, not only total allocated bytes.</p>
+<p>For a training-method comparison, start baseline and candidate from matching parameters, optimizer state, batches, shapes, and random state. For a change intended to preserve the update, such as activation checkpointing, compare loss, gradients, and resulting parameters under equivalent forward behavior, with tolerances chosen before timing. For a precision change, declare the permitted loss or quality difference and check finite gradients using the <a href="#sec-m4-c07-s04">unscaling and update rules in Section 9.4</a>. A short loss comparison detects early problems; longer training needs a held-out quality or convergence check. A fixed seed alone does not guarantee identical GPU execution.</p>
+</section>
+<section class="level2" data-number="9.3" id="sec-m4-c07-s03">
+<h2 class="anchored" data-anchor-id="sec-m4-c07-s03" data-number="9.3"><span class="header-section-number">9.3</span> Feeding data and applying updates</h2>
+<p>Training-step speed depends on the complete path: the host prepares the next batch, copies move it to the GPU, forward and backward kernels execute, and the optimizer reads gradients and persistent state before the next step begins.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Data pipeline:</strong></span> The CPU-side and storage-side path that reads examples, tokenizes or transforms them, assembles batches, and makes them available for GPU transfer.</li>
+<li><strong class="m4-term-label">Micro-batch:</strong> The examples processed by one forward/backward pass before optional gradient accumulation. Its tensor dimensions determine activation memory and kernel shape.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Gradient accumulation:</strong></span> Runs several micro-batches, adds their gradients, and performs one optimizer update afterward. It raises the effective global batch while keeping per-micro-batch activation memory lower.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Fused optimizer:</strong></span> An optimizer implementation that combines update operations, such as reading gradients and updating parameters and moment buffers, with fewer launches or less intermediate traffic.</li>
+</ul>
+<p>The first fixture created features on the selected device. A training job usually receives batches from a loader and may copy them to a GPU. The abbreviated loop below adds that input path; it is a phase trace, not a second complete program.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-80"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: Abbreviated input-to-update loop</strong></p>
+<p>For sequence classification, <code>input_ids</code> is a <code>torch.long</code> tensor of shape <code>[B,T]</code>, with batch size <code>B</code> and fixed sequence length <code>T</code>; no padding is used here. The supplied classifier returns floating-point logits <code>[B,C]</code>, one row of <code>C</code> class scores per sequence, rather than <code>[B,T,C]</code> token scores. <code>labels</code> has shape <code>[B]</code>, contains integer IDs from 0 to <code>C-1</code>, and <code>loader</code> supplies compatible batches. The model is already in training mode on <code>cuda:0</code>, and the optimizer already owns its parameters. This listing omits those constructors, so it is not runnable alone.</p>
+<p><code>nn.CrossEntropyLoss()</code> takes those raw scores and labels and returns one scalar mean loss. For <code>B=2</code>, <code>C=2</code>, scores <code>[[0,0],[0,0]]</code>, and labels <code>[0,1]</code>, each target has probability <code>1/2</code>. Each loss is <code>-log(1/2)</code>, about <code>0.6931</code>, and the mean is also <code>0.6931</code>; <code>loss.backward()</code> starts from that scalar. The class axis and target type follow the PyTorch 2.4 loss contract.<a class="footnote-ref" href="#fn2" id="fnref2" role="doc-noteref"><sup>2</sup></a> A causal language model needs a different token-target alignment and loss layout.</p>
+<div class="m4-contained-code-caption publisher-code-caption" data-custom-style="Code Caption" hidden="">
+<p><strong>Code example: Abbreviated input-to-update loop</strong></p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c03"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c03-1"><a aria-hidden="true" href="#lst-m4-c01-c03-1" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c01-c03-2"><a aria-hidden="true" href="#lst-m4-c01-c03-2" tabindex="-1"></a><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="lst-m4-c01-c03-3"><a aria-hidden="true" href="#lst-m4-c01-c03-3" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-4"><a aria-hidden="true" href="#lst-m4-c01-c03-4" tabindex="-1"></a>device <span class="op">=</span> torch.device(<span class="st">"cuda"</span>, <span class="dv">0</span>)</span>
+<span id="lst-m4-c01-c03-5"><a aria-hidden="true" href="#lst-m4-c01-c03-5" tabindex="-1"></a><span class="co"># model is already on this device; optimizer owns its parameters.</span></span>
+<span id="lst-m4-c01-c03-6"><a aria-hidden="true" href="#lst-m4-c01-c03-6" tabindex="-1"></a>loss_fn <span class="op">=</span> nn.CrossEntropyLoss()</span>
+<span id="lst-m4-c01-c03-7"><a aria-hidden="true" href="#lst-m4-c01-c03-7" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-8"><a aria-hidden="true" href="#lst-m4-c01-c03-8" tabindex="-1"></a><span class="cf">for</span> batch <span class="kw">in</span> loader:</span>
+<span id="lst-m4-c01-c03-9"><a aria-hidden="true" href="#lst-m4-c01-c03-9" tabindex="-1"></a>    <span class="co"># Pinned source buffers plus non_blocking copies can overlap input transfer with GPU work.</span></span>
+<span id="lst-m4-c01-c03-10"><a aria-hidden="true" href="#lst-m4-c01-c03-10" tabindex="-1"></a>    input_ids <span class="op">=</span> batch[<span class="st">"input_ids"</span>].to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c01-c03-11"><a aria-hidden="true" href="#lst-m4-c01-c03-11" tabindex="-1"></a>    labels <span class="op">=</span> batch[<span class="st">"labels"</span>].to(device, non_blocking<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c01-c03-12"><a aria-hidden="true" href="#lst-m4-c01-c03-12" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-13"><a aria-hidden="true" href="#lst-m4-c01-c03-13" tabindex="-1"></a>    <span class="co"># Releasing old gradient storage avoids writing a full tensor of zeros each step.</span></span>
+<span id="lst-m4-c01-c03-14"><a aria-hidden="true" href="#lst-m4-c01-c03-14" tabindex="-1"></a>    optimizer.zero_grad(set_to_none<span class="op">=</span><span class="va">True</span>)</span>
+<span id="lst-m4-c01-c03-15"><a aria-hidden="true" href="#lst-m4-c01-c03-15" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-16"><a aria-hidden="true" href="#lst-m4-c01-c03-16" tabindex="-1"></a>    <span class="co"># Forward execution reads parameters, creates activations, and may retain them for backward.</span></span>
+<span id="lst-m4-c01-c03-17"><a aria-hidden="true" href="#lst-m4-c01-c03-17" tabindex="-1"></a>    logits <span class="op">=</span> model(input_ids)  <span class="co"># tensor [B, C], one row per sequence</span></span>
+<span id="lst-m4-c01-c03-18"><a aria-hidden="true" href="#lst-m4-c01-c03-18" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-19"><a aria-hidden="true" href="#lst-m4-c01-c03-19" tabindex="-1"></a>    <span class="co"># Integer labels [B]; default mean reduction returns a scalar.</span></span>
+<span id="lst-m4-c01-c03-20"><a aria-hidden="true" href="#lst-m4-c01-c03-20" tabindex="-1"></a>    loss <span class="op">=</span> loss_fn(logits, labels)</span>
+<span id="lst-m4-c01-c03-21"><a aria-hidden="true" href="#lst-m4-c01-c03-21" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-22"><a aria-hidden="true" href="#lst-m4-c01-c03-22" tabindex="-1"></a>    <span class="co"># Backward reads saved activations, writes gradients, and may trigger distributed collectives.</span></span>
+<span id="lst-m4-c01-c03-23"><a aria-hidden="true" href="#lst-m4-c01-c03-23" tabindex="-1"></a>    loss.backward()</span>
+<span id="lst-m4-c01-c03-24"><a aria-hidden="true" href="#lst-m4-c01-c03-24" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c03-25"><a aria-hidden="true" href="#lst-m4-c01-c03-25" tabindex="-1"></a>    <span class="co"># The optimizer reads parameters, gradients, and optimizer-state buffers, then writes updated parameters and state.</span></span>
+<span id="lst-m4-c01-c03-26"><a aria-hidden="true" href="#lst-m4-c01-c03-26" tabindex="-1"></a>    optimizer.step()</span></code></pre></div><button class="code-copy-button" title="Copy to Clipboard"><i class="bi"></i></button></div>
+<p>The loop makes four measurement questions concrete:</p>
+<ul>
+<li><strong>Input transfer:</strong> The <code>.to(device, non_blocking=True)</code> calls overlap other work only when the source buffers and stream dependencies permit it. Pinned host memory is commonly needed for useful overlap.<a class="footnote-ref" href="#fn3" id="fnref3" role="doc-noteref"><sup>3</sup></a></li>
+<li><strong>Forward execution:</strong> <code>PyTorch</code> dispatches tensor operations. Large projections may call vendor GEMM kernels, while small elementwise regions may launch separately unless compilation or fusion changes that path.</li>
+<li><strong>Activation retention:</strong> Autograd records operations and saves values needed for backward. Parameters, saved activations, gradients, and workspaces can overlap in time and set peak memory.</li>
+<li><strong>Optimizer traffic:</strong> Adam-style updates read parameters, gradients, and persistent moment buffers, then write updated parameters and moments. Measure this work separately when it may limit the step.</li>
+</ul>
+</div></div>
+<p>Accumulation preserves a chosen mean loss only when each backward pass contributes the correct fraction of that mean. For two equal-sized micro-batches with mean losses <span class="math inline">\(L_1\)</span> and <span class="math inline">\(L_2\)</span>, the combined objective is <span class="math inline">\((L_1+L_2)/2\)</span>. Backward therefore uses <span class="math inline">\(L_1/2\)</span> and <span class="math inline">\(L_2/2\)</span>, with parameters held fixed until both contributions have accumulated. Gradients are cleared before this cycle and after its single optimizer update, never between its backward passes<a class="footnote-ref" href="#fn4" id="fnref4" role="doc-noteref"><sup>4</sup></a>.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">For an additive mean over two equal examples, scale each micro-batch loss by one half, accumulate both gradients at unchanged parameters, then update once. In the toy calculation the combined gradient is 5 and the parameter moves from 1 to 0.5. Batch-dependent behavior and unequal valid-token counts need separate handling.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-32"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Example: Two micro-batches, one optimizer update</span><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Two micro-batches, one update</strong></p>
+<p><strong>Inputs and objective:</strong> Consider training a scalar model <span class="math inline">\(\hat y=\theta x\)</span> with <span class="math inline">\(\theta=1\)</span>, inputs <span class="math inline">\(x_1=1\)</span> and <span class="math inline">\(x_2=3\)</span>, and targets <span class="math inline">\(y_1=y_2=0\)</span>. Each one-example micro-batch has loss <span class="math inline">\(L_j=(\theta x_j-y_j)^2/2\)</span>. The intended objective is the mean over both examples. This illustrative calculation uses ordinary gradient descent with learning rate <span class="math inline">\(0.1\)</span> and no momentum.</p>
+<ol type="1">
+<li>Clear old gradients. At the unchanged parameter <span class="math inline">\(\theta=1\)</span>, the losses are <span class="math inline">\(L_1=0.5\)</span> and <span class="math inline">\(L_2=4.5\)</span>. Their derivatives are <span class="math inline">\((\theta x_j-y_j)x_j\)</span>, giving <span class="math inline">\(1\)</span> and <span class="math inline">\(9\)</span>.</li>
+<li>Backward on <span class="math inline">\(L_1/2\)</span> leaves accumulated gradient <span class="math inline">\(0.5\)</span>. Backward on <span class="math inline">\(L_2/2\)</span> adds <span class="math inline">\(4.5\)</span>, leaving <span class="math inline">\(5\)</span>. No optimizer update or gradient clearing occurs between them.</li>
+<li>One combined batch also gives loss <span class="math inline">\((0.5+4.5)/2=2.5\)</span> and gradient <span class="math inline">\((1+9)/2=5\)</span>. The optimizer applies <span class="math inline">\(\theta\leftarrow1-0.1(5)=0.5\)</span> once, then clears the gradients for the next cycle.</li>
+</ol>
+<p><strong>Conclusion:</strong> Summing the two unnormalized gradients would give <span class="math inline">\(10\)</span> and double this update. Matching the combined gradient assumes an additive objective and the same per-example forward behavior. Batch-dependent operations, random draws, and floating-point summation order can prevent exact agreement in a real model.</p>
+</div></div>
+<p>For an unweighted mean over valid training tokens, equal example counts need not mean equal loss weight. Let <span class="math inline">\(n_j\)</span> count the non-ignored target positions in micro-batch <span class="math inline">\(j\)</span>, and let <span class="math inline">\(N=\sum_j n_j&gt;0\)</span> cover the whole accumulation cycle. If <span class="math inline">\(L_j\)</span> is that micro-batch’s mean over its valid targets, its contribution is <span class="math inline">\((n_j/N)L_j\)</span>. Equivalently, each micro-batch’s summed valid-token loss is divided by the same <span class="math inline">\(N\)</span>. A micro-batch with no valid targets contributes zero without taking an empty mean. A shorter final accumulation cycle uses its actual count. A class-weighted or per-sequence objective requires its own reduction denominator. These counts and the following trace describe one worker. Distributed averaging must preserve the intended global objective as well.</p>
+<p>Padding also affects throughput accounting. A valid training token here is a target position that contributes to the chosen token loss, after any target shift or mask. Padding and ignored targets do not count. For <span class="math inline">\(B_{\mathrm{global}}\)</span> examples in a complete update, let <span class="math inline">\(n_i\)</span> be example <span class="math inline">\(i\)</span>’s valid-token count and <span class="math inline">\(t_{\mathrm{update}}\)</span> the update duration in seconds, including all accumulated micro-batches:</p>
+<p><span id="eq-m4-c07-e04"><span class="math display">\[
+\text{useful training tokens/s} = \frac{\sum_{i=1}^{B_{\mathrm{global}}} n_i}{t_{\mathrm{update}}}
+\tag{9.4}\]</span></span></p>
+<p>By contrast, <span class="math inline">\(B_{\mathrm{global}}T_{\mathrm{padded}}/t_{\mathrm{update}}\)</span> counts processed tensor positions per second when all sequences are padded to length <span class="math inline">\(T_{\mathrm{padded}}\)</span>. It equals useful tokens/s only if every position contributes a valid target. Both rates use the same complete update boundary after warmup, with global batch, precision, and loss convention reported.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Padding and useful throughput</strong></p>
+<p>Suppose two training sequences contribute 3 and 5 valid targets and are padded to a common length of 5. The complete update takes an illustrative 0.1 seconds. The loss mask excludes the two padded positions, so useful throughput is <span class="math inline">\((3+5)/0.1=80\)</span> tokens/s. The tensor contains <span class="math inline">\(2(5)=10\)</span> positions, giving <span class="math inline">\(10/0.1=100\)</span> processed positions/s. Extra padding can raise the position count without adding training targets. The useful-token rate therefore answers how much loss-bearing data the update processed.</p>
+</div>
+<p>A change that also changes optimizer update frequency, the loss curve, or model quality creates a different training setup and must be evaluated separately.</p>
+<p>Follow the training step in execution order and check each stage before tuning the next one:</p>
+<ol type="1">
+<li><strong>Batch preparation:</strong> CPU workers, storage reads, tokenization, and collation make the next batch ready before the current GPU step finishes.</li>
+<li><strong>GPU transfer:</strong> Pinned host buffers, copy streams, and dependencies permit overlap without serializing the step.</li>
+<li><strong>Forward and backward evidence:</strong> Profiler evidence separates compute throughput, HBM traffic, launch overhead, activation memory, and gradient work.</li>
+<li><strong>Parameter-update evidence:</strong> Parameter, gradient, and optimizer-moment traffic are measured separately from backward. Supported runtimes can use fused update kernels.</li>
+<li><strong>Gradient accumulation:</strong> Preserves the intended effective batch while tracking gradient lifetime, memory use, update frequency, and synchronization.</li>
+</ol>
+<p>These are single-worker training controls. Once the full step is understood locally, the <a href="ch-m4-n17.html">distributed chapters</a> add the communication and state-placement costs of scaling the same step across GPUs and nodes.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Counting parameter and gradient bytes</strong></p>
+<p>This abbreviated calculation assumes that <code>model</code> already exists and its parameters and gradients use dense layouts. Parameter bytes can be counted immediately. Gradient bytes appear only after backward propagation has populated <code>p.grad</code>. The helper counts logical tensor payloads, not unique storage when tensors share memory. Sparse gradients need a layout-specific count of stored values and index arrays, so this helper is not their storage estimate. It also excludes allocator reservation, fragmentation (free memory split into pieces too small to use), metadata, workspaces, or distributed buffers.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-81"><div class="m4-contained-code-caption publisher-code-caption" data-custom-style="Code Caption" data-m4-fold-heading="1" hidden="">
+<p><strong>Code example: Counting parameter and gradient bytes</strong></p>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="lst-m4-c01-c02"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="lst-m4-c01-c02-1"><a aria-hidden="true" href="#lst-m4-c01-c02-1" tabindex="-1"></a><span class="im">import</span> torch</span>
+<span id="lst-m4-c01-c02-2"><a aria-hidden="true" href="#lst-m4-c01-c02-2" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c02-3"><a aria-hidden="true" href="#lst-m4-c01-c02-3" tabindex="-1"></a>param_bytes <span class="op">=</span> <span class="bu">sum</span>(</span>
+<span id="lst-m4-c01-c02-4"><a aria-hidden="true" href="#lst-m4-c01-c02-4" tabindex="-1"></a>    p.numel() <span class="op">*</span> p.element_size()</span>
+<span id="lst-m4-c01-c02-5"><a aria-hidden="true" href="#lst-m4-c01-c02-5" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> model.parameters()</span>
+<span id="lst-m4-c01-c02-6"><a aria-hidden="true" href="#lst-m4-c01-c02-6" tabindex="-1"></a>)</span>
+<span id="lst-m4-c01-c02-7"><a aria-hidden="true" href="#lst-m4-c01-c02-7" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c02-8"><a aria-hidden="true" href="#lst-m4-c01-c02-8" tabindex="-1"></a>grad_bytes <span class="op">=</span> <span class="bu">sum</span>(</span>
+<span id="lst-m4-c01-c02-9"><a aria-hidden="true" href="#lst-m4-c01-c02-9" tabindex="-1"></a>    p.grad.numel() <span class="op">*</span> p.grad.element_size()</span>
+<span id="lst-m4-c01-c02-10"><a aria-hidden="true" href="#lst-m4-c01-c02-10" tabindex="-1"></a>    <span class="cf">for</span> p <span class="kw">in</span> model.parameters()</span>
+<span id="lst-m4-c01-c02-11"><a aria-hidden="true" href="#lst-m4-c01-c02-11" tabindex="-1"></a>    <span class="cf">if</span> p.grad <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span></span>
+<span id="lst-m4-c01-c02-12"><a aria-hidden="true" href="#lst-m4-c01-c02-12" tabindex="-1"></a>)</span>
+<span id="lst-m4-c01-c02-13"><a aria-hidden="true" href="#lst-m4-c01-c02-13" tabindex="-1"></a></span>
+<span id="lst-m4-c01-c02-14"><a aria-hidden="true" href="#lst-m4-c01-c02-14" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"parameters: </span><span class="sc">{</span>param_bytes <span class="op">/</span> <span class="dv">2</span><span class="op">**</span><span class="dv">20</span><span class="sc">:.1f}</span><span class="ss"> MiB"</span>)</span>
+<span id="lst-m4-c01-c02-15"><a aria-hidden="true" href="#lst-m4-c01-c02-15" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"gradients:  </span><span class="sc">{</span>grad_bytes <span class="op">/</span> <span class="dv">2</span><span class="op">**</span><span class="dv">20</span><span class="sc">:.1f}</span><span class="ss"> MiB"</span>)</span></code></pre></div><button class="code-copy-button" title="Copy to Clipboard"><i class="bi"></i></button></div></div>
+<p><strong>Conclusion:</strong> Parameter payload exists before backward, while gradient payload begins when autograd materializes <code>p.grad</code>. A memory report therefore needs the active phase as well as allocator and workspace overhead.</p>
+</div>
+</section>
+<section class="level2" data-number="9.4" id="sec-m4-c07-s04">
+<h2 class="anchored" data-anchor-id="sec-m4-c07-s04" data-number="9.4"><span class="header-section-number">9.4</span> Precision formats and PyTorch backend controls</h2>
+<p>A numeric format determines how values use their available bits. In training, the format must preserve a stable update while reducing memory traffic and using efficient matrix hardware. In deployment, the same format choice can instead target model footprint or inference bandwidth.</p>
+<p><code>torch.backends</code> and precision APIs permit framework-owned implementation choices for matrix multiplication, <code>cuDNN</code> (NVIDIA’s neural-network kernel library) operations, and attention. The relevant setting must be recorded with the training precision and measured execution path.</p>
+<p>A finite, nonzero normalized binary floating-point value has the form <span class="math inline">\((-1)^b(1.f)_2 2^e\)</span>. The <span class="definition-term" data-custom-style="Definition Term"><strong>sign bit</strong></span> <span class="math inline">\(b\)</span> selects positive or negative. The <span class="definition-term" data-custom-style="Definition Term"><strong>exponent</strong></span> <span class="math inline">\(e\)</span> sets the power-of-two scale. The <span class="definition-term" data-custom-style="Definition Term"><strong>significand</strong></span> <span class="math inline">\((1.f)_2\)</span> holds the significant binary digits, with fractional bits <span class="math inline">\(f\)</span> determining the spacing at a given exponent. Format descriptions often call these stored fractional bits the mantissa. The encoded exponent uses a bias to represent negative and positive exponents<a class="footnote-ref" href="#fn5" id="fnref5" role="doc-noteref"><sup>5</sup></a>.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">In a toy binary format with two fractional bits and exponents from -2 to 2, the spacing near 3 is 0.5, while 8 exceeds the range. More exponent range admits larger magnitudes. More fractional bits refine nearby values. The toy format omits zero, subnormals, infinities, and NaNs.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-33"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Example: Exponent range versus value spacing</span><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Range versus spacing</strong></p>
+<p>Assume a toy format with two fractional bits and allowed exponents from <span class="math inline">\(-2\)</span> to <span class="math inline">\(2\)</span>. It describes normalized nonzero numbers only, omitting zero, subnormal numbers, infinities, and NaNs. The value <span class="math inline">\(+(1.10)_2 2^1=(1+1/2)2=3\)</span> has positive sign, significand <span class="math inline">\(1.5\)</span>, and exponent <span class="math inline">\(1\)</span>.</p>
+<p>At that exponent, adjacent values are <span class="math inline">\(2\)</span>, <span class="math inline">\(2.5\)</span>, <span class="math inline">\(3\)</span>, and <span class="math inline">\(3.5\)</span>: their spacing is <span class="math inline">\(2^1/2^2=0.5\)</span>. Rounding to the nearest value maps <span class="math inline">\(3.1\)</span> back to <span class="math inline">\(3\)</span>, so adding <span class="math inline">\(0.1\)</span> to a value stored as <span class="math inline">\(3\)</span> can leave it unchanged. The largest positive value is <span class="math inline">\((1.11)_2 2^2=7\)</span>. A value of <span class="math inline">\(8\)</span> lies outside this format’s range. Allowing a larger exponent would admit <span class="math inline">\(8\)</span> but would not make the spacing near <span class="math inline">\(3\)</span> finer. Adding a fractional bit would refine that spacing without adding another exponent.</p>
+<p><strong>Conclusion:</strong> Exponent range governs which magnitudes fit. Significand precision governs how closely nearby values can be distinguished.</p>
+</div></div>
+<p>This distinction explains the FP16/BF16 choice: BF16 covers a wider range but has fewer fractional bits than FP16. <span class="definition-term" data-custom-style="Definition Term"><strong>Loss scaling</strong></span> (multiplying the loss to reduce small-gradient underflow) can move small gradients into a representable range during backward, but cannot restore precision already lost to rounding or make a tiny update survive addition to a much larger low-precision weight. Wider optimizer state addresses that separate problem.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">FP32:</strong></span> 32-bit floating point. It is broadly supported and useful for numerically sensitive accumulation or reference results. The same tensor uses twice the storage of FP16/BF16. Operation speed depends on the GPU, TensorFloat-32 policy, dimensions, and selected library kernel.</li>
+<li><strong class="m4-term-label">TF32:</strong> TensorFloat-32, an NVIDIA tensor-core mode for many FP32 matrix operations. It keeps FP32-like exponent range but uses a reduced mantissa, so it can be much faster than strict FP32 while being less precise.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">FP16:</strong></span> 16-bit floating point with smaller range than FP32. It is common for training and inference on tensor cores, but training may require loss scaling or mixed-precision practices to avoid overflow/underflow problems.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">BF16:</strong></span> 16-bit Brain Floating Point. It has FP32-like exponent range with fewer mantissa bits, which often makes training more stable than FP16 while still reducing memory traffic relative to FP32.</li>
+</ul>
+<div alt="Three byte groups show four unit cells for FP32 and two each for FP16 and BF16. Three aligned toy number lines show positive normalized values near 3. The original toy has two fraction bits and exponents minus 2 to 2. Its nearby values are 2, 2.5, 3 and 3.5. Rounding maps 3.1 to 3, and 8 exceeds its maximum of 7. Allowing exponent 3 makes 8 representable without changing spacing near 3. A third fraction bit with the original exponent limits adds quarter-step values, including 3.25, while 8 remains outside. These toy rows do not depict real-format bit encodings." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-c07-formats">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c07-formats-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img alt="Three byte groups show four unit cells for FP32 and two each for FP16 and BF16. Three aligned toy number lines show positive normalized values near 3. The original toy has two fraction bits and exponents minus 2 to 2. Its nearby values are 2, 2.5, 3 and 3.5. Rounding maps 3.1 to 3, and 8 exceeds its maximum of 7. Allowing exponent 3 makes 8 representable without changing spacing near 3. A third fraction bit with the original exponent limits adds quarter-step values, including 3.25, while 8 remains outside. These toy rows do not depict real-format bit encodings." class="img-fluid figure-img" src="../assets/fig-m4-c07-formats.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" />
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c07-formats-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 9.4: FP32 stores four bytes per element, while FP16 and BF16 each store two. The positive normalized toy example separates exponent range from spacing. Allowing exponent 3 admits 8. Adding a third fraction bit gives finer spacing near 3. These toy choices illustrate why exponent range and significand precision answer different questions. BF16 has wider exponent range and fewer fraction bits than FP16. Stored width alone does not determine update quality or complete-step speed.
+</figcaption>
+</figure>
+</div>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">FP8:</strong></span> 8-bit floating-point families used on newer accelerators with scaling metadata and compatible kernels<a class="footnote-ref" href="#fn6" id="fnref6" role="doc-noteref"><sup>6</sup></a>. Runtime support must handle scaling, accumulation, and selected operations.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">FP4 and block-scaled FP4:</strong></span> 4-bit floating formats often paired with one scale for a small block of values<a class="footnote-ref" href="#fn7" id="fnref7" role="doc-noteref"><sup>7</sup></a>. Block scaling can preserve local dynamic range, but it adds scale loads, packing constraints, and hardware-specific kernel requirements.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">INT8:</strong></span> 8-bit integer representation commonly used for quantized inference weights and sometimes activations (<a href="ch-m4-n12.html#sec-m4-c07-s05">Section 11.1</a>). It requires a mapping between integer codes and approximate real values, plus kernels that efficiently consume the representation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">INT4:</strong></span> 4-bit integer representation often used for weight-only inference compression. Quality and speed depend strongly on grouping, scales, dequantization cost, and kernel support.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Ternary weights:</strong></span> A specialized low-bit design whose weights take three values, such as negative, zero, and positive. It requires a model representation and kernel path designed for ternary values. An ordinary FP16 checkpoint needs conversion plus compatible kernels.</li>
+</ul>
+<p>Precision settings let <code>PyTorch</code> choose lower-precision internal arithmetic or a different library kernel for supported operations. The selected path still depends on the PyTorch version, GPU, dimensions, dtype, and operation-specific eligibility. PyTorch 2.14 documents the newer precision controls and warns against mixing them with the older <code>allow_tf32</code> flags in one configuration<a class="footnote-ref" href="#fn8" id="fnref8" role="doc-noteref"><sup>8</sup></a>.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-55"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Precision controls by PyTorch version</span><div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c07-t03">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 9.3: PyTorch precision controls and the conditions that determine their effect.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t03-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>PyTorch control</th>
+<th>Owner and scope</th>
+<th>Performance meaning</th>
+<th>Condition to verify</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>torch.backends.cuda.matmul.fp32_precision</code></td>
+<td>PyTorch CUDA matrix policy in newer releases</td>
+<td>Can permit reduced internal precision for supported FP32 matrix multiplication</td>
+<td>Version, GPU support, output accuracy, and actual dispatched kernel</td>
+</tr>
+<tr class="even">
+<td><code>torch.backends.cudnn.fp32_precision</code></td>
+<td>PyTorch cuDNN policy in newer releases</td>
+<td>Can permit reduced internal precision for supported cuDNN operations</td>
+<td>The operation is covered by cuDNN and the setting exists in the installed version</td>
+</tr>
+<tr class="odd">
+<td><code>torch.backends.cuda.matmul.allow_tf32</code></td>
+<td>Older PyTorch CUDA matrix flag</td>
+<td>Allows TensorFloat-32 for supported matrix multiplication</td>
+<td>Version-specific guidance and whether a newer control supersedes it</td>
+</tr>
+<tr class="even">
+<td><code>torch.set_float32_matmul_precision(...)</code></td>
+<td>PyTorch matrix-multiplication API</td>
+<td>Selects internal precision policy for float32 matrix multiplication</td>
+<td>It does not control convolution precision or model-quality requirements</td>
+</tr>
+<tr class="odd">
+<td>Scaled-dot-product attention backend policy</td>
+<td>PyTorch attention dispatch</td>
+<td>Permits flash, memory-efficient, or math attention paths</td>
+<td>Device, dtype, mask, head dimension, sequence dimensions, and backend availability</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div></div>
+<p>The formats above describe available representations. The following update mechanisms keep reduced-precision compute paths numerically stable during training.</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Mixed-precision training:</strong></span> Runs selected tensor operations and storage in reduced precision while retaining higher-precision accumulation or selected state where numerical range matters<a class="footnote-ref" href="#fn9" id="fnref9" role="doc-noteref"><sup>9</sup></a>. The objective is lower traffic and faster matrix paths without destabilizing parameter updates.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">FP32 master weights:</strong></span> One common FP16 mixed-precision design keeps persistent FP32 parameters for optimizer updates and casts a reduced-precision compute copy for forward and backward kernels<a class="footnote-ref" href="#fn10" id="fnref10" role="doc-noteref"><sup>10</sup></a>. BF16, fused optimizers, sharded state, and newer low-precision recipes can use different layouts.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Gradient underflow:</strong></span> A gradient becomes too small for the selected format and rounds to zero. FP16 is especially susceptible because its representable range is narrower than FP32 or BF16.</li>
+<li><strong class="m4-term-label">Loss scaling:</strong> Multiplies the loss before backward propagation so small FP16 gradients are less likely to underflow, then divides the gradients by the same scale before the optimizer update<a class="footnote-ref" href="#fn11" id="fnref11" role="doc-noteref"><sup>11</sup></a>. Dynamic loss scaling lowers the scale after overflow is detected.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Higher-precision accumulation:</strong></span> Accumulates reductions, dot products, or optimizer updates in a wider format than the input operands when the hardware and kernel path support it. This preserves numerical headroom while retaining much of the throughput benefit of reduced-precision inputs.</li>
+</ul>
+<p>The mixed-precision state path separates the representation used by fast matrix kernels from the representation that receives the parameter update. A common FP16 path keeps FP32 master weights, uses loss scaling, then unscales and checks gradients before the FP32 update. BF16 has a wider exponent range and often does not need loss scaling, although the optimizer and accumulation layout still depend on the selected training stack.</p>
+<p><span id="eq-m4-c07-e05"><span class="math display">\[
+\text{scaled loss} = S \times \text{loss}; \quad \text{unscaled gradient} = \frac{\text{scaled gradient}}{S}
+\tag{9.5}\]</span></span></p>
+<p>Here S is a positive loss scale. Scaling can keep small FP16 gradients representable during backward propagation, but one scale may still leave some gradients too small or make others overflow. Unscaling restores their intended magnitude before the optimizer updates the FP32 master weights. A finite-value check detects overflow before an invalid update is applied.</p>
+<p>With gradient accumulation, the loss scale stays fixed through the whole cycle in <a href="#sec-m4-c07-s03">Section 9.3</a>. For an FP16 CUDA loop with one optimizer, create <code>scaler = torch.amp.GradScaler()</code> once before training. This object holds the loss scale <span class="math inline">\(S\)</span> and adjusts it between accumulation cycles. Compute the forward pass and loss inside <code>torch.autocast(device_type="cuda", dtype=torch.float16)</code>. This context chooses FP16 for eligible operations and keeps selected operations in FP32 where more precision is needed. Normalize the loss as in <a href="#sec-m4-c07-s03">Section 9.3</a>. Outside that context, call <code>scaler.scale(normalized_loss).backward()</code> for each micro-batch to accumulate scaled gradients.</p>
+<p>If clipping is needed, call <code>scaler.unscale_(optimizer)</code> once after the last backward pass, then clip the unscaled gradients before calling <code>scaler.step(optimizer)</code>. That step unscales if needed, checks for nonfinite gradients, and applies or skips the optimizer update. Finish the cycle with <code>scaler.update()</code> to adjust the scale, then <code>optimizer.zero_grad()</code> to clear gradients for the next cycle<a class="footnote-ref" href="#fn12" id="fnref12" role="doc-noteref"><sup>12</sup></a>.</p>
+<div alt="FP32 master weights supply an FP16 working copy for eligible forward operations. The forward and loss region contains selected FP32 accumulation. The scalar loss is not assigned one universal format. A positive scale S multiplies the loss before backward. Unscaling divides gradients by S. A finite-gradient check leads to an FP32 update or skips it. The update reads and writes master weights and FP32 moments. A skipped update preserves both. The scale is adjusted for later cycles. This common recipe does not describe every training stack." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-c07-fp16-state">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-c07-fp16-state-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img alt="FP32 master weights supply an FP16 working copy for eligible forward operations. The forward and loss region contains selected FP32 accumulation. The scalar loss is not assigned one universal format. A positive scale S multiplies the loss before backward. Unscaling divides gradients by S. A finite-gradient check leads to an FP32 update or skips it. The update reads and writes master weights and FP32 moments. A skipped update preserves both. The scale is adjusted for later cycles. This common recipe does not describe every training stack." class="img-fluid figure-img" src="../assets/fig-m4-c07-fp16-state.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" />
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-c07-fp16-state-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 9.5: One common FP16 recipe casts working weights from FP32 master weights. Selected wider accumulation and FP32 optimizer state coexist with reduced-precision work. Gradients are unscaled and checked before an update is applied or skipped. Finite gradients do not prove learning quality.
+</figcaption>
+</figure>
+</div>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Scaling an accumulated gradient</strong></p>
+<p>Using the two-micro-batch example from <a href="#sec-m4-c07-s03">Section 9.3</a> with an illustrative fixed loss scale <span class="math inline">\(S=8\)</span>, the backward contributions are <span class="math inline">\(8(0.5)=4\)</span> and <span class="math inline">\(8(4.5)=36\)</span>. Their sum is <span class="math inline">\(40\)</span>, and unscaling once gives <span class="math inline">\(40/8=5\)</span>, the intended combined gradient. Unscaling after the first contribution would instead mix <span class="math inline">\(0.5\)</span> with the still-scaled <span class="math inline">\(36\)</span>. A single division could no longer recover the intended result. If the final accumulated gradients contain an infinity or NaN, the optimizer update is skipped and the scale is adjusted before the next cycle.</p>
+</div>
+<p>FP8 is a family, not one format. The two common FP8 encodings trade exponent range against mantissa precision, and practical systems add scaling metadata so tensors with wider dynamic range can still be represented<a class="footnote-ref" href="#fn13" id="fnref13" role="doc-noteref"><sup>13</sup></a>.</p>
+<p>The <span class="definition-term" data-custom-style="Definition Term"><strong>amax</strong></span> of a tensor is its maximum absolute element value, <span class="math inline">\(\max_i |x_i|\)</span>. An FP8 scaling recipe uses this magnitude, or, in delayed scaling, a history of earlier magnitudes, to choose a scale that fits the tensor into the selected format. A large outlier can force coarser spacing for smaller values. Delayed scaling also depends on how well previous amax values predict the current tensor<a class="footnote-ref" href="#fn14" id="fnref14" role="doc-noteref"><sup>14</sup></a>.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c07-t04">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c07-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 9.4: FP8 format and scaling choices.
+</figcaption>
+<div aria-describedby="tbl-m4-c07-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Format or scaling choice</th>
+<th>What it changes</th>
+<th>Performance effect</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>E4M3</td>
+<td>Four exponent bits and three mantissa bits</td>
+<td>More precision within a narrower range; often useful for values whose range can be controlled by scaling</td>
+</tr>
+<tr class="even">
+<td>E5M2</td>
+<td>Five exponent bits and two mantissa bits</td>
+<td>Wider dynamic range with less mantissa precision; useful when overflow risk is more important than small relative error</td>
+</tr>
+<tr class="odd">
+<td>Per-tensor scale</td>
+<td>One scale for a whole tensor</td>
+<td>Low metadata overhead but poor fit when channels or blocks have different ranges</td>
+</tr>
+<tr class="even">
+<td>Per-channel or per-block scale</td>
+<td>Separate scales for smaller groups</td>
+<td>Better local fit and fewer saturated values, but extra metadata and more complex kernels</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The same block-scaling idea appears in emerging FP4 paths. Transformer Engine 2.19 documents NVFP4, whose four-bit values use one sign bit, two exponent bits, and one mantissa bit (E2M1). Its one-dimensional format uses an E4M3 scale per 16-element block and an additional per-tensor FP32 scale. For comparison, MXFP8 stores eight-bit values, not four-bit values, and uses one E8M0 power-of-two scale per 32 values<a class="footnote-ref" href="#fn15" id="fnref15" role="doc-noteref"><sup>15</sup></a>. The local trade-off is scale precision against scale storage and conversion cost. These formats require compatible hardware and kernels. A reported FP4 throughput gain describes a particular model, accelerator, and runtime path, not a universal property of four-bit storage.</p>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Performance condition</strong></p>
+<p>A smaller representation can improve performance by reducing limiting traffic, enabling useful work that previously did not fit, or using faster supported arithmetic. Conversion, wider temporary tensors, and unsupported kernels can offset those gains, so the complete workload must be measured.</p>
+</div>
+<p>Bit width alone does not predict speed. For a precision or optimizer change, start baseline and candidate from matching model and optimizer states, use the same batches and random-state policy, and declare acceptable numerical differences before timing. Check finite loss, gradients, and resulting parameters. If the change is intended to preserve the update, compare those values within the chosen tolerances. A short finite update catches failures but does not show that the altered method preserves learning; check intended quality or convergence over a longer training run. Then measure complete warmed steps with the same <a href="ch-m4-n07.html#sec-m4-c11-s01">measurement interval</a>. Deployment formats that store weights or the KV cache in fewer bits, and their quality checks, belong in <a href="ch-m4-n12.html">model compression for inference</a>.</p>
+<div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p><strong>Example: Training memory per parameter</strong></p>
+<p><strong>Inputs:</strong> Consider the mixed-precision training arrangement (computing mostly in 16-bit formats while keeping some values in 32-bit) used for the ZeRO paper’s Adam memory estimate. It keeps five values for every parameter. The working weights and gradients in the cited example use FP16, at 2 bytes each. Using BF16 for these two arrays gives the same byte count. The optimizer holds an FP32 master copy of the weights plus Adam’s two running averages, at 4 bytes each. <a href="#sec-m4-c07-s04">Section 9.4</a> explains why the master copy exists. Other implementations can store gradients or optimizer state differently, so this 16-byte budget applies to the arrangement specified here.</p>
+<p><strong>Calculation:</strong> <span class="math inline">\(2+2+4+4+4=16\)</span> bytes per parameter. This is the standard accounting in the ZeRO paper, which writes the optimizer’s share as <span class="math inline">\(K=12\)</span> bytes.<a class="footnote-ref" href="#fn16" id="fnref16" role="doc-noteref"><sup>16</sup></a> For a 7-billion-parameter model, <span class="math inline">\(7\times10^9\times16=112\times10^9\)</span> bytes, or 112 GB, compared with 14 GB for the BF16 weights that inference needs.</p>
+<p><strong>Conclusion:</strong> Before a single activation is stored, the training state of a 7B model exceeds one 80 GB GPU. Activation checkpointing (discarding some forward results and recomputing them during backward, <a href="#sec-m4-c07-s02">Section 9.2</a>) does not help with these 112 GB, because it reduces activations only. Sharding the 16 bytes across ranks (<a href="ch-m4-n19.html#sec-m4-c13-s05">Section 18.4</a>) does.</p>
+</div>
+<p>Training changes parameters and therefore keeps gradients, saved activations, and optimizer state live. Inference fixes the parameters but introduces request state, prompt prefill, repeated token decode, and a growing KV cache. <a href="ch-m4-n11.html">Chapter 10</a> builds that different workload and its user-visible metrics from the request path onward.</p>
+</section>
+<section class="footnotes footnotes-end-of-document" data-m4-endnotes="1" id="footnotes" role="doc-endnotes"><h2 data-m4-endnotes-heading="1" data-m4-fold-ui="references-heading">References</h2><div data-m4-endnotes-body="1" data-m4-fold-created="endnotes-body" id="m4-endnotes-body">
+<hr/>
+<ol>
+<li id="fn1"><p>Hu, E. J., et al. (2021). <em>LoRA: Low-Rank Adaptation of Large Language Models</em>. arXiv:2106.09685. <a href="https://arxiv.org/abs/2106.09685">LoRA paper</a>. Supports freezing base weights and training injected low rank matrices to cut trainable parameters and memory, with no added inference latency after merging. Limit: reported parameter and memory reductions are for the paper GPT-3 style setup; activation memory still depends on micro-batch and sequence length.<a class="footnote-back" href="#fnref1" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>PyTorch. (2024). <em>CrossEntropyLoss</em> (PyTorch 2.4 documentation). <a href="https://docs.pytorch.org/docs/2.4/generated/torch.nn.CrossEntropyLoss.html">Input and target shapes</a>. Supports raw logits <code>[B,C]</code>, integer class targets <code>[B]</code>, and scalar output under mean reduction. The two-example calculation illustrates that contract, not a measured training result.<a class="footnote-back" href="#fnref2" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p>NVIDIA. (2024). <em>CUDA C++ Programming Guide 12.4</em>. <a href="https://docs.nvidia.com/cuda/archive/12.4.0/cuda-c-programming-guide/index.html">CUDA 12.4 programming guide</a> (release 2024-03-05). Support: page-locked host memory and overlap of data transfer with kernel execution, including stream and event ordering conditions. Limit: PyTorch DataLoader pinning and nonblocking flags are framework wrappers around this CUDA behavior.<a class="footnote-back" href="#fnref3" role="doc-backlink">↩︎</a></p></li>
+<li id="fn4"><p>PyTorch. (2.14 documentation). <em>Automatic Mixed Precision examples</em>, Gradient accumulation. <a href="https://docs.pytorch.org/docs/2.14/notes/amp_examples.html#gradient-accumulation">PyTorch gradient accumulation example</a>. Supports fixed scaling during accumulation and unscale/check/step/scale-update at the effective-batch boundary. Limit: its equal-size example divides by the number of micro-batches; unequal valid-token counts require the objective-specific weighting derived here.<a class="footnote-back" href="#fnref4" role="doc-backlink">↩︎</a></p></li>
+<li id="fn5"><p>NVIDIA. (CUDA 13.4 documentation). <em>Floating Point and IEEE 754</em>, Sections 2.1-2.2. <a href="https://docs.nvidia.com/cuda/floating-point/index.html">CUDA floating-point guide</a>. Supports sign, biased exponent, fraction, finite precision, and rounding. Limit: the two-fractional-bit format is an illustrative calculation, not an IEEE format or hardware measurement.<a class="footnote-back" href="#fnref5" role="doc-backlink">↩︎</a></p></li>
+<li id="fn6"><p>NVIDIA. (Transformer Engine 2.19.0 documentation). <em>Using FP8 and FP4 with Transformer Engine</em>. <a href="https://github.com/NVIDIA/TransformerEngine/blob/v2.19.0/docs/examples/fp8_primer.ipynb">Transformer Engine FP8 and FP4 primer</a>. Supports E4M3 as 1 sign bit, 4 exponent bits, 3 mantissa bits up to about plus or minus 448, and E5M2 as 1 sign bit, 5 exponent bits, 2 mantissa bits up to about plus or minus 57344; the usual hybrid use is E4M3 for forward weights and activations and E5M2 for backward gradients, with one FP32 scale per tensor in current scaling. Limit: H100 and Blackwell Tensor Core support and recipe availability vary by GPU and Transformer Engine release; the chapter table keeps the choice as a measurement decision.<a class="footnote-back" href="#fnref6" role="doc-backlink">↩︎</a></p></li>
+<li id="fn7"><p>NVIDIA. (Transformer Engine 2.19.0 documentation). <em>Using FP8 and FP4 with Transformer Engine</em>. <a href="https://github.com/NVIDIA/TransformerEngine/blob/v2.19.0/docs/examples/fp8_primer.ipynb">Transformer Engine FP4 block-scaling primer</a>. Describes four-bit NVFP4 values of magnitude up to 6, a scale per 16 values, and an additional FP32 tensor scale. Its training recipe uses 16 by 16 scaling for weights. The eight-bit MXFP8 comparison uses a power-of-two scale per 32 values. These are Blackwell-specific recipes, not evidence of a universal speedup.<a class="footnote-back" href="#fnref7" role="doc-backlink">↩︎</a></p></li>
+<li id="fn8"><p>PyTorch. (2.14 documentation). <em>CUDA semantics</em>, TensorFloat-32 on Ampere and later devices. <a href="https://docs.pytorch.org/docs/2.14/notes/cuda.html#tensorfloat-32-tf32-on-ampere-and-later-devices">CUDA semantics</a>. Describes backend and operator precision controls and the unsupported mixing of old and new settings. Eligibility and accuracy still depend on the operation and hardware.<a class="footnote-back" href="#fnref8" role="doc-backlink">↩︎</a></p></li>
+<li id="fn9"><p>Micikevicius, P., et al. (2018). <em>Mixed Precision Training</em>. arXiv:1710.03740. <a href="https://arxiv.org/abs/1710.03740">Mixed Precision Training paper</a>. Supports storing weights, activations and gradients in FP16 with an FP32 master copy, scaling loss before backward and unscaling before update, and accumulating FP16 products in FP32. Limit: the method targets FP16 range limits; BF16 and FP8 paths in the chapter have different stability and kernel conditions.<a class="footnote-back" href="#fnref9" role="doc-backlink">↩︎</a></p></li>
+<li id="fn10"><p>Micikevicius, P., et al. (2018). <em>Mixed Precision Training</em>. arXiv:1710.03740. <a href="https://arxiv.org/abs/1710.03740">Mixed Precision Training paper</a>. Supports storing weights, activations and gradients in FP16 with an FP32 master copy, scaling loss before backward and unscaling before update, and accumulating FP16 products in FP32. Limit: the method targets FP16 range limits; BF16 and FP8 paths in the chapter have different stability and kernel conditions.<a class="footnote-back" href="#fnref10" role="doc-backlink">↩︎</a></p></li>
+<li id="fn11"><p>Micikevicius, P., et al. (2018). <em>Mixed Precision Training</em>. arXiv:1710.03740. <a href="https://arxiv.org/abs/1710.03740">Mixed Precision Training paper</a>. Supports storing weights, activations and gradients in FP16 with an FP32 master copy, scaling loss before backward and unscaling before update, and accumulating FP16 products in FP32. Limit: the method targets FP16 range limits; BF16 and FP8 paths in the chapter have different stability and kernel conditions.<a class="footnote-back" href="#fnref11" role="doc-backlink">↩︎</a></p></li>
+<li id="fn12"><p>PyTorch. (2.14 documentation). <em>Automatic Mixed Precision examples</em>, Gradient accumulation. <a href="https://docs.pytorch.org/docs/2.14/notes/amp_examples.html#gradient-accumulation">PyTorch gradient accumulation example</a>. Supports fixed scaling during accumulation and unscale/check/step/scale-update at the effective-batch boundary. Limit: its equal-size example divides by the number of micro-batches; unequal valid-token counts require the objective-specific weighting derived here.<a class="footnote-back" href="#fnref12" role="doc-backlink">↩︎</a></p></li>
+<li id="fn13"><p>NVIDIA. (Transformer Engine 2.19.0 documentation). <em>Using FP8 and FP4 with Transformer Engine</em>. <a href="https://github.com/NVIDIA/TransformerEngine/blob/v2.19.0/docs/examples/fp8_primer.ipynb">Transformer Engine FP8 and FP4 primer</a>. Supports E4M3 as 1 sign bit, 4 exponent bits, 3 mantissa bits up to about plus or minus 448, and E5M2 as 1 sign bit, 5 exponent bits, 2 mantissa bits up to about plus or minus 57344; the usual hybrid use is E4M3 for forward weights and activations and E5M2 for backward gradients, with one FP32 scale per tensor in current scaling. Limit: H100 and Blackwell Tensor Core support and recipe availability vary by GPU and Transformer Engine release; the chapter table keeps the choice as a measurement decision.<a class="footnote-back" href="#fnref13" role="doc-backlink">↩︎</a></p></li>
+<li id="fn14"><p>NVIDIA. (Transformer Engine 2.19.0 documentation). <em>Using FP8 and FP4 with Transformer Engine</em>. <a href="https://github.com/NVIDIA/TransformerEngine/blob/v2.19.0/docs/examples/fp8_primer.ipynb">Transformer Engine FP8 and FP4 primer</a>. Supports E4M3 as 1 sign bit, 4 exponent bits, 3 mantissa bits up to about plus or minus 448, and E5M2 as 1 sign bit, 5 exponent bits, 2 mantissa bits up to about plus or minus 57344; the usual hybrid use is E4M3 for forward weights and activations and E5M2 for backward gradients, with one FP32 scale per tensor in current scaling. Limit: H100 and Blackwell Tensor Core support and recipe availability vary by GPU and Transformer Engine release; the chapter table keeps the choice as a measurement decision.<a class="footnote-back" href="#fnref14" role="doc-backlink">↩︎</a></p></li>
+<li id="fn15"><p>NVIDIA. (Transformer Engine 2.19.0 documentation). <em>Using FP8 and FP4 with Transformer Engine</em>. <a href="https://github.com/NVIDIA/TransformerEngine/blob/v2.19.0/docs/examples/fp8_primer.ipynb">Transformer Engine FP4 block-scaling primer</a>. Describes four-bit NVFP4 values of magnitude up to 6, a scale per 16 values, and an additional FP32 tensor scale. Its training recipe uses 16 by 16 scaling for weights. The eight-bit MXFP8 comparison uses a power-of-two scale per 32 values. These are Blackwell-specific recipes, not evidence of a universal speedup.<a class="footnote-back" href="#fnref15" role="doc-backlink">↩︎</a></p></li>
+<li id="fn16"><p>Rajbhandari, S., Rasley, J., Ruwase, O., &amp; He, Y. (2020). <em>ZeRO: Memory Optimizations Toward Training Trillion Parameter Models</em>. <a href="https://arxiv.org/abs/1910.02054">ZeRO paper on arXiv</a> (v3 2020-05-13). Support: ZeRO partitions optimizer states (Stage 1), gradients (Stage 2), and parameters (Stage 3) across data-parallel ranks. Section 3.1 counts mixed-precision Adam as 2 bytes of fp16 parameters, 2 bytes of gradients, and K = 12 bytes of fp32 parameter copy, momentum, and variance, 16 bytes per parameter in total. Limit: FSDP details and the guide’s sharding tradeoffs are separate framework behavior covered in later chapters.<a class="footnote-back" href="#fnref16" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</div></section>
+</main> <!-- /main -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const automaticLongContentFolding = false;
+  const referenceSections = document.querySelectorAll(
+    'main.content section.footnotes[role="doc-endnotes"]'
+  );
+
+  referenceSections.forEach((section) => {
+    if (section.closest("details.publisher-chapter-references")) return;
+
+    const details = document.createElement("details");
+    details.className = "publisher-chapter-references";
+    const summary = document.createElement("summary");
+    const count = section.querySelectorAll("ol > li").length;
+    summary.textContent = count ? `References (${count})` : "References";
+
+    section.parentNode.insertBefore(details, section);
+    details.append(summary, section);
+  });
+
+  const openFoldTarget = (target) => {
+    const details = target?.closest(
+      "details.publisher-chapter-references, details.publisher-long-content"
+    );
+    if (details) details.open = true;
+  };
+
+  const targetFromHash = (hash) => {
+    if (!hash || hash === "#") return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('a[href*="#"]');
+    if (!link) return;
+    let destination;
+    try {
+      destination = new URL(link.getAttribute("href") || "", location.href);
+    } catch (_error) {
+      return;
+    }
+    if (destination.href.split("#")[0] !== location.href.split("#")[0]) return;
+    openFoldTarget(targetFromHash(destination.hash));
+  });
+
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
+    if (control?.classList.contains("publisher-fold-never")) return "never";
+    if (control?.classList.contains("publisher-fold-always")) return "always";
+    if (control?.classList.contains("publisher-fold-open")) return "open";
+    const requested = control?.dataset.publisherFold || "auto";
+    return ["auto", "never", "always", "open"].includes(requested)
+      ? requested
+      : "auto";
+  };
+
+  const foldCandidate = (candidate, kind) => {
+    if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
+
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
+    if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
+    const minimumFoldHeight = 320;
+    const foldHeight = Math.max(
+      minimumFoldHeight,
+      Math.round(document.documentElement.clientHeight * 0.5)
+    );
+    if (mode === "auto" && candidate.getBoundingClientRect().height <= foldHeight) return;
+
+    const titleSource = kind === "table"
+      ? candidate.querySelector("figcaption, caption")
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
+    const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
+
+    const details = document.createElement("details");
+    details.className = `publisher-long-content publisher-long-${kind}`;
+    if (mode === "open") details.open = true;
+    const summary = document.createElement("summary");
+    if (titleSource && label) {
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
+    } else {
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
+    }
+    const body = document.createElement("div");
+    body.className = "publisher-fold-body";
+    if (titleSource) titleSource.classList.add("publisher-fold-title-source");
+
+    candidate.parentNode.insertBefore(details, candidate);
+    details.append(summary, body);
+    body.append(candidate);
+  };
+
+  const foldLongContent = () => {
+    if (!automaticLongContentFolding) return;
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
+    document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
+      const float = figure.parentElement?.classList.contains("quarto-float")
+        ? figure.parentElement
+        : figure;
+      foldCandidate(float, "table");
+    });
+    document.querySelectorAll("main.content table").forEach((table) => {
+      if (!table.closest("figure.quarto-float-tbl")) foldCandidate(table, "table");
+    });
+    openFoldTarget(targetFromHash(location.hash));
+  };
+
+  if (document.readyState === "complete") {
+    requestAnimationFrame(foldLongContent);
+  } else {
+    window.addEventListener("load", () => requestAnimationFrame(foldLongContent), {
+      once: true,
+    });
+  }
+
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
+  document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
+  const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
+  window.addEventListener("hashchange", openLocationTarget);
+  openLocationTarget();
+});
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+<div class="nav-page nav-page-previous">
+<a aria-label="Part III: Training and single-worker inference" class="pagination-link" href="../parts/part-iii.html">
+<i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Part III: Training and single-worker inference</span>
+</a>
+</div>
+<div class="nav-page nav-page-next">
+<a aria-label="Inference phases and memory budgets" class="pagination-link" href="../chapters/ch-m4-n11.html">
+<span class="nav-page-text"><span class="chapter-number">10</span>  <span class="chapter-title">Inference phases and memory budgets</span></span> <i class="bi bi-arrow-right-short"></i>
+</a>
+</div>
+</nav>
+</div> <!-- /content -->
+<script data-m4-fold-ui="script" defer="defer" src="../html-folds/folds.js"></script>  <div class="book-image-preview-overlay" data-book-image-overlay hidden>
+    <button class="book-image-preview-backdrop" type="button" data-book-image-close aria-label="Close image preview"></button>
+    <div class="book-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview">
+      <button class="book-image-preview-close" type="button" data-book-image-close>Close</button>
+      <img class="book-image-preview-image" data-book-image-preview-img alt="">
+    </div>
+  </div>
+  <script id="book-image-preview-script">
+    (() => {
+      if (window.__bookImagePreviewReady) {
+        return;
+      }
+      window.__bookImagePreviewReady = true;
+
+      const overlay = document.querySelector("[data-book-image-overlay]");
+      const preview = document.querySelector("[data-book-image-preview-img]");
+      const closeButtons = document.querySelectorAll("[data-book-image-close]");
+      const closeButton = overlay ? overlay.querySelector(".book-image-preview-close") : null;
+      let restoreFocus = null;
+
+      if (!overlay || !preview) {
+        return;
+      }
+
+      function openPreview(image) {
+        restoreFocus = image;
+        preview.src = image.currentSrc || image.src;
+        preview.alt = image.alt || "";
+        overlay.hidden = false;
+        document.body.classList.add("book-image-preview-open");
+        if (closeButton) {
+          closeButton.focus();
+        }
+      }
+
+      function closePreview() {
+        if (overlay.hidden) {
+          return;
+        }
+        overlay.hidden = true;
+        preview.removeAttribute("src");
+        preview.alt = "";
+        document.body.classList.remove("book-image-preview-open");
+        if (restoreFocus) {
+          restoreFocus.focus();
+        }
+      }
+
+      document.querySelectorAll("img[data-book-image-preview]").forEach((image) => {
+        image.addEventListener("click", () => openPreview(image));
+        image.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPreview(image);
+          }
+        });
+      });
+      closeButtons.forEach((button) => {
+        button.addEventListener("click", closePreview);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!overlay.hidden && event.key === "Escape") {
+          closePreview();
+        }
+      });
+    })();
+  </script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "bf257544e13140429e7cbda3a16caddb"}'></script><!-- End Cloudflare Web Analytics -->
+<!-- book-ask-ai:start -->
+<link rel="stylesheet" href="../ask-ai-assets/ask-ai.css">
+<script id="book-ask-ai-config" type="application/json">{"endpoint": "https://course-ask-ai.course-ask-ai-backend.workers.dev/ask", "book": "module_4", "bookTitle": "", "version": ""}</script>
+<script defer src="../ask-ai-assets/ask-ai.js"></script>
+<!-- book-ask-ai:end -->
+</body></html>

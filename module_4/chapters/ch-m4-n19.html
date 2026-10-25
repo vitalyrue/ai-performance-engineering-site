@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"><head>
+<meta charset="utf-8"/>
+<meta content="quarto-1.10.18" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>18  Replicated and sharded training – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta content="../" name="quarto:offset"/>
+<link href="../chapters/ch-m4-n20.html" rel="next"/>
+<link href="../chapters/ch-m4-n18.html" rel="prev"/>
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet"/>
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" id="quarto-text-highlighting-styles" rel="stylesheet"/>
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet"/>
+<link append-hash="true" data-mode="light" href="../site_libs/bootstrap/bootstrap-741cab1455972e99f328c2af765061c1.min.css" id="quarto-bootstrap" rel="stylesheet"/>
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+<link href="../styles.css" rel="stylesheet"/>
+<link data-reading-layout="true" href="../reading-layout/reading.css" rel="stylesheet"/><link data-m4-fold-ui="style" href="../html-folds/folds.css" rel="stylesheet"/><link data-map-style="" href="../map-viewer/viewer.css" rel="stylesheet"/><script data-map-script="" defer="" src="../map-viewer/viewer.js"></script>  <style id="book-image-preview-style">
+    img[data-book-image-preview] {
+      cursor: zoom-in;
+    }
+    img[data-book-image-preview]:focus {
+      outline: 3px solid rgba(15, 107, 120, 0.36);
+      outline-offset: 4px;
+    }
+    body.book-image-preview-open {
+      overflow: hidden;
+    }
+    .book-image-preview-overlay[hidden] {
+      display: none !important;
+    }
+    .book-image-preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .book-image-preview-backdrop {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      background: rgba(18, 28, 40, 0.76);
+      cursor: zoom-out;
+    }
+    .book-image-preview-dialog {
+      position: relative;
+      width: min(94vw, 1100px);
+      max-height: 94vh;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.36);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 24px 70px rgba(18, 28, 40, 0.34);
+    }
+    .book-image-preview-close {
+      display: block;
+      margin: 0 0 12px auto;
+      padding: 7px 12px;
+      border: 1px solid #d7e2e8;
+      border-radius: 6px;
+      background: #f5f8fa;
+      color: #1f2f44;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .book-image-preview-image {
+      display: block;
+      width: 100%;
+      max-height: calc(94vh - 74px);
+      object-fit: contain;
+      border-radius: 6px;
+      background: #eef6f7;
+    }
+  </style>
+  <style id="book-release-metadata-style">
+    .book-release-meta {
+      margin: 0.55rem 0 0.8rem;
+      color: #536273;
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+    .book-release-meta dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.12rem 0.5rem;
+      margin: 0;
+    }
+    .book-release-meta dt {
+      color: #24384d;
+      font-weight: 650;
+    }
+    .book-release-meta dd {
+      margin: 0;
+    }
+    .book-release-home {
+      display: inline-block;
+      color: #0f6b78;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .book-release-home:hover,
+    .book-release-home:focus {
+      text-decoration: underline;
+    }
+    .book-release-home-wrap {
+      margin: 0.55rem 0 0.8rem;
+    }
+    .book-release-meta-sidebar {
+      margin-top: 0.8rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid #d7e2e8;
+    }
+    .book-release-meta-front {
+      padding: 0.7rem 0.85rem;
+      border-left: 3px solid #0f6b78;
+      background: #eef6f7;
+      max-width: 34rem;
+    }
+  </style>
+</head>
+<body class="nav-sidebar floating quarto-light">
+<div id="quarto-search-results"></div>
+<header class="headroom fixed-top" id="quarto-header">
+<nav class="quarto-secondary-nav">
+<div class="container-fluid d-flex">
+<button aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="quarto-btn-toggle btn" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="button" type="button">
+<i class="bi bi-layout-text-sidebar-reverse"></i>
+</button>
+<nav aria-label="breadcrumb" class="quarto-page-breadcrumbs"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-v.html">Part V: Distributed execution</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n19.html"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></a></li></ol></nav>
+<a aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="flex-grow-1" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="navigation">
+</a>
+<button aria-label="Search" class="btn quarto-search-button" onclick="window.quartoOpenSearch();" type="button">
+<i class="bi bi-search"></i>
+</button>
+</div>
+</nav>
+</header>
+<!-- content -->
+<div class="quarto-container page-columns page-rows-contents page-layout-article" id="quarto-content">
+<!-- sidebar -->
+<nav class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto" id="quarto-sidebar">
+<div class="pt-lg-2 mt-2 text-left sidebar-header">
+<div class="sidebar-title mb-0 py-0">
+<a href="../">Advanced LLM Performance Engineering</a>
+</div>
+</div>
+<div class="mt-2 flex-shrink-0 align-items-center">
+<div class="sidebar-search">
+<div class="" id="quarto-search" title="Search"></div>
+</div>
+</div>
+<div class="book-release-home-wrap" data-book-release-location="sidebar-home">
+  <a class="book-release-home" href="../../">&larr; AI Systems Engineering</a>
+</div>
+    <div class="sidebar-menu-container">
+<ul class="list-unstyled mt-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../index.html">
+<span class="menu-text">Advanced LLM Performance Engineering</span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../frontmatter/ch-m4-index.html">
+<span class="menu-text">Introduction and Learning Path</span></a>
+</div>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-i.html">
+<span class="menu-text">Part I: Models, workload state, and GPU hardware</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-1" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n01.html">
+<span class="menu-text"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n02.html">
+<span class="menu-text"><span class="chapter-number">2</span>  <span class="chapter-title">Workload phases and live memory</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n03.html">
+<span class="menu-text"><span class="chapter-number">3</span>  <span class="chapter-title">GPU hardware and memory</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-ii.html">
+<span class="menu-text">Part II: GPU execution, measurement, and optimization</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-2" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-2">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n04.html">
+<span class="menu-text"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n05.html">
+<span class="menu-text"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n06.html">
+<span class="menu-text"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n07.html">
+<span class="menu-text"><span class="chapter-number">7</span>  <span class="chapter-title">Measurement, profiling and fair comparisons</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n08.html">
+<span class="menu-text"><span class="chapter-number">8</span>  <span class="chapter-title">Compilation and runtime</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iii.html">
+<span class="menu-text">Part III: Training and single-worker inference</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-3" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-3">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n10.html">
+<span class="menu-text"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n11.html">
+<span class="menu-text"><span class="chapter-number">10</span>  <span class="chapter-title">Inference phases and memory budgets</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n12.html">
+<span class="menu-text"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n13.html">
+<span class="menu-text"><span class="chapter-number">12</span>  <span class="chapter-title">Decode and KV-cache layout</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iv.html">
+<span class="menu-text">Part IV: Serving systems</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-4" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-4">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n14.html">
+<span class="menu-text"><span class="chapter-number">13</span>  <span class="chapter-title">Request scheduling and prefix reuse</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n15.html">
+<span class="menu-text"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n16.html">
+<span class="menu-text"><span class="chapter-number">15</span>  <span class="chapter-title">Serving measurement and stack selection</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-v.html">
+<span class="menu-text">Part V: Distributed execution</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-5" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-5">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n17.html">
+<span class="menu-text"><span class="chapter-number">16</span>  <span class="chapter-title">Collective data movement and its cost</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n18.html">
+<span class="menu-text"><span class="chapter-number">17</span>  <span class="chapter-title">Launching and measuring distributed work</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link active" href="../chapters/ch-m4-n19.html">
+<span class="menu-text"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n20.html">
+<span class="menu-text"><span class="chapter-number">19</span>  <span class="chapter-title">Tensor and sequence parallelism</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n21.html">
+<span class="menu-text"><span class="chapter-number">20</span>  <span class="chapter-title">Pipeline, expert and combined layouts</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n22.html">
+<span class="menu-text"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a aria-expanded="true" class="sidebar-item-text sidebar-link text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<span class="menu-text">Appendices</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-6">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/references.html">
+<span class="menu-text"><span class="chapter-number">A</span>  <span class="chapter-title">References</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/optional-labs.html">
+<span class="menu-text"><span class="chapter-number">B</span>  <span class="chapter-title">Optional Labs</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
+  <dl>
+    <dt>Publisher version</dt>
+    <dd>0.8.23</dd>
+    <dt>Released</dt>
+    <dd><time datetime="2026-10-25">2026-10-25</time></dd>
+  </dl>
+</section>
+</nav>
+<div class="quarto-sidebar-collapse-item" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" id="quarto-sidebar-glass"></div>
+<!-- margin-sidebar -->
+<div class="sidebar margin-sidebar" id="quarto-margin-sidebar">
+<nav class="toc-active" id="TOC" role="doc-toc">
+<h2 id="toc-title">Table of contents</h2>
+<ul>
+<li><a class="nav-link active" data-scroll-target="#sec-m4-c13-s01" href="#sec-m4-c13-s01" id="toc-sec-m4-c13-s01"><span class="header-section-number">18.1</span> Work and state beyond one GPU</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c13-s02" href="#sec-m4-c13-s02" id="toc-sec-m4-c13-s02"><span class="header-section-number">18.2</span> DDP and gradient all-reduce</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c13-s04" href="#sec-m4-c13-s04" id="toc-sec-m4-c13-s04"><span class="header-section-number">18.3</span> DDP bucket timing and overlap</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c13-s05" href="#sec-m4-c13-s05" id="toc-sec-m4-c13-s05"><span class="header-section-number">18.4</span> Sharding model state</a>
+<ul class="collapse">
+<li><a class="nav-link" data-scroll-target="#sec-m4-n19-fsdp-cycle" href="#sec-m4-n19-fsdp-cycle" id="toc-sec-m4-n19-fsdp-cycle"><span class="header-section-number">18.4.1</span> Full-shard update cycle</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c13-s06" href="#sec-m4-c13-s06" id="toc-sec-m4-c13-s06"><span class="header-section-number">18.4.2</span> DeepSpeed and ZeRO implementations</a></li>
+</ul></li>
+</ul>
+</nav>
+</div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+<header class="quarto-title-block default" id="title-block-header"><nav aria-label="breadcrumb" class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-v.html">Part V: Distributed execution</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n19.html"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span class="quarto-section-identifier" id="sec-ch-m4-n19"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></span></h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+</header>
+<p>More GPUs can process different training examples at once, but each model copy still needs parameters, gradients, and optimizer state. If that full state fits on every GPU, replicated training can divide the data and synchronize gradients. When those copies exceed the memory budget, partitioning selected state across ranks can reduce persistent storage on each device.</p>
+<div alt="A two-rank averaged-gradient update contrasts with ordered ready buckets and a full-shard cycle. A full tensor illustrates local copies on both ranks. The sequence shows parameters released or gathered, reduced gradient shards, and one local update. ZeRO storage and API-window comparisons show different persistent and temporary state." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-n19-map">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-n19-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a aria-describedby="fig-m4-n19-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca" aria-label="Enlarge map" class="m4-map-link" data-map-viewer="" href="../assets/fig-m4-n19-map.png" rel="noopener" target="_blank"><img alt="A two-rank averaged-gradient update contrasts with ordered ready buckets and a full-shard cycle. A full tensor illustrates local copies on both ranks. The sequence shows parameters released or gathered, reduced gradient shards, and one local update. ZeRO storage and API-window comparisons show different persistent and temporary state." class="img-fluid figure-img" src="../assets/fig-m4-n19-map.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" /></a>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-n19-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 18.1: DDP synchronizes gradients for full replicas. Full sharding instead gathers parameters near use, reduces gradient shards and updates matching local state before a later gather; bucket timing and temporary tensors decide whether the memory saving improves the complete step.
+</figcaption>
+</figure>
+</div>
+<p>The memory saving changes the update cycle. A rank may need gathered parameters for computation, a reduced gradient shard for its local optimizer, and newly updated parameters at the next use. Temporary full tensors and communication buffers still count toward peak memory. The choice between replication and sharding therefore depends on both the live memory windows and the exchanges that remain exposed in the training step.</p>
+<section class="level2" data-number="18.1" id="sec-m4-c13-s01">
+<h2 class="anchored" data-anchor-id="sec-m4-c13-s01" data-number="18.1"><span class="header-section-number">18.1</span> Work and state beyond one GPU</h2>
+<p>Scaling beyond one GPU means deciding which object is too large or too slow on one device. The answer determines the distributed strategy.</p>
+<ul>
+<li><strong>Data:</strong> The training examples or serving requests. Splitting data can increase throughput when each replica can fit the full model, enough work is available, and communication does not dominate.</li>
+<li><strong>Model state:</strong> Parameters, gradients, and optimizer state. Sharding state reduces per-GPU memory but introduces communication to gather or reduce the pieces that each step needs.</li>
+<li><strong>Layer computation:</strong> Matrix multiplications and attention inside a layer. <span class="definition-term" data-custom-style="Definition Term"><strong>Tensor parallelism</strong></span> splits this work, but then partial results must be combined frequently.</li>
+<li><strong>Layer sequence:</strong> The ordered stack of transformer layers. <span class="definition-term" data-custom-style="Definition Term"><strong>Pipeline parallelism</strong></span> places different layer ranges on different devices and moves activations between stages.</li>
+<li><strong>Experts:</strong> Specialized modules in a Mixture-of-Experts model. <span class="definition-term" data-custom-style="Definition Term"><strong>Expert parallelism</strong></span> routes token representations to the devices where selected experts are placed.</li>
+</ul>
+<p>Replication is simple but duplicates memory. Sharding saves memory or increases parallel compute, but it creates communication that must fit the topology. Distributed strategies are applications of collective communication and physical fabric constraints, not replacements for them.</p>
+<p>The object being split determines the communication obligation: replicated models synchronize gradients, while split model work exchanges activations or partial results. The next question is how Distributed Data Parallel (DDP) turns replicated parameters and different local mini-batches into synchronized updates.</p>
+</section>
+<section class="level2" data-number="18.2" id="sec-m4-c13-s02">
+<h2 class="anchored" data-anchor-id="sec-m4-c13-s02" data-number="18.2"><span class="header-section-number">18.2</span> DDP and gradient all-reduce</h2>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Distributed Data Parallel (DDP)</strong></span> is the baseline multi-GPU training strategy when the full model fits on every GPU. Each process holds one model replica and computes local gradients on one mini-batch drawn from its assigned data shard, then synchronizes gradients before the optimizer step. DDP itself does not shard the input. The application assigns per-rank shards, for example with a distributed sampler.</p>
+<p>PyTorch DDP is a training strategy implemented above <code>torch.distributed</code>. The wrapper registers gradient hooks and groups gradients into buckets with a configurable <code>bucket_cap_mb</code>, following the <a href="https://docs.pytorch.org/docs/2.14/notes/ddp.html">Distributed Data Parallel design note</a><a class="footnote-ref" href="#fn1" id="fnref1" role="doc-noteref"><sup>1</sup></a>. The process group and its backend execute the all-reduces required to keep replicas synchronized.</p>
+<ul>
+<li><strong class="m4-term-label">Rank:</strong> The integer identity of a participating process within its process group, as defined in <a href="ch-m4-n03.html#sec-m4-c02-s05">Section 3.4</a>. A common setup uses one process per GPU.</li>
+<li><strong class="m4-term-label">Replica:</strong> A full copy of the model parameters on one rank. DDP keeps replicas numerically synchronized by all-reducing gradients.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Local mini-batch:</strong></span> The examples one rank processes in one forward and backward pass, also called its local micro-batch (<a href="ch-m4-n10.html#sec-m4-c07-s03">Section 9.3</a>).</li>
+<li><strong class="m4-term-label">Global batch:</strong> The examples used for one optimizer update across ranks and accumulation steps. With equal per-rank counts, it is the number of examples in one local mini-batch times the number of data-parallel ranks times the number of accumulation steps.</li>
+<li><strong class="m4-term-label">Gradient all-reduce:</strong> Each rank contributes gradients, the gradients are reduced, and every rank receives the same synchronized result.</li>
+</ul>
+<p>DDP works well when the model fits on each GPU and synchronization takes a small enough share of each step. It does not reduce parameter memory because every rank stores a full replica. When model state is the memory wall, FSDP or another sharding strategy can reduce each GPU’s stored state.</p>
+<p>DDP’s default initialization synchronizes replicas from rank 0. Backward hooks reduce gradient buckets, and every rank applies an equivalent optimizer update after the required synchronization. With the default reduction, DDP averages gradients across ranks. Custom communication hooks can change that reduction, so the loss normalization and reduction rule must agree.<a class="footnote-ref" href="#fn2" id="fnref2" role="doc-noteref"><sup>2</sup></a></p>
+<p>Default DDP synchronizes gradients during backward. It does not add a weight-synchronization collective after each optimizer step.<a class="footnote-ref" href="#fn3" id="fnref3" role="doc-noteref"><sup>3</sup></a></p>
+<p>The implementation pattern is one process per GPU: initialize the process group, map <code>LOCAL_RANK</code> to the local CUDA device, wrap the model with Distributed Data Parallel, shard the data stream with a distributed sampler, and let backward hooks launch gradient all-reduces. For one update, suppose two ranks start with parameters [1, 1] and compute local gradients [2, 4] and [4, 2] from equally sized mini-batches under a mean-loss rule. SUM all-reduce returns [6, 6] to both; division by two gives the mean gradient [3, 3]. <span class="definition-term" data-custom-style="Definition Term"><strong>Stochastic gradient descent (SGD)</strong></span> subtracts learning rate times gradient. With learning rate 0.1, it updates both replicas to [0.7, 0.7]. This trace assumes no accumulation or momentum. Matching initial parameters, synchronized gradients, and the same update rule keep the replicas equal without another weight collective.</p>
+</section>
+<section class="level2" data-number="18.3" id="sec-m4-c13-s04">
+<h2 class="anchored" data-anchor-id="sec-m4-c13-s04" data-number="18.3"><span class="header-section-number">18.3</span> DDP bucket timing and overlap</h2>
+<p><a href="ch-m4-n18.html#sec-m4-c12-s09">Section 17.2</a> gives the general overlap rule. In DDP, communication/computation overlap uses the order of backward propagation. Gradients for later layers become ready while earlier layers are still computing backward, so DDP can start all-reducing ready gradient buckets before the full backward pass completes.</p>
+<ul>
+<li><strong class="m4-term-label">Gradient bucket:</strong> A group of parameter gradients packed together so DDP can launch fewer, larger all-reduces instead of one collective per tensor.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Ready time:</strong></span> The moment all gradients in a bucket have been produced by backward propagation.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">Hidden communication:</strong></span> Communication that finishes during independent backward work, leaving no exposed tail from that exchange. Contention for shared resources can still lengthen the step (<a href="ch-m4-n18.html#sec-m4-c12-s09">Section 17.2</a>).</li>
+<li><strong class="m4-term-label">Exposed tail:</strong> The communication left after the last useful computation has finished (<a href="ch-m4-n10.html#sec-m4-c07-s01">Section 9.1</a>). Here it is the part of the gradient all-reduce that no backward work covers.</li>
+</ul>
+<p>Overlap has a cost. Small buckets may start earlier while reducing bandwidth efficiency because there are more collectives. Large buckets may use bandwidth better while starting later and leaving a larger exposed tail. The useful measurement is whether reducing collective time would still reduce the end-to-end training step.</p>
+<p>The DDP reducer turns many parameter gradients into bucket-level communication. A bucket becomes ready when all its gradients are available, but reductions must launch in the same bucket order on every rank. A ready bucket can therefore wait for an earlier bucket. Once that ordering condition is met, its reduction can run while earlier layers in the backward pass are still computing.<a class="footnote-ref" href="#fn4" id="fnref4" role="doc-noteref"><sup>4</sup></a></p>
+<p>Bucket setup and the timing of one update can be read in this order:</p>
+<ol type="1">
+<li><strong>Form the buckets:</strong> Group parameter gradients using a configured limit such as <code>bucket_cap_mb</code>. Smaller buckets can start earlier. Larger buckets usually use bandwidth more efficiently.</li>
+<li><strong>Mark gradients ready:</strong> Autograd hooks mark each parameter gradient as backward propagation produces it. Parameter order and graph structure determine when every gradient in a bucket is available.</li>
+<li><strong>All-reduce launch:</strong> A ready bucket is reduced in the shared bucket order across the data-parallel ranks, usually through NCCL on NVIDIA GPUs. The communication overlaps only while independent backward computation continues.</li>
+<li><strong>Exposed tail:</strong> Communication remaining after backward computation finishes directly lengthens the training step.</li>
+</ol>
+<p>A slow DDP step can still come from local causes such as data loading, forward kernels, backward memory pressure, or optimizer state. Distributed causes add rank skew, all-reduce bandwidth, bucket timing, and topology placement.</p>
+</section>
+<section class="level2" data-number="18.4" id="sec-m4-c13-s05">
+<h2 class="anchored" data-anchor-id="sec-m4-c13-s05" data-number="18.4"><span class="header-section-number">18.4</span> Sharding model state</h2>
+<p><span class="definition-term" data-custom-style="Definition Term"><strong>Fully Sharded Data Parallel (FSDP)</strong></span> supports several sharding strategies. Under <code>FULL_SHARD</code>, parameters, gradients, and optimizer state are sharded across ranks outside their materialized use windows, following the <a href="https://docs.pytorch.org/docs/2.14/fsdp.html">FullyShardedDataParallel documentation</a><a class="footnote-ref" href="#fn5" id="fnref5" role="doc-noteref"><sup>5</sup></a>. Other strategies replicate or retain more state. Full sharding reduces per-GPU memory but introduces parameter all-gather and gradient reduce-scatter around layer execution.</p>
+<section class="level3" data-number="18.4.1" id="sec-m4-n19-fsdp-cycle">
+<h3 class="anchored" data-anchor-id="sec-m4-n19-fsdp-cycle" data-number="18.4.1"><span class="header-section-number">18.4.1</span> Full-shard update cycle</h3>
+<p>Full sharding has separate forward and backward communication phases. Parameters are all-gathered before forward computation and may be resharded afterward. If forward released the full parameters, they are gathered again before backward computation. As gradients become ready, reduce-scatter combines them and leaves each rank with its local shard. Prefetch settings can overlap a future gather with current computation, but they may raise peak memory by materializing parameters earlier.</p>
+<p>One full-shard layer follows this communication sequence:</p>
+<ol type="1">
+<li><strong>Gather before forward:</strong> All-gather parameter shards so the layer can compute. Prefetching too early increases peak memory.</li>
+<li><strong>Reshard after forward:</strong> Release or reshard the full parameters according to the selected strategy. Keeping them improves reuse but reduces memory savings.</li>
+<li><strong>Gather before backward:</strong> All-gather parameters again when forward released them. Backward prefetch can overlap this transfer with compute while increasing live memory.</li>
+<li><strong>Reduce after gradients are ready:</strong> Reduce-scatter gradients and retain each rank’s local shard. Communication that remains after compute becomes the exposed tail.</li>
+<li><strong>Update the local parameter shard:</strong> Once the step’s required backward, accumulation, and synchronization are complete, each rank’s optimizer uses its reduced gradient shard and matching optimizer-state shard to update the same parameter indices. This is one step update, not a separate update each time a layer finishes backward.</li>
+<li><strong>Gather updated values at next use:</strong> Full sharding keeps the updated parameter partitions on their ranks. The next forward gathers those new partitions when the wrapped unit is needed. Optimizer buffers remain local.<a class="footnote-ref" href="#fn6" id="fnref6" role="doc-noteref"><sup>6</sup></a></li>
+</ol>
+<p>A concrete optimizer update makes the final stage of the sharded cycle visible. <span class="definition-term" data-custom-style="Definition Term"><strong>Stochastic gradient descent (SGD) with momentum</strong></span> is an optimizer that keeps a decaying sum of past gradients and moves parameters against that accumulated direction. Its <span class="definition-term" data-custom-style="Definition Term"><strong>momentum buffer</strong></span> stores that history for each parameter between steps. The example uses this shorter update rule to expose how parameter, gradient, and optimizer-state shards stay aligned.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="true" data-m4-fold-keys="selection-85"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: From gradient shards to updated parameters</strong></p>
+<p>Consider one four-parameter unit in a training step after momentum buffers have already been initialized. Rank 0 stores parameters <span class="math inline">\([1,2]\)</span> and momentum <span class="math inline">\([0.5,-0.5]\)</span> for indices 0 and 1. Rank 1 stores parameters <span class="math inline">\([3,4]\)</span> and momentum <span class="math inline">\([1,-1]\)</span> for indices 2 and 3. A forward all-gather temporarily supplies <span class="math inline">\([1,2,3,4]\)</span> on both ranks. If full parameters are released after forward, a second gather reconstructs the same values for backward. Parameters stay unchanged until the step update.</p>
+<p>Suppose backward on equally weighted local data shards produces gradient contributions [1, 2, 3, 4] and [3, 6, 9, 12]. SUM reduce-scatter followed by division by two leaves rank 0 with mean-gradient shard [2, 4] and rank 1 with [6, 8]. The division expresses this example’s mean-loss convention, not an implicit property of SUM.</p>
+<p>The momentum SGD update is <span class="math inline">\(v' = 0.9v + g\)</span> followed by <span class="math inline">\(p' = p - 0.1v'\)</span>, where <span class="math inline">\(p\)</span> is a parameter shard, <span class="math inline">\(g\)</span> its mean-gradient shard, and <span class="math inline">\(v\)</span> its existing momentum buffer. The prime denotes the new value. The factor 0.9 retains part of the previous buffer, and the learning rate 0.1 sets the parameter change per unit of new momentum. This omits weight decay, dampening, and Nesterov momentum.<a class="footnote-ref" href="#fn7" id="fnref7" role="doc-noteref"><sup>7</sup></a></p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c13-t06">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c13-t06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 18.1: New momentum and parameters on each rank.
+</figcaption>
+<div aria-describedby="tbl-m4-c13-t06-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Rank</th>
+<th>New momentum, 0.9v + g</th>
+<th>New parameters, p - 0.1v’</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td><span class="math inline">\([0.45+2,-0.45+4]=[2.45,3.55]\)</span></td>
+<td><span class="math inline">\([1-0.245,2-0.355]=[0.755,1.645]\)</span></td>
+</tr>
+<tr class="even">
+<td>1</td>
+<td><span class="math inline">\([0.9+6,-0.9+8]=[6.9,7.1]\)</span></td>
+<td><span class="math inline">\([3-0.69,4-0.71]=[2.31,3.29]\)</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>The next forward all-gather supplies [0.755, 1.645, 2.31, 3.29] on both ranks. Each rank retains only its own updated parameter and momentum partitions between full-shard use windows. Adam would retain two moment buffers per parameter and use a different update rule, but the matching of local parameter, gradient, and optimizer-state indices is the same.</p>
+<p><strong>Conclusion:</strong> Gradient reduction is followed by a local update and later parameter materialization. Persistent shards and temporary full tensors occupy different storage windows. The values here illustrate that cycle, not measured convergence or runtime performance.</p>
+</div></div>
+<p>In PyTorch 2.14’s <code>FullyShardedDataParallel</code> API, <code>FULL_SHARD</code> gathers a wrapped unit’s parameters before forward, reshards afterward, gathers again for backward, and reshards after backward. <code>SHARD_GRAD_OP</code> gathers before forward but keeps those full parameters through backward, then reshards them. Both keep optimizer state partitioned and reduce-scatter gradients on synchronized steps. Retaining full parameters removes the second gather but lengthens their memory lifetime. FSDP’s <strong><code>no_sync()</code> context</strong> defers gradient synchronization during accumulation. FSDP retains full gradients instead of gradient shards until synchronization, so peak memory can rise substantially. The first forward-backward pass after leaving the context synchronizes the accumulated gradients. Inside this context, <code>SHARD_GRAD_OP</code> also retains full parameters after backward. These windows refer to the cited <code>ShardingStrategy</code> API, not every API called FSDP.<a class="footnote-ref" href="#fn8" id="fnref8" role="doc-noteref"><sup>8</sup></a></p>
+</section>
+<section class="level3" data-number="18.4.2" id="sec-m4-c13-s06">
+<h3 class="anchored" data-anchor-id="sec-m4-c13-s06" data-number="18.4.2"><span class="header-section-number">18.4.2</span> DeepSpeed and ZeRO implementations</h3>
+<p>Zero Redundancy Optimizer (ZeRO) names the staged sharding strategy, following <em>ZeRO: Memory Optimizations Toward Training Trillion Parameter Models</em><a class="footnote-ref" href="#fn9" id="fnref9" role="doc-noteref"><sup>9</sup></a>, while DeepSpeed is a distributed-training library that implements ZeRO-family state placement together with optimizer, pipeline, and runtime integrations. PyTorch FSDP provides built-in sharding strategies within PyTorch. Its <code>FULL_SHARD</code> mode partitions parameters, gradients, and optimizer state.</p>
+<p>The choice between these implementations follows the required state placement and collective schedule. Configuration names differ, but memory savings and communication costs follow the same parameters, gradients, optimizer state, all-gather, and reduce-scatter objects.</p>
+<p>PyTorch FSDP and DeepSpeed ZeRO Stage 3 are related full-sharding approaches with similar state-placement goals, but they are distinct APIs and implementations with different policies and scheduling behavior. The comparison below therefore follows the parameter, gradient, and optimizer-state lifecycle instead of treating the implementations as interchangeable.</p>
+<p>The ZeRO family names three progressively broader state-sharding choices:</p>
+<ul>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">ZeRO-1:</strong></span> Shards optimizer state while parameters and gradients remain replicated. The 16 bytes per parameter of <a href="ch-m4-n02.html#sec-m4-c01-s02">Section 2.1</a> become <span class="math inline">\(4+12/N_d\)</span> bytes per rank, where <span class="math inline">\(N_d\)</span> is the number of data-parallel ranks and 12 bytes are the optimizer’s FP32 master copy and two Adam moments.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">ZeRO-2:</strong></span> Also shards gradients, leaving <span class="math inline">\(2+14/N_d\)</span> bytes per parameter per rank. Reduce-scatter timing follows bucket readiness, hooks, overlap, and implementation policy rather than an unconditional immediate layer-by-layer rule.</li>
+<li><span class="definition-term" data-custom-style="Definition Term"><strong class="m4-term-label">ZeRO-3:</strong></span> Also shards parameters outside their materialized use windows, leaving <span class="math inline">\(16/N_d\)</span> bytes per parameter per rank. Implementations may reshard or retain gathered parameters. Temporary full parameters and communication buffers still consume memory.</li>
+</ul>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-11"><div class="publisher-worked-calculation" data-custom-style="Worked Calculation">
+<p data-m4-fold-heading="1"><strong>Example: Model-state memory per GPU under ZeRO</strong></p>
+<p><strong>Inputs:</strong> The ZeRO paper’s example model has <span class="math inline">\(7.5\times10^9\)</span> parameters trained with mixed-precision Adam on <span class="math inline">\(N_d=64\)</span> data-parallel GPUs.<a class="footnote-ref" href="#fn10" id="fnref10" role="doc-noteref"><sup>10</sup></a> Activations, workspaces, and buffers are excluded.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c13-t05">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c13-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 18.2: Model-state memory per GPU under each ZeRO stage.
+</figcaption>
+<div aria-describedby="tbl-m4-c13-t05-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>Bytes per parameter per GPU</th>
+<th>Model state per GPU</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Plain data parallelism</td>
+<td>16</td>
+<td>120 GB</td>
+</tr>
+<tr class="even">
+<td>ZeRO-1</td>
+<td><span class="math inline">\(4+12/64\approx4.19\)</span></td>
+<td>31.4 GB</td>
+</tr>
+<tr class="odd">
+<td>ZeRO-2</td>
+<td><span class="math inline">\(2+14/64\approx2.22\)</span></td>
+<td>16.6 GB</td>
+</tr>
+<tr class="even">
+<td>ZeRO-3</td>
+<td><span class="math inline">\(16/64=0.25\)</span></td>
+<td>1.9 GB</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p><strong>Conclusion:</strong> Most of the saving comes from the optimizer state, which is 12 of the 16 bytes. At 64 ranks, sharding the gradients as well reduces 31.4 GB to 16.6 GB, nearly halving what remains. Sharding the parameters makes this persistent model-state estimate fall in proportion to the number of GPUs. The price is communication: ZeRO-3 gathers parameters before they are used, which the paper puts at about 1.5 times the communication volume of plain data parallelism under its communication model.</p>
+</div></div>
+<p>The comparison below holds the data-parallel goal fixed and shows which model-state objects remain replicated or become sharded. The final column identifies the communication phase introduced by each broader sharding choice.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c13-t01">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c13-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 18.3: DDP, ZeRO, and FSDP state placement comparison.
+</figcaption>
+<div aria-describedby="tbl-m4-c13-t01-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 20%"/>
+<col style="width: 20%"/>
+<col style="width: 20%"/>
+<col style="width: 20%"/>
+<col style="width: 20%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Strategy</th>
+<th>Parameters</th>
+<th>Gradients</th>
+<th>Optimizer state</th>
+<th>Main timing cost</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>DDP</td>
+<td>Replicated</td>
+<td>All-reduced and replicated</td>
+<td>Replicated</td>
+<td>Gradient all-reduce after buckets become ready</td>
+</tr>
+<tr class="even">
+<td>ZeRO-1</td>
+<td>Replicated</td>
+<td>Replicated</td>
+<td>Sharded</td>
+<td>Gradient synchronization, local partition update, then distribution of updated parameter partitions to all replicas</td>
+</tr>
+<tr class="odd">
+<td>ZeRO-2</td>
+<td>Replicated</td>
+<td>Reduce-scattered or sharded</td>
+<td>Sharded</td>
+<td>Gradient reduce-scatter, local partition update, then distribution of updated parameter partitions to all replicas</td>
+</tr>
+<tr class="even">
+<td>ZeRO-3 / FSDP FULL_SHARD</td>
+<td>Sharded outside layer execution</td>
+<td>Reduce-scattered and sharded</td>
+<td>Sharded</td>
+<td>Parameter all-gather before forward/backward layer use plus reduce-scatter after gradients</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<p>ZeRO-1 and ZeRO-2 also let each rank update its assigned parameter partition using local optimizer state. They then distribute the updated partitions, for example by all-gather, to restore the full parameter replicas before the next forward. In the example, each replica must receive both [0.755, 1.645] and [2.31, 3.29]. ZeRO-1 keeps the synchronized gradients replicated, whereas ZeRO-2 partitions them as well. Full sharding instead leaves parameters partitioned between their next-use gathers.<a class="footnote-ref" href="#fn11" id="fnref11" role="doc-noteref"><sup>11</sup></a></p>
+<p>When even sharded model state does not fit, selected state can move to host memory. <span class="definition-term" data-custom-style="Definition Term"><strong>Offload</strong></span> stores that state on the CPU and transfers the values needed by GPU computation. ZeRO-Offload runs optimizer computation on the CPU. The paper also describes an optional one-step delayed update that overlaps CPU optimizer work with GPU computation. This changes which step’s gradients supply the update. In its tested V100 setup, the authors report training models with over 13 billion parameters on one GPU, about ten times their PyTorch baseline, without model changes.<a class="footnote-ref" href="#fn12" id="fnref12" role="doc-noteref"><sup>12</sup></a> PyTorch FSDP’s <code>CPUOffload</code> option keeps parameters on the CPU when they are not in use, which also moves the gradients to the CPU and runs the optimizer step there.<a class="footnote-ref" href="#fn13" id="fnref13" role="doc-noteref"><sup>13</sup></a> Offload trades GPU memory for PCIe traffic (<a href="ch-m4-n03.html#sec-m4-c02-s05">Section 3.4</a>) and CPU optimizer time. It is useful when the capacity gain outweighs those costs for the workload.</p>
+<p>Full sharding reduces persistent per-rank model state by adding timed parameter gathers and gradient reduce-scatters. Its benefit depends on peak-memory relief compared with exposed communication and temporary materialization. When state sharding alone cannot meet the target, <a href="ch-m4-n20.html">tensor and sequence parallelism (Chapter 19)</a> asks whether to split layer work or long-context state. <a href="ch-m4-n21.html">Pipeline and expert layouts (Chapter 20)</a> then follow work across layer stages and remote experts.</p>
+</section>
+</section>
+<section class="footnotes footnotes-end-of-document" data-m4-endnotes="1" id="footnotes" role="doc-endnotes"><h2 data-m4-endnotes-heading="1" data-m4-fold-ui="references-heading">References</h2><div data-m4-endnotes-body="1" data-m4-fold-created="endnotes-body" id="m4-endnotes-body">
+<hr/>
+<ol>
+<li id="fn1"><p>PyTorch. (2026). <em>Distributed Data Parallel</em>. Versioned v2.14 design note at <a href="https://docs.pytorch.org/docs/2.14/notes/ddp.html">Distributed Data Parallel design note</a>, created 2026-05-16 and updated 2026-05-16, describing implementation state as of v1.4. Supports Reducer gradient buckets with <code>bucket_cap_mb</code>, autograd hooks, per-bucket async all-reduce with mean gradients, same-order all-reduce across ranks, and overlap of collectives with backward compute. Limit: input sharding is done by the application, for example with a distributed sampler; DDP synchronizes gradients but does not partition inputs by itself.<a class="footnote-back" href="#fnref1" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>PyTorch. (2026). <em>Distributed Data Parallel</em>. Versioned v2.14 design note at <a href="https://docs.pytorch.org/docs/2.14/notes/ddp.html">Distributed Data Parallel design note</a>, created 2026-05-16 and updated 2026-05-16, describing implementation state as of v1.4. Supports Reducer gradient buckets with <code>bucket_cap_mb</code>, autograd hooks, per-bucket async all-reduce with mean gradients, same-order all-reduce across ranks, and overlap of collectives with backward compute. Limit: input sharding is done by the application, for example with a distributed sampler; DDP synchronizes gradients but does not partition inputs by itself.<a class="footnote-back" href="#fnref2" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p>PyTorch. (2026). <em>Distributed Data Parallel</em>. Versioned v2.14 design note at <a href="https://docs.pytorch.org/docs/2.14/notes/ddp.html">Distributed Data Parallel design note</a>, created 2026-05-16 and updated 2026-05-16, describing implementation state as of v1.4. Supports Reducer gradient buckets with <code>bucket_cap_mb</code>, autograd hooks, per-bucket async all-reduce with mean gradients, same-order all-reduce across ranks, and overlap of collectives with backward compute. Limit: input sharding is done by the application, for example with a distributed sampler; DDP synchronizes gradients but does not partition inputs by itself.<a class="footnote-back" href="#fnref3" role="doc-backlink">↩︎</a></p></li>
+<li id="fn4"><p>PyTorch. (2026). <em>Distributed Data Parallel</em>. Versioned v2.14 design note at <a href="https://docs.pytorch.org/docs/2.14/notes/ddp.html">Distributed Data Parallel design note</a>, created 2026-05-16 and updated 2026-05-16, describing implementation state as of v1.4. Supports Reducer gradient buckets with <code>bucket_cap_mb</code>, autograd hooks, per-bucket async all-reduce with mean gradients, same-order all-reduce across ranks, and overlap of collectives with backward compute. Limit: input sharding is done by the application, for example with a distributed sampler; DDP synchronizes gradients but does not partition inputs by itself.<a class="footnote-back" href="#fnref4" role="doc-backlink">↩︎</a></p></li>
+<li id="fn5"><p>PyTorch. (2026). <em>FullyShardedDataParallel</em>, <code>ShardingStrategy</code> entries. Versioned v2.14 documentation at <a href="https://docs.pytorch.org/docs/2.14/fsdp.html">FullyShardedDataParallel documentation</a>, created 2022-02-02 and updated 2026-05-12. Supports the <code>FULL_SHARD</code> and <code>SHARD_GRAD_OP</code> storage windows, gathers, gradient reduce-scatter, and local optimizer updates described here. <code>SHARD_GRAD_OP</code> retains full parameters after backward inside <code>no_sync()</code>. Limit: this wrapper’s API contract does not establish the behavior of every FSDP API or achieved step time.<a class="footnote-back" href="#fnref5" role="doc-backlink">↩︎</a></p></li>
+<li id="fn6"><p>PyTorch. (2026). <em>FullyShardedDataParallel</em>, <code>ShardingStrategy</code> entries. Versioned v2.14 documentation at <a href="https://docs.pytorch.org/docs/2.14/fsdp.html">FullyShardedDataParallel documentation</a>, created 2022-02-02 and updated 2026-05-12. Supports the <code>FULL_SHARD</code> and <code>SHARD_GRAD_OP</code> storage windows, gathers, gradient reduce-scatter, and local optimizer updates described here. <code>SHARD_GRAD_OP</code> retains full parameters after backward inside <code>no_sync()</code>. Limit: this wrapper’s API contract does not establish the behavior of every FSDP API or achieved step time.<a class="footnote-back" href="#fnref6" role="doc-backlink">↩︎</a></p></li>
+<li id="fn7"><p>PyTorch. (2026). <em>SGD</em>. Versioned v2.14 API documentation at <a href="https://docs.pytorch.org/docs/2.14/generated/torch.optim.SGD.html">SGD API documentation</a>. Supports the momentum-buffer recurrence and parameter update. The illustration assumes existing buffers and excludes weight decay, dampening, and Nesterov momentum. It does not illustrate Adam’s update or distributed optimizer implementation details.<a class="footnote-back" href="#fnref7" role="doc-backlink">↩︎</a></p></li>
+<li id="fn8"><p>PyTorch. (2026). <em>FullyShardedDataParallel</em>, <code>ShardingStrategy</code> entries. Versioned v2.14 documentation at <a href="https://docs.pytorch.org/docs/2.14/fsdp.html">FullyShardedDataParallel documentation</a>, created 2022-02-02 and updated 2026-05-12. Supports the <code>FULL_SHARD</code> and <code>SHARD_GRAD_OP</code> storage windows, gathers, gradient reduce-scatter, and local optimizer updates described here. <code>SHARD_GRAD_OP</code> retains full parameters after backward inside <code>no_sync()</code>. Limit: this wrapper’s API contract does not establish the behavior of every FSDP API or achieved step time.<a class="footnote-back" href="#fnref8" role="doc-backlink">↩︎</a></p></li>
+<li id="fn9"><p>Rajbhandari, S., Rasley, J., Ruwase, O., &amp; He, Y. (2020). <em>ZeRO: Memory Optimizations Toward Training Trillion Parameter Models</em>. Preprint at <a href="https://arxiv.org/abs/1910.02054">ZeRO paper</a> (<a href="https://doi.org/10.48550/arXiv.1910.02054">DOI</a>), v2 submitted 2019-10-07, v3 revised 2020-05-13. Supports staged sharding with Stage 1 for optimizer states, Stage 2 adding gradients, and Stage 3 adding parameters outside materialized use windows. The paper gives per-rank model-state memory of 4 + K/N_d, 2 + 14/N_d, and 16/N_d bytes per parameter with K = 12, the 7.5B-parameter, 64-GPU example of 120, 31.4, 16.6, and 1.9 GB, and a 1.5x communication volume for parameter partitioning. Limit: memory and scaling results depend on model, device count, and implementation policy for gathering and resharding.<a class="footnote-back" href="#fnref9" role="doc-backlink">↩︎</a></p></li>
+<li id="fn10"><p>Rajbhandari, S., Rasley, J., Ruwase, O., &amp; He, Y. (2020). <em>ZeRO: Memory Optimizations Toward Training Trillion Parameter Models</em>. Preprint at <a href="https://arxiv.org/abs/1910.02054">ZeRO paper</a> (<a href="https://doi.org/10.48550/arXiv.1910.02054">DOI</a>), v2 submitted 2019-10-07, v3 revised 2020-05-13. Supports staged sharding with Stage 1 for optimizer states, Stage 2 adding gradients, and Stage 3 adding parameters outside materialized use windows. The paper gives per-rank model-state memory of 4 + K/N_d, 2 + 14/N_d, and 16/N_d bytes per parameter with K = 12, the 7.5B-parameter, 64-GPU example of 120, 31.4, 16.6, and 1.9 GB, and a 1.5x communication volume for parameter partitioning. Limit: memory and scaling results depend on model, device count, and implementation policy for gathering and resharding.<a class="footnote-back" href="#fnref10" role="doc-backlink">↩︎</a></p></li>
+<li id="fn11"><p>Rajbhandari, S., Rasley, J., Ruwase, O., &amp; He, Y. (2020). <em>ZeRO: Memory Optimizations Toward Training Trillion Parameter Models</em>. Preprint at <a href="https://arxiv.org/abs/1910.02054">ZeRO paper</a> (<a href="https://doi.org/10.48550/arXiv.1910.02054">DOI</a>), v2 submitted 2019-10-07, v3 revised 2020-05-13. Supports staged sharding with Stage 1 for optimizer states, Stage 2 adding gradients, and Stage 3 adding parameters outside materialized use windows. The paper gives per-rank model-state memory of 4 + K/N_d, 2 + 14/N_d, and 16/N_d bytes per parameter with K = 12, the 7.5B-parameter, 64-GPU example of 120, 31.4, 16.6, and 1.9 GB, and a 1.5x communication volume for parameter partitioning. Limit: memory and scaling results depend on model, device count, and implementation policy for gathering and resharding.<a class="footnote-back" href="#fnref11" role="doc-backlink">↩︎</a></p></li>
+<li id="fn12"><p>Ren, J., Rajbhandari, S., Aminabadi, R. Y., Ruwase, O., Yang, S., Zhang, M., Li, D., &amp; He, Y. (2021). <em>ZeRO-Offload: Democratizing Billion-Scale Model Training</em>. USENIX ATC 2021. <a href="https://arxiv.org/abs/2101.06840">arXiv:2101.06840</a>. Supports offloading data and compute to the CPU, a fast CPU optimizer whose step can overlap GPU compute through a one-step delayed parameter update, and training models with over 13 billion parameters on a single GPU, a 10x increase over PyTorch, without model changes. Limit: throughput depends on CPU speed and PCIe bandwidth.<a class="footnote-back" href="#fnref12" role="doc-backlink">↩︎</a></p></li>
+<li id="fn13"><p>PyTorch. (2026). <em>FullyShardedDataParallel</em>, <code>CPUOffload</code> (v2.14 documentation). <a href="https://docs.pytorch.org/docs/2.14/fsdp.html">FSDP CPUOffload documentation</a>. Supports that <code>offload_params=True</code> offloads parameters to the CPU when they are not involved in computation, which also offloads gradients so that the optimizer step runs on the CPU. Limit: the page documents behavior, not the resulting step time.<a class="footnote-back" href="#fnref13" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</div></section>
+</main> <!-- /main -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const automaticLongContentFolding = false;
+  const referenceSections = document.querySelectorAll(
+    'main.content section.footnotes[role="doc-endnotes"]'
+  );
+
+  referenceSections.forEach((section) => {
+    if (section.closest("details.publisher-chapter-references")) return;
+
+    const details = document.createElement("details");
+    details.className = "publisher-chapter-references";
+    const summary = document.createElement("summary");
+    const count = section.querySelectorAll("ol > li").length;
+    summary.textContent = count ? `References (${count})` : "References";
+
+    section.parentNode.insertBefore(details, section);
+    details.append(summary, section);
+  });
+
+  const openFoldTarget = (target) => {
+    const details = target?.closest(
+      "details.publisher-chapter-references, details.publisher-long-content"
+    );
+    if (details) details.open = true;
+  };
+
+  const targetFromHash = (hash) => {
+    if (!hash || hash === "#") return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('a[href*="#"]');
+    if (!link) return;
+    let destination;
+    try {
+      destination = new URL(link.getAttribute("href") || "", location.href);
+    } catch (_error) {
+      return;
+    }
+    if (destination.href.split("#")[0] !== location.href.split("#")[0]) return;
+    openFoldTarget(targetFromHash(destination.hash));
+  });
+
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
+    if (control?.classList.contains("publisher-fold-never")) return "never";
+    if (control?.classList.contains("publisher-fold-always")) return "always";
+    if (control?.classList.contains("publisher-fold-open")) return "open";
+    const requested = control?.dataset.publisherFold || "auto";
+    return ["auto", "never", "always", "open"].includes(requested)
+      ? requested
+      : "auto";
+  };
+
+  const foldCandidate = (candidate, kind) => {
+    if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
+
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
+    if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
+    const minimumFoldHeight = 320;
+    const foldHeight = Math.max(
+      minimumFoldHeight,
+      Math.round(document.documentElement.clientHeight * 0.5)
+    );
+    if (mode === "auto" && candidate.getBoundingClientRect().height <= foldHeight) return;
+
+    const titleSource = kind === "table"
+      ? candidate.querySelector("figcaption, caption")
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
+    const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
+
+    const details = document.createElement("details");
+    details.className = `publisher-long-content publisher-long-${kind}`;
+    if (mode === "open") details.open = true;
+    const summary = document.createElement("summary");
+    if (titleSource && label) {
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
+    } else {
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
+    }
+    const body = document.createElement("div");
+    body.className = "publisher-fold-body";
+    if (titleSource) titleSource.classList.add("publisher-fold-title-source");
+
+    candidate.parentNode.insertBefore(details, candidate);
+    details.append(summary, body);
+    body.append(candidate);
+  };
+
+  const foldLongContent = () => {
+    if (!automaticLongContentFolding) return;
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
+    document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
+      const float = figure.parentElement?.classList.contains("quarto-float")
+        ? figure.parentElement
+        : figure;
+      foldCandidate(float, "table");
+    });
+    document.querySelectorAll("main.content table").forEach((table) => {
+      if (!table.closest("figure.quarto-float-tbl")) foldCandidate(table, "table");
+    });
+    openFoldTarget(targetFromHash(location.hash));
+  };
+
+  if (document.readyState === "complete") {
+    requestAnimationFrame(foldLongContent);
+  } else {
+    window.addEventListener("load", () => requestAnimationFrame(foldLongContent), {
+      once: true,
+    });
+  }
+
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
+  document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
+  const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
+  window.addEventListener("hashchange", openLocationTarget);
+  openLocationTarget();
+});
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+<div class="nav-page nav-page-previous">
+<a aria-label="Launching and measuring distributed work" class="pagination-link" href="../chapters/ch-m4-n18.html">
+<i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">17</span>  <span class="chapter-title">Launching and measuring distributed work</span></span>
+</a>
+</div>
+<div class="nav-page nav-page-next">
+<a aria-label="Tensor and sequence parallelism" class="pagination-link" href="../chapters/ch-m4-n20.html">
+<span class="nav-page-text"><span class="chapter-number">19</span>  <span class="chapter-title">Tensor and sequence parallelism</span></span> <i class="bi bi-arrow-right-short"></i>
+</a>
+</div>
+</nav>
+</div> <!-- /content -->
+<script data-m4-fold-ui="script" defer="defer" src="../html-folds/folds.js"></script>  <div class="book-image-preview-overlay" data-book-image-overlay hidden>
+    <button class="book-image-preview-backdrop" type="button" data-book-image-close aria-label="Close image preview"></button>
+    <div class="book-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview">
+      <button class="book-image-preview-close" type="button" data-book-image-close>Close</button>
+      <img class="book-image-preview-image" data-book-image-preview-img alt="">
+    </div>
+  </div>
+  <script id="book-image-preview-script">
+    (() => {
+      if (window.__bookImagePreviewReady) {
+        return;
+      }
+      window.__bookImagePreviewReady = true;
+
+      const overlay = document.querySelector("[data-book-image-overlay]");
+      const preview = document.querySelector("[data-book-image-preview-img]");
+      const closeButtons = document.querySelectorAll("[data-book-image-close]");
+      const closeButton = overlay ? overlay.querySelector(".book-image-preview-close") : null;
+      let restoreFocus = null;
+
+      if (!overlay || !preview) {
+        return;
+      }
+
+      function openPreview(image) {
+        restoreFocus = image;
+        preview.src = image.currentSrc || image.src;
+        preview.alt = image.alt || "";
+        overlay.hidden = false;
+        document.body.classList.add("book-image-preview-open");
+        if (closeButton) {
+          closeButton.focus();
+        }
+      }
+
+      function closePreview() {
+        if (overlay.hidden) {
+          return;
+        }
+        overlay.hidden = true;
+        preview.removeAttribute("src");
+        preview.alt = "";
+        document.body.classList.remove("book-image-preview-open");
+        if (restoreFocus) {
+          restoreFocus.focus();
+        }
+      }
+
+      document.querySelectorAll("img[data-book-image-preview]").forEach((image) => {
+        image.addEventListener("click", () => openPreview(image));
+        image.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPreview(image);
+          }
+        });
+      });
+      closeButtons.forEach((button) => {
+        button.addEventListener("click", closePreview);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!overlay.hidden && event.key === "Escape") {
+          closePreview();
+        }
+      });
+    })();
+  </script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "bf257544e13140429e7cbda3a16caddb"}'></script><!-- End Cloudflare Web Analytics -->
+<!-- book-ask-ai:start -->
+<link rel="stylesheet" href="../ask-ai-assets/ask-ai.css">
+<script id="book-ask-ai-config" type="application/json">{"endpoint": "https://course-ask-ai.course-ask-ai-backend.workers.dev/ask", "book": "module_4", "bookTitle": "", "version": ""}</script>
+<script defer src="../ask-ai-assets/ask-ai.js"></script>
+<!-- book-ask-ai:end -->
+</body></html>

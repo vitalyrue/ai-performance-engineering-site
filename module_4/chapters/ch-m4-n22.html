@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"><head>
+<meta charset="utf-8"/>
+<meta content="quarto-1.10.18" name="generator"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=yes" name="viewport"/>
+<title>21  Distributed serving and KV locality – Advanced LLM Performance Engineering</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta content="../" name="quarto:offset"/>
+<link href="../appendices/references.html" rel="next"/>
+<link href="../chapters/ch-m4-n21.html" rel="prev"/>
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet"/>
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" id="quarto-text-highlighting-styles" rel="stylesheet"/>
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet"/>
+<link append-hash="true" data-mode="light" href="../site_libs/bootstrap/bootstrap-741cab1455972e99f328c2af765061c1.min.css" id="quarto-bootstrap" rel="stylesheet"/>
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+<link href="../styles.css" rel="stylesheet"/>
+<link data-reading-layout="true" href="../reading-layout/reading.css" rel="stylesheet"/><link data-m4-fold-ui="style" href="../html-folds/folds.css" rel="stylesheet"/><link data-map-style="" href="../map-viewer/viewer.css" rel="stylesheet"/><script data-map-script="" defer="" src="../map-viewer/viewer.js"></script>  <style id="book-image-preview-style">
+    img[data-book-image-preview] {
+      cursor: zoom-in;
+    }
+    img[data-book-image-preview]:focus {
+      outline: 3px solid rgba(15, 107, 120, 0.36);
+      outline-offset: 4px;
+    }
+    body.book-image-preview-open {
+      overflow: hidden;
+    }
+    .book-image-preview-overlay[hidden] {
+      display: none !important;
+    }
+    .book-image-preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .book-image-preview-backdrop {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      background: rgba(18, 28, 40, 0.76);
+      cursor: zoom-out;
+    }
+    .book-image-preview-dialog {
+      position: relative;
+      width: min(94vw, 1100px);
+      max-height: 94vh;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.36);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 24px 70px rgba(18, 28, 40, 0.34);
+    }
+    .book-image-preview-close {
+      display: block;
+      margin: 0 0 12px auto;
+      padding: 7px 12px;
+      border: 1px solid #d7e2e8;
+      border-radius: 6px;
+      background: #f5f8fa;
+      color: #1f2f44;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .book-image-preview-image {
+      display: block;
+      width: 100%;
+      max-height: calc(94vh - 74px);
+      object-fit: contain;
+      border-radius: 6px;
+      background: #eef6f7;
+    }
+  </style>
+  <style id="book-release-metadata-style">
+    .book-release-meta {
+      margin: 0.55rem 0 0.8rem;
+      color: #536273;
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+    .book-release-meta dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.12rem 0.5rem;
+      margin: 0;
+    }
+    .book-release-meta dt {
+      color: #24384d;
+      font-weight: 650;
+    }
+    .book-release-meta dd {
+      margin: 0;
+    }
+    .book-release-home {
+      display: inline-block;
+      color: #0f6b78;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .book-release-home:hover,
+    .book-release-home:focus {
+      text-decoration: underline;
+    }
+    .book-release-home-wrap {
+      margin: 0.55rem 0 0.8rem;
+    }
+    .book-release-meta-sidebar {
+      margin-top: 0.8rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid #d7e2e8;
+    }
+    .book-release-meta-front {
+      padding: 0.7rem 0.85rem;
+      border-left: 3px solid #0f6b78;
+      background: #eef6f7;
+      max-width: 34rem;
+    }
+  </style>
+</head>
+<body class="nav-sidebar floating quarto-light">
+<div id="quarto-search-results"></div>
+<header class="headroom fixed-top" id="quarto-header">
+<nav class="quarto-secondary-nav">
+<div class="container-fluid d-flex">
+<button aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="quarto-btn-toggle btn" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="button" type="button">
+<i class="bi bi-layout-text-sidebar-reverse"></i>
+</button>
+<nav aria-label="breadcrumb" class="quarto-page-breadcrumbs"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-v.html">Part V: Distributed execution</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n22.html"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></a></li></ol></nav>
+<a aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" class="flex-grow-1" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }" role="navigation">
+</a>
+<button aria-label="Search" class="btn quarto-search-button" onclick="window.quartoOpenSearch();" type="button">
+<i class="bi bi-search"></i>
+</button>
+</div>
+</nav>
+</header>
+<!-- content -->
+<div class="quarto-container page-columns page-rows-contents page-layout-article" id="quarto-content">
+<!-- sidebar -->
+<nav class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto" id="quarto-sidebar">
+<div class="pt-lg-2 mt-2 text-left sidebar-header">
+<div class="sidebar-title mb-0 py-0">
+<a href="../">Advanced LLM Performance Engineering</a>
+</div>
+</div>
+<div class="mt-2 flex-shrink-0 align-items-center">
+<div class="sidebar-search">
+<div class="" id="quarto-search" title="Search"></div>
+</div>
+</div>
+<div class="book-release-home-wrap" data-book-release-location="sidebar-home">
+  <a class="book-release-home" href="../../">&larr; AI Systems Engineering</a>
+</div>
+    <div class="sidebar-menu-container">
+<ul class="list-unstyled mt-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../index.html">
+<span class="menu-text">Advanced LLM Performance Engineering</span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../frontmatter/ch-m4-index.html">
+<span class="menu-text">Introduction and Learning Path</span></a>
+</div>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-i.html">
+<span class="menu-text">Part I: Models, workload state, and GPU hardware</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-1" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-1">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n01.html">
+<span class="menu-text"><span class="chapter-number">1</span>  <span class="chapter-title">Model operations and tensors</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n02.html">
+<span class="menu-text"><span class="chapter-number">2</span>  <span class="chapter-title">Workload phases and live memory</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n03.html">
+<span class="menu-text"><span class="chapter-number">3</span>  <span class="chapter-title">GPU hardware and memory</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-ii.html">
+<span class="menu-text">Part II: GPU execution, measurement, and optimization</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-2" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-2">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n04.html">
+<span class="menu-text"><span class="chapter-number">4</span>  <span class="chapter-title">CUDA execution and data movement</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n05.html">
+<span class="menu-text"><span class="chapter-number">5</span>  <span class="chapter-title">Triton and attention kernels</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n06.html">
+<span class="menu-text"><span class="chapter-number">6</span>  <span class="chapter-title">Performance models</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n07.html">
+<span class="menu-text"><span class="chapter-number">7</span>  <span class="chapter-title">Measurement, profiling and fair comparisons</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n08.html">
+<span class="menu-text"><span class="chapter-number">8</span>  <span class="chapter-title">Compilation and runtime</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iii.html">
+<span class="menu-text">Part III: Training and single-worker inference</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-3" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-3">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n10.html">
+<span class="menu-text"><span class="chapter-number">9</span>  <span class="chapter-title">Training state and precision</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n11.html">
+<span class="menu-text"><span class="chapter-number">10</span>  <span class="chapter-title">Inference phases and memory budgets</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n12.html">
+<span class="menu-text"><span class="chapter-number">11</span>  <span class="chapter-title">Model compression for inference</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n13.html">
+<span class="menu-text"><span class="chapter-number">12</span>  <span class="chapter-title">Decode and KV-cache layout</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-iv.html">
+<span class="menu-text">Part IV: Serving systems</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-4" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-4">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n14.html">
+<span class="menu-text"><span class="chapter-number">13</span>  <span class="chapter-title">Request scheduling and prefix reuse</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n15.html">
+<span class="menu-text"><span class="chapter-number">14</span>  <span class="chapter-title">Speculative and constrained decoding</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n16.html">
+<span class="menu-text"><span class="chapter-number">15</span>  <span class="chapter-title">Serving measurement and stack selection</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../parts/part-v.html">
+<span class="menu-text">Part V: Distributed execution</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-5" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-5">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n17.html">
+<span class="menu-text"><span class="chapter-number">16</span>  <span class="chapter-title">Collective data movement and its cost</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n18.html">
+<span class="menu-text"><span class="chapter-number">17</span>  <span class="chapter-title">Launching and measuring distributed work</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n19.html">
+<span class="menu-text"><span class="chapter-number">18</span>  <span class="chapter-title">Replicated and sharded training</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n20.html">
+<span class="menu-text"><span class="chapter-number">19</span>  <span class="chapter-title">Tensor and sequence parallelism</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../chapters/ch-m4-n21.html">
+<span class="menu-text"><span class="chapter-number">20</span>  <span class="chapter-title">Pipeline, expert and combined layouts</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link active" href="../chapters/ch-m4-n22.html">
+<span class="menu-text"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+<li class="sidebar-item sidebar-item-section">
+<div class="sidebar-item-container">
+<a aria-expanded="true" class="sidebar-item-text sidebar-link text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<span class="menu-text">Appendices</span></a>
+<a aria-expanded="true" aria-label="Toggle section" class="sidebar-item-toggle text-start" data-bs-target="#quarto-sidebar-section-6" data-bs-toggle="collapse" role="navigation">
+<i class="bi bi-chevron-right ms-2"></i>
+</a>
+</div>
+<ul class="collapse list-unstyled sidebar-section depth1 show" id="quarto-sidebar-section-6">
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/references.html">
+<span class="menu-text"><span class="chapter-number">A</span>  <span class="chapter-title">References</span></span></a>
+</div>
+</li>
+<li class="sidebar-item">
+<div class="sidebar-item-container">
+<a class="sidebar-item-text sidebar-link" href="../appendices/optional-labs.html">
+<span class="menu-text"><span class="chapter-number">B</span>  <span class="chapter-title">Optional Labs</span></span></a>
+</div>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<section class="book-release-meta book-release-meta-sidebar" data-book-release-location="sidebar" aria-label="Book release information">
+  <dl>
+    <dt>Publisher version</dt>
+    <dd>0.8.23</dd>
+    <dt>Released</dt>
+    <dd><time datetime="2026-10-25">2026-10-25</time></dd>
+  </dl>
+</section>
+</nav>
+<div class="quarto-sidebar-collapse-item" data-bs-target=".quarto-sidebar-collapse-item" data-bs-toggle="collapse" id="quarto-sidebar-glass"></div>
+<!-- margin-sidebar -->
+<div class="sidebar margin-sidebar" id="quarto-margin-sidebar">
+<nav class="toc-active" id="TOC" role="doc-toc">
+<h2 id="toc-title">Table of contents</h2>
+<ul>
+<li><a class="nav-link active" data-scroll-target="#sec-m4-c13-s11" href="#sec-m4-c13-s11" id="toc-sec-m4-c13-s11"><span class="header-section-number">21.1</span> Distributed inference and serving</a>
+<ul class="collapse">
+<li><a class="nav-link" data-scroll-target="#sec-m4-c13-s12" href="#sec-m4-c13-s12" id="toc-sec-m4-c13-s12"><span class="header-section-number">21.1.1</span> Serving groups, routing, and placement</a></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c13-s16" href="#sec-m4-c13-s16" id="toc-sec-m4-c13-s16"><span class="header-section-number">21.1.2</span> Serving mixture-of-experts models</a></li>
+</ul></li>
+<li><a class="nav-link" data-scroll-target="#sec-m4-c13-s13" href="#sec-m4-c13-s13" id="toc-sec-m4-c13-s13"><span class="header-section-number">21.2</span> KV-cache locality in distributed serving</a></li>
+</ul>
+</nav>
+</div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+<header class="quarto-title-block default" id="title-block-header"><nav aria-label="breadcrumb" class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../parts/part-v.html">Part V: Distributed execution</a></li><li class="breadcrumb-item"><a href="../chapters/ch-m4-n22.html"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title"><span class="quarto-section-identifier" id="sec-ch-m4-n22"><span class="chapter-number">21</span>  <span class="chapter-title">Distributed serving and KV locality</span></span></h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+</header>
+<p>Adding serving workers can increase the number of requests processed at once, yet moving an active request can delay its next token if its cache remains on another worker. Splitting one model across GPUs can solve a capacity limit, but it can also add communication inside every layer or decode step. The design must separate routing among complete serving groups from the work needed to execute a sharded model within a group.</p>
+<div alt="New requests route to complete serving groups while model shards exchange internally. A token uses local and remote experts, with outputs weighted once at its owner. A request with prompt-only KV either stays on A or moves compatible KV and controls to B before processing the same selected next input; both paths are compared under replayed load." class="quarto-float quarto-figure quarto-figure-center anchored" id="fig-m4-n22-map">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-m4-n22-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a aria-describedby="fig-m4-n22-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca" aria-label="Enlarge map" class="m4-map-link" data-map-viewer="" href="../assets/fig-m4-n22-map.png" rel="noopener" target="_blank"><img alt="New requests route to complete serving groups while model shards exchange internally. A token uses local and remote experts, with outputs weighted once at its owner. A request with prompt-only KV either stays on A or moves compatible KV and controls to B before processing the same selected next input; both paths are compared under replayed load." class="img-fluid figure-img" src="../assets/fig-m4-n22-map.png" style="width:6.25in" data-book-image-preview tabindex="0" role="button" /></a>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-m4-n22-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure 21.1: Routing new requests among complete groups can preserve decode locality. A sharded group still pays its internal exchanges, and moving an active request requires its compatible KV and control state or recomputation. The benefit must exceed that cost under the same load and quality rule.
+</figcaption>
+</figure>
+</div>
+<p>Three decisions meet at each request: how the model is placed, which group runs the request, and where that request’s key-value cache stays. A replica group can keep token generation local when the model fits. A sharded group must include its required exchanges in the latency and throughput measurements. Cache migration or recomputation is a further cost, so moving a request toward a less busy group helps only when the expected benefit outweighs that cost.</p>
+<section class="level2" data-number="21.1" id="sec-m4-c13-s11">
+<h2 class="anchored" data-anchor-id="sec-m4-c13-s11" data-number="21.1"><span class="header-section-number">21.1</span> Distributed inference and serving</h2>
+<p>Distributed inference uses the same links, backends, and collective libraries as distributed training, while the user-facing metric changes. The goal includes latency, Time To First Token (TTFT), Time Per Output Token (TPOT), tail behavior, serving capacity, and tokens per second.</p>
+<section class="level3" data-number="21.1.1" id="sec-m4-c13-s12">
+<h3 class="anchored" data-anchor-id="sec-m4-c13-s12" data-number="21.1.1"><span class="header-section-number">21.1.1</span> Serving groups, routing, and placement</h3>
+<p>A distributed serving system combines request routing and cache ownership with replica, tensor-parallel, or pipeline-parallel worker groups. vLLM and SGLang can coordinate multi-GPU serving groups. The TensorRT-LLM documentation retrieved September 28, 2026 describes PyTorch-native execution for supported models and multi-GPU configurations. Older releases used a compiled-engine workflow (<a href="ch-m4-n16.html#sec-m4-c10-s18">Section 15.2.2</a>). The software choice follows the placement strategy and topology rather than defining them.</p>
+<p>The critical ownership questions are which worker group holds the model shard, which group owns each request’s KV cache, which collectives lie on every decode step, and whether routing preserves that locality across replicas.</p>
+<p>A common serving strategy keeps frequent collectives inside a node and scales across nodes by replicating serving groups. This avoids making every token depend on a slow cross-node path. When the model is too large for one node, the system must balance model sharding, cache locality, batch scheduling, and network cost.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">When a model fits inside a serving group, replicas can scale throughput without putting cross-node communication on every token. Larger models may need tensor or pipeline sharding, which adds collectives or activation transfers. Keep active requests near their KV state and measure token and tail latency.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-43"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Distributed serving: tensor, pipeline, replicas, and routing</span><ul>
+<li><strong>Tensor-parallel serving:</strong> Splits layer math across GPUs. It helps when one layer is too large or too slow for one GPU, but it may put collectives in the per-layer or per-token path, so fast intra-node links matter.</li>
+<li><strong>Pipeline-parallel serving:</strong> Assigns different layer ranges to different devices. It can fit deeper models, but stage imbalance, micro-batch scheduling, and activation transfer can increase tail latency.</li>
+<li><strong>Replica groups:</strong> A router sends requests to one of several complete serving instances. This is often simpler than cross-node sharding when the model fits per group, and it can preserve low Time Per Output Token (TPOT).</li>
+<li><strong>Router and cache locality:</strong> The router should avoid moving an active request away from the devices holding its KV cache unless the benefit outweighs the transfer cost.</li>
+<li><strong>Cross-node sharding:</strong> A capacity or throughput option when one node is insufficient or another placement goal justifies it. It carries higher decode-latency risk when each token depends on cross-node communication with little independent work to hide the cost.</li>
+</ul></div>
+<p>Distributed inference can be slower than single-node inference when the model already fits and per-token communication dominates. A single optimized replica may produce lower TPOT than a cross-node sharded model because decode has little independent work to hide network latency. The correct scale-out design depends on whether the bottleneck is memory capacity, throughput, Time To First Token (TTFT), TPOT, or tail latency.</p>
+<div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c13-t04">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c13-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 21.1: Training versus inference tensor parallelism.
+</figcaption>
+<div aria-describedby="tbl-m4-c13-t04-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+<col style="width: 33%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Dimension</th>
+<th>Training tensor parallelism</th>
+<th>Inference tensor parallelism</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Primary metric</td>
+<td>Step throughput and model flops utilization</td>
+<td>TTFT, TPOT, tail latency, goodput meeting the SLO</td>
+</tr>
+<tr class="even">
+<td>Batch shape</td>
+<td>Large micro-batches can reduce collective time as a share of useful computation</td>
+<td>Decode may have one token per sequence, so per-layer collectives are more exposed</td>
+</tr>
+<tr class="odd">
+<td>Overlap opportunity</td>
+<td>Layer collectives overlap only independent work; dependent forward outputs and backward input gradients must wait. DDP buckets belong to a separate data-parallel group</td>
+<td>The next token or layer often needs the collective result immediately</td>
+</tr>
+<tr class="even">
+<td>State pressure</td>
+<td>Activations, gradients, optimizer state, and parameters</td>
+<td>Weights plus KV-cache placement and per-request cache locality</td>
+</tr>
+<tr class="odd">
+<td>Topology rule</td>
+<td>Cross-node TP needs enough compute per exchange or sufficiently fast links to keep exposed communication acceptable; overlap helps where dependencies permit it</td>
+<td>Per-token TP should usually stay inside the fastest scale-up domain</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section class="level3" data-number="21.1.2" id="sec-m4-c13-s16">
+<h3 class="anchored" data-anchor-id="sec-m4-c13-s16" data-number="21.1.2"><span class="header-section-number">21.1.2</span> Serving mixture-of-experts models</h3>
+<p>A mixture-of-experts model separates the parameters it stores from the parameters each token uses. DeepSeek-V2, for example, has 236 billion parameters in total, of which 21 billion are activated for each token.<a class="footnote-ref" href="#fn1" id="fnref1" role="doc-noteref"><sup>1</sup></a> A deployment must make all required expert weights available, while each token uses only its selected experts and shared components. Assuming all weights remain on GPUs in BF16, their payload is 472 GB, a capacity-only lower bound of six 80 GB GPUs before KV cache, workspaces, replication, or placement constraints. The coarse <span class="math inline">\(2P\)</span> estimate gives about <span class="math inline">\(2\times21\times10^9=42\)</span> GFLOP per token for parameter-related forward work, compared with 472 GFLOP when all 236B parameters are active (<a href="ch-m4-n02.html#sec-m4-c01-s03">Section 2.2</a>). This excludes attention’s context-dependent work and routing overhead. The active count alone therefore cannot predict memory needs or the serving bottleneck.</p>
+<p class="m4-fold-intro" data-m4-fold-ui="visible-intro">Expert parallelism places experts across GPUs, so remote token routes may require dispatch and combine transfers. Total weights differ from weights active per token. Few tokens per expert can give poor reuse, and a busy expert can set latency. If an expert's token buffer overflows, the engine may skip that expert's computation and change the output. Check the engine's policy.</p><div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-44"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Expert serving: remote routing, token counts, and overflow</span><ul>
+<li><strong>Expert parallelism in serving:</strong> Experts are spread across GPUs. In the dispatch/combine layout of <a href="ch-m4-n21.html#sec-m4-n21-expert">Section 20.2</a>, a layer routes token representations to remote experts and returns their outputs through two logical exchanges. An engine may implement these with all-to-all collectives or another schedule, and local routes need no cross-GPU transfer. Frequent remote routing favors a fast scale-up domain when capacity permits (<a href="ch-m4-n18.html#sec-m4-c12-s11">Section 17.4</a>).</li>
+<li><strong>Tokens per expert:</strong> A step with <span class="math inline">\(B\)</span> tokens and top-<span class="math inline">\(k\)</span> routing over <span class="math inline">\(E\)</span> experts has an average of <span class="math inline">\(Bk/E\)</span> token assignments per expert before capacity limits. With 64 experts, top-2 routing, and 256 tokens, that average is 8 rows. Actual counts depend on the router. Eight-row multiplications often have little weight reuse and can be memory-bound (<a href="ch-m4-n06.html#sec-m4-c02-s08">Section 6.2</a>); dtype, matrix dimensions, caching, and grouped kernels affect the measured limit. Larger decode batches can raise rows per expert and arithmetic intensity when routing remains balanced.</li>
+<li><strong>Load imbalance:</strong> The busiest expert or rank can set the expert phase’s completion time when its work lies on the critical path. For its top-1 routing, Switch Transformer sizes each expert’s buffer as the tokens per batch divided by the number of experts, times a <span class="definition-term" data-custom-style="Definition Term"><strong>capacity factor</strong></span>, and passes tokens that exceed it to the next layer through the residual connection without expert computation.<a class="footnote-ref" href="#fn2" id="fnref2" role="doc-noteref"><sup>2</sup></a> Top-<span class="math inline">\(k\)</span> engines may use different capacity accounting. Dropping an expert computation can change the model’s output, so a serving deployment checks how its engine handles overflow.</li>
+</ul></div>
+</section>
+</section>
+<section class="level2" data-number="21.2" id="sec-m4-c13-s13">
+<h2 class="anchored" data-anchor-id="sec-m4-c13-s13" data-number="21.2"><span class="header-section-number">21.2</span> KV-cache locality in distributed serving</h2>
+<p>KV-cache locality is the serving-design property that keeps an active request near the GPU group holding its key-value cache blocks. It matters because decode repeatedly reads old KV blocks and appends new ones. Moving an active request away from its cache can add a large transfer or force recomputation.</p>
+<p>A planned prefill/decode handoff sends initial KV and compatible request state to a decode worker before token generation continues there. Moving an already decoding request is a separate decision: its KV has grown with each emitted token, and the new group needs the compatible state required for the next step. The example below tests that active move.</p>
+<p>The common pattern is <span class="definition-term" data-custom-style="Definition Term"><strong>Sticky placement</strong></span>: once a request has built substantial KV state on a serving group, the router prefers keeping later decode steps on that group unless the load-balancing benefit outweighs transfer or recomputation cost. This is a serving-scheduler property, not an attention-kernel or hardware-cache optimization.</p>
+<ul>
+<li><strong>Sticky placement:</strong> An active request remains on the worker group that owns its current KV blocks.</li>
+<li><strong>Locality-aware routing:</strong> New-request routing considers both load and whether useful prefix or cache state already exists on a worker.</li>
+<li><strong>Cache migration:</strong> Moving KV blocks between worker groups. For load balancing, the expected benefit should outweigh peer, host, or network transfer cost. Prefill/decode handoff or worker evacuation can require movement for other reasons.</li>
+</ul>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Example: One request on a sharded serving group</strong></p>
+<p><strong>Setup:</strong> Groups A and B are separate serving groups. Each group has two GPUs holding one tensor-parallel copy of the same model, with attention heads and their KV state split across its GPUs. The groups use the same GPU type, model weights, precision, and execution configuration. Assume there is no reusable prefix. A CPU front end tokenizes an 8k-token prompt, and the router assigns this request to A. These are illustrative conditions, not benchmark results.</p>
+<p><strong>Prefill and first token:</strong> A’s scheduler admits the prompt under its token and cache budgets. Each GPU runs its assigned attention and projection work and stores KV blocks for its local heads. The GPUs combine partial layer outputs where the layout requires it; <a href="ch-m4-n20.html#sec-m4-c13-s08">Section 19.1</a> traces one such tensor-parallel all-reduce. After prefill produces next-token scores, the sampler selects the first output token and the server emits it. The exact exchanges depend on the model and implementation.</p>
+<p><strong>Repeated decode and cache ownership:</strong> Both GPUs receive the selected token for the next step. Each reads and extends its own KV shard, performs its assigned layer work, and joins the required exchanges before the next token is selected. Decode repeats on A until the request stops. A then releases the request’s active cache ownership. Its separate prefix-cache policy may retain valid blocks for a future request; that reuse is not migration of this active request.</p>
+<p>After A emits its first selected token, its KV cache still covers the processed prompt, as in the <a href="ch-m4-n13.html#sec-m4-c09-s01">decode state trace</a>. To continue on B, each B worker needs those KV blocks mapped to its corresponding layer and head shard, the next sequence position, and the selected token as its next input. B then processes that token, extends KV and selects the following token. For a later move, transfer KV for all already processed positions plus any selected token not yet processed. Recomputing from the token history can reconstruct the required KV state instead. The request’s generation limits, output constraints and sampling state, including random state when the chosen output rule needs it, must move with the request. Compatible weights and cache layout alone do not supply that control state.</p>
+<p><strong>Routing decision and fair check:</strong> Suppose B becomes less busy after the first token. Moving the active request to B requires transferring A’s KV state in a compatible layout or recomputing it on B. Sending only the latest token is insufficient. Compare keeping this request on A with moving it at the same decision point under a replay of the same arrivals and initial cache placement. Hold the model, tokenizer, precision, generation settings, and output-quality rule fixed.</p>
+<p>For an exact-token comparison, hold batch composition and the numerical execution path fixed as well as using deterministic decoding, then verify outputs; a nearly tied greedy choice can change when batching or reduction order changes. If those conditions cannot be held, use the declared numerical or output-quality rule instead. For sampled runs, control random state and apply the declared quality rule rather than assuming individual outputs match. Include transfer and recomputation time.</p>
+<p>Record the active request’s inter-token delay and completion time, new requests’ TTFT, transferred bytes, recomputed tokens, tail latency, and SLO goodput using the <a href="ch-m4-n16.html#sec-m4-c10-s15">Section 15.1 request-load method</a>. Routing new requests to B is a separate policy comparison.</p>
+<p><strong>Conclusion:</strong> B’s shorter queue helps only if its expected remaining-time benefit exceeds cache movement or recomputation and meets the latency and quality targets. Measure the whole sharded request path, including its internal exchanges.</p>
+</div>
+<p>The following table applies the communication frequencies introduced with topology-aware design to complete placement and scheduling patterns. Each row states the intended topology fit and the failure that appears when the mapping is wrong.</p>
+<div class="m4-fold-target" data-m4-fold="1" data-m4-fold-created="block" data-m4-fold-default-open="false" data-m4-fold-keys="selection-57"><span data-m4-fold-heading="1" data-m4-fold-ui="caption">Distributed design patterns</span><div class="quarto-float quarto-figure quarto-figure-center anchored" id="tbl-m4-c12-t02">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-c12-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 21.2: Distributed system design patterns for communication-heavy workloads.
+</figcaption>
+<div aria-describedby="tbl-m4-c12-t02-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top m4-row-labels table">
+<colgroup>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+<col style="width: 25%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th>Design pattern</th>
+<th>Communication pattern</th>
+<th>Topology fit</th>
+<th>Failure mode</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Topology-aware placement</td>
+<td>Ranks with frequent exchange are placed near each other</td>
+<td>Prefer NVLink/NVSwitch for frequent collectives; same-rack placement only helps when the measured network path meets the workload’s latency target</td>
+<td>Scheduler spreads hot ranks across slow paths</td>
+</tr>
+<tr class="even">
+<td>Hierarchical collective</td>
+<td>Communicate inside one scale-up domain, then across slower domains, then inside the destination scale-up domain</td>
+<td>Matches intra-node GPU fabric plus cross-node network</td>
+<td>Treats all rank pairs as equally cheap</td>
+</tr>
+<tr class="odd">
+<td>Bucket and overlap</td>
+<td>Group tensors and launch communication while compute continues</td>
+<td>Works when independent compute remains</td>
+<td>Small buckets add overhead; large buckets expose a tail</td>
+</tr>
+<tr class="even">
+<td>Shard-and-gather</td>
+<td>Store state sharded; materialize only near layer use</td>
+<td>Works when gather/reduce paths are fast enough</td>
+<td>Memory saved locally becomes network-bound</td>
+</tr>
+<tr class="odd">
+<td>Scale-up first, scale-out second</td>
+<td>Keep per-token or per-layer traffic inside one node/group</td>
+<td>Serving replicas or groups scale across nodes</td>
+<td>Exposed cross-node per-token exchanges can raise TPOT when their delay exceeds saved compute</td>
+</tr>
+<tr class="even">
+<td>Sticky KV-cache placement</td>
+<td>Route active requests near the GPUs holding their KV cache</td>
+<td>Serving groups with stable cache locality</td>
+<td>Load balancing moves cache-heavy requests too freely</td>
+</tr>
+<tr class="odd">
+<td>Rail or NIC-aware grouping</td>
+<td>Ranks that leave a node use the intended NIC path</td>
+<td>Systems with multiple NICs or network rails</td>
+<td>Traffic concentrates on one weak interface</td>
+</tr>
+<tr class="even">
+<td>Topology-aware replica placement</td>
+<td>Replicas are spread to avoid shared-fabric hot spots</td>
+<td>Serving fleets and multi-tenant clusters</td>
+<td>All replicas contend on the same leaf or spine</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div></div>
+<div class="publisher-clarification-note" data-custom-style="Clarification Note">
+<p><strong>Design checklist</strong></p>
+<p><strong>Object:</strong> Is the moving object a gradient, parameter shard, activation, KV block, expert token, logits vector, request, or checkpoint chunk?</p>
+<p><strong>Frequency:</strong> Does it move per token, per layer, per step, per request, or in the background?</p>
+<p><strong>Critical path:</strong> Would shortening this transfer reduce TTFT, TPOT, step time, or tail latency?</p>
+<p><strong>Overlap:</strong> Is there independent compute available while the transfer runs?</p>
+<p><strong>Locality:</strong> Does the traffic stay inside the intended scale-up domain, or does it cross NICs and switches?</p>
+<p><strong>Contention:</strong> What happens when multiple jobs, collectives, or serving replicas share the same fabric?</p>
+<p><strong>Metric:</strong> Is success judged by throughput, TTFT, TPOT, tail latency, utilization, memory capacity, or cost?</p>
+</div>
+<p>Comparing these patterns helps expose a common distributed-system error: choosing a parallelism strategy because it fits memory, then discovering that its communication frequency does not fit the topology. Memory capacity and communication distance have to be designed together.</p>
+<p>The measured hot path determines the placement. Replicated groups can scale request throughput without adding per-token cross-node collectives when the model fits per group. A sharded group can solve capacity or parallel-compute limits, but its per-layer or per-token communication must be included in TTFT, TPOT, throughput, and tail-latency measurements.</p>
+<p>Appendix A collects the formulas, software controls, compatibility checks, practice questions, and source map needed to apply the same reasoning during implementation and review.</p>
+</section>
+<section class="footnotes footnotes-end-of-document" data-m4-endnotes="1" id="footnotes" role="doc-endnotes"><h2 data-m4-endnotes-heading="1" data-m4-fold-ui="references-heading">References</h2><div data-m4-endnotes-body="1" data-m4-fold-created="endnotes-body" id="m4-endnotes-body">
+<hr/>
+<ol>
+<li id="fn1"><p>DeepSeek-AI. (2024). <em>DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model</em>. <a href="https://arxiv.org/abs/2405.04434">arXiv:2405.04434</a>. Supports 236B total parameters with 21B activated per token. Limit: the memory and FLOP figures in <a href="#sec-m4-c13-s16">the distributed serving estimate</a> are derived from these counts.<a class="footnote-back" href="#fnref1" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>Fedus, W., Zoph, B., &amp; Shazeer, N. (2022). <em>Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity</em>. Journal of Machine Learning Research, 23(120), 1-39. <a href="https://jmlr.org/papers/v23/21-0998.html">Journal article</a>; <a href="https://arxiv.org/abs/2101.03961">arXiv:2101.03961</a>. Supports expert capacity = (tokens per batch / number of experts) x capacity factor, and dropped tokens passing to the next layer through the residual connection. Limit: the paper describes training, and inference engines handle overflow in their own ways.<a class="footnote-back" href="#fnref2" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</div></section>
+</main> <!-- /main -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const automaticLongContentFolding = false;
+  const referenceSections = document.querySelectorAll(
+    'main.content section.footnotes[role="doc-endnotes"]'
+  );
+
+  referenceSections.forEach((section) => {
+    if (section.closest("details.publisher-chapter-references")) return;
+
+    const details = document.createElement("details");
+    details.className = "publisher-chapter-references";
+    const summary = document.createElement("summary");
+    const count = section.querySelectorAll("ol > li").length;
+    summary.textContent = count ? `References (${count})` : "References";
+
+    section.parentNode.insertBefore(details, section);
+    details.append(summary, section);
+  });
+
+  const openFoldTarget = (target) => {
+    const details = target?.closest(
+      "details.publisher-chapter-references, details.publisher-long-content"
+    );
+    if (details) details.open = true;
+  };
+
+  const targetFromHash = (hash) => {
+    if (!hash || hash === "#") return null;
+    try {
+      return document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('a[href*="#"]');
+    if (!link) return;
+    let destination;
+    try {
+      destination = new URL(link.getAttribute("href") || "", location.href);
+    } catch (_error) {
+      return;
+    }
+    if (destination.href.split("#")[0] !== location.href.split("#")[0]) return;
+    openFoldTarget(targetFromHash(destination.hash));
+  });
+
+  const foldMode = (candidate, inherit = true) => {
+    const selector = '[data-publisher-fold], .publisher-fold-never, .publisher-fold-always, .publisher-fold-open';
+    const control = candidate.matches(selector)
+      ? candidate
+      : inherit ? candidate.closest(selector) : null;
+    if (control?.classList.contains("publisher-fold-never")) return "never";
+    if (control?.classList.contains("publisher-fold-always")) return "always";
+    if (control?.classList.contains("publisher-fold-open")) return "open";
+    const requested = control?.dataset.publisherFold || "auto";
+    return ["auto", "never", "always", "open"].includes(requested)
+      ? requested
+      : "auto";
+  };
+
+  const foldCandidate = (candidate, kind) => {
+    if (!candidate || candidate.closest("details") || candidate.querySelector("details")) return;
+
+    const mode = foldMode(candidate, kind !== "note" && kind !== "code");
+    if (mode === "never") return;
+    if (kind === "note" && mode === "auto") return;
+    const minimumFoldHeight = 320;
+    const foldHeight = Math.max(
+      minimumFoldHeight,
+      Math.round(document.documentElement.clientHeight * 0.5)
+    );
+    if (mode === "auto" && candidate.getBoundingClientRect().height <= foldHeight) return;
+
+    const titleSource = kind === "table"
+      ? candidate.querySelector("figcaption, caption")
+      : kind === "code"
+        ? candidate.querySelector(":scope > .publisher-code-caption")
+        : candidate.querySelector(":scope > p:first-child");
+    const label = titleSource?.textContent.replace(/\s+/g, " ").trim();
+
+    const details = document.createElement("details");
+    details.className = `publisher-long-content publisher-long-${kind}`;
+    if (mode === "open") details.open = true;
+    const summary = document.createElement("summary");
+    if (titleSource && label) {
+      titleSource.childNodes.forEach((node) => {
+        const clone = node.cloneNode(true);
+        clone.removeAttribute?.("id");
+        clone.querySelectorAll?.("[id]").forEach((element) => element.removeAttribute("id"));
+        summary.append(clone);
+      });
+    } else {
+      summary.textContent = kind === "table" ? "Table" : kind === "note" ? "Details" : kind === "code" ? "Code" : "Example";
+    }
+    const body = document.createElement("div");
+    body.className = "publisher-fold-body";
+    if (titleSource) titleSource.classList.add("publisher-fold-title-source");
+
+    candidate.parentNode.insertBefore(details, candidate);
+    details.append(summary, body);
+    body.append(candidate);
+  };
+
+  const foldLongContent = () => {
+    if (!automaticLongContentFolding) return;
+    document.querySelectorAll(
+      "main.content .publisher-worked-calculation, main.content .publisher-clarification-note, main.content .publisher-code-fold"
+    ).forEach((candidate) => {
+      const kind = candidate.classList.contains("publisher-code-fold") ? "code"
+        : candidate.classList.contains("publisher-clarification-note") ? "note" : "example";
+      foldCandidate(candidate, kind);
+    });
+    document.querySelectorAll("main.content figure.quarto-float-tbl").forEach((figure) => {
+      const float = figure.parentElement?.classList.contains("quarto-float")
+        ? figure.parentElement
+        : figure;
+      foldCandidate(float, "table");
+    });
+    document.querySelectorAll("main.content table").forEach((table) => {
+      if (!table.closest("figure.quarto-float-tbl")) foldCandidate(table, "table");
+    });
+    openFoldTarget(targetFromHash(location.hash));
+  };
+
+  if (document.readyState === "complete") {
+    requestAnimationFrame(foldLongContent);
+  } else {
+    window.addEventListener("load", () => requestAnimationFrame(foldLongContent), {
+      once: true,
+    });
+  }
+
+  const closedBeforePrint = new Set();
+  window.addEventListener("beforeprint", () => {
+    document.querySelectorAll("details.publisher-long-content, details.publisher-chapter-references").forEach((details) => {
+      if (!details.open) {
+        closedBeforePrint.add(details);
+        details.open = true;
+      }
+    });
+  });
+  window.addEventListener("afterprint", () => {
+    closedBeforePrint.forEach((details) => { details.open = false; });
+    closedBeforePrint.clear();
+  });
+  document.addEventListener("beforematch", (event) => openFoldTarget(event.target));
+  const openLocationTarget = () => openFoldTarget(targetFromHash(location.hash));
+  window.addEventListener("hashchange", openLocationTarget);
+  openLocationTarget();
+});
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+<div class="nav-page nav-page-previous">
+<a aria-label="Pipeline, expert and combined layouts" class="pagination-link" href="../chapters/ch-m4-n21.html">
+<i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">20</span>  <span class="chapter-title">Pipeline, expert and combined layouts</span></span>
+</a>
+</div>
+<div class="nav-page nav-page-next">
+<a aria-label="References" class="pagination-link" href="../appendices/references.html">
+<span class="nav-page-text"><span class="chapter-number">A</span>  <span class="chapter-title">References</span></span> <i class="bi bi-arrow-right-short"></i>
+</a>
+</div>
+</nav>
+</div> <!-- /content -->
+<script data-m4-fold-ui="script" defer="defer" src="../html-folds/folds.js"></script>  <div class="book-image-preview-overlay" data-book-image-overlay hidden>
+    <button class="book-image-preview-backdrop" type="button" data-book-image-close aria-label="Close image preview"></button>
+    <div class="book-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview">
+      <button class="book-image-preview-close" type="button" data-book-image-close>Close</button>
+      <img class="book-image-preview-image" data-book-image-preview-img alt="">
+    </div>
+  </div>
+  <script id="book-image-preview-script">
+    (() => {
+      if (window.__bookImagePreviewReady) {
+        return;
+      }
+      window.__bookImagePreviewReady = true;
+
+      const overlay = document.querySelector("[data-book-image-overlay]");
+      const preview = document.querySelector("[data-book-image-preview-img]");
+      const closeButtons = document.querySelectorAll("[data-book-image-close]");
+      const closeButton = overlay ? overlay.querySelector(".book-image-preview-close") : null;
+      let restoreFocus = null;
+
+      if (!overlay || !preview) {
+        return;
+      }
+
+      function openPreview(image) {
+        restoreFocus = image;
+        preview.src = image.currentSrc || image.src;
+        preview.alt = image.alt || "";
+        overlay.hidden = false;
+        document.body.classList.add("book-image-preview-open");
+        if (closeButton) {
+          closeButton.focus();
+        }
+      }
+
+      function closePreview() {
+        if (overlay.hidden) {
+          return;
+        }
+        overlay.hidden = true;
+        preview.removeAttribute("src");
+        preview.alt = "";
+        document.body.classList.remove("book-image-preview-open");
+        if (restoreFocus) {
+          restoreFocus.focus();
+        }
+      }
+
+      document.querySelectorAll("img[data-book-image-preview]").forEach((image) => {
+        image.addEventListener("click", () => openPreview(image));
+        image.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPreview(image);
+          }
+        });
+      });
+      closeButtons.forEach((button) => {
+        button.addEventListener("click", closePreview);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!overlay.hidden && event.key === "Escape") {
+          closePreview();
+        }
+      });
+    })();
+  </script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "bf257544e13140429e7cbda3a16caddb"}'></script><!-- End Cloudflare Web Analytics -->
+<!-- book-ask-ai:start -->
+<link rel="stylesheet" href="../ask-ai-assets/ask-ai.css">
+<script id="book-ask-ai-config" type="application/json">{"endpoint": "https://course-ask-ai.course-ask-ai-backend.workers.dev/ask", "book": "module_4", "bookTitle": "", "version": ""}</script>
+<script defer src="../ask-ai-assets/ask-ai.js"></script>
+<!-- book-ask-ai:end -->
+</body></html>
