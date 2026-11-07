@@ -15,8 +15,19 @@
   trigger.type = "button";
   trigger.className = "book-ask-ai-trigger";
   trigger.textContent = "Ask AI";
-  trigger.hidden = true;
   trigger.setAttribute("aria-controls", "book-ask-ai-panel");
+  const selectionActions = document.createElement("div");
+  selectionActions.className = "book-selection-actions";
+  selectionActions.hidden = true;
+  selectionActions.append(trigger);
+  const reporting = config.reporting?.enabled ? config.reporting : null;
+  const reportButton = document.createElement("button");
+  if (reporting) {
+    reportButton.type = "button";
+    reportButton.className = "book-report-trigger";
+    reportButton.textContent = "Report a problem";
+    selectionActions.append(reportButton);
+  }
   const panel = document.createElement("aside");
   panel.id = "book-ask-ai-panel";
   panel.className = "book-ask-ai-panel";
@@ -50,7 +61,7 @@
         <button class="book-ask-ai-icon" type="button" data-action="stop" title="Stop waiting" aria-label="Stop waiting" hidden><i class="bi bi-stop-fill" aria-hidden="true"></i></button>
       </form>
     </footer>`;
-  document.body.append(trigger, panel);
+  document.body.append(selectionActions, panel);
   const find = (selector) => panel.querySelector(selector);
   const questionInput = find("textarea");
   const status = find(".book-ask-ai-status");
@@ -64,6 +75,79 @@
   let controller = null;
   let focusBeforePanel = null;
   let selectionTimer;
+  let reportFlowPromise;
+
+  function loadReportFlow() {
+    if (reportFlowPromise) return reportFlowPromise;
+    reportFlowPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = reporting.scriptUrl;
+      script.async = false;
+      script.dataset.repo = reporting.repo;
+      script.dataset.button = "false";
+      script.dataset.showIssueLink = "public";
+      script.onload = () => {
+        try {
+          if (!window.BugDrop?.registerFlow) throw new Error("BugDrop did not initialize");
+          resolve(window.BugDrop.registerFlow({
+            configVersion: 1,
+            id: "book-reading-problem",
+            presentation: { kind: "modal", size: "compact" },
+            appearance: { theme: "light", accentColor: "#176c69" },
+            content: { successTitle: "Report sent", successMessage: "Thank you for helping improve the book." },
+            forms: [{
+              id: "report", title: "Report a problem",
+              description: "Your comment, selected passage, and page address will appear in a public GitHub Issue. No screenshot is taken.",
+              fields: [{ id: "problem", type: "shortText", label: "What is wrong?", required: true,
+                minLength: 3, maxLength: 120, placeholder: "For example, this definition seems incorrect" }],
+            }],
+            screens: [{ id: "report-screen", type: "form", form: "report", continueLabel: "Send report" }],
+            issue: {
+              classification: "bug", title: "Reading problem: {{report.problem}}",
+              sections: [
+                { heading: "Problem", answer: "report.problem" },
+                { heading: "Selected passage", context: "selected_passage" },
+                { heading: "Page", context: "page_url" },
+                { heading: "Book", context: "book" },
+                { heading: "Chapter", context: "chapter" },
+                { heading: "Section", context: "section" },
+                { heading: "Version", context: "version", omitWhenEmpty: true },
+              ],
+            },
+          }));
+        } catch (error) { reject(error); }
+      };
+      script.onerror = () => reject(new Error("BugDrop could not load"));
+      document.body.append(script);
+    }).catch((error) => { reportFlowPromise = null; throw error; });
+    return reportFlowPromise;
+  }
+
+  async function openReport() {
+    if (!pendingSelection || !reporting) return;
+    const passage = { ...pendingSelection };
+    selectionActions.hidden = true;
+    reportButton.disabled = true;
+    try {
+      const flow = await loadReportFlow();
+      const opened = flow.open({ context: {
+        selected_passage: passage.selection, page_url: passage.url, book: passage.book,
+        chapter: passage.chapter, section: passage.section, version: passage.version,
+      } });
+      // Quarto checks document.activeElement on keyup. Shadow DOM makes the
+      // report host look like a non-form element, so its search shortcuts can
+      // steal letters typed into the report field.
+      const reportHost = [...document.querySelectorAll("[data-bugdrop-instance]")]
+        .find((element) => element.getAttribute("data-bugdrop-instance") === opened.instanceId);
+      reportHost?.shadowRoot?.addEventListener("keyup", (event) => event.stopPropagation());
+      reportButton.textContent = "Report a problem";
+      reportButton.title = "";
+    } catch (error) {
+      reportButton.title = error?.message || "Could not open report";
+      reportButton.textContent = "Report unavailable. Try again";
+      selectionActions.hidden = false;
+    } finally { reportButton.disabled = false; }
+  }
 
   function setStatus(text, error = false) {
     status.textContent = text;
@@ -107,16 +191,16 @@
   function captureSelection() {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) {
-      if (document.activeElement !== trigger) trigger.hidden = true;
+      if (!selectionActions.contains(document.activeElement)) selectionActions.hidden = true;
       return;
     }
     const range = selection.getRangeAt(0);
     if (!main.contains(range.startContainer) || !main.contains(range.endContainer)) {
-      trigger.hidden = true;
+      selectionActions.hidden = true;
       return;
     }
     const text = selection.toString().trim();
-    if (!text || text.length > MAX_SELECTION) { trigger.hidden = true; return; }
+    if (!text || text.length > MAX_SELECTION) { selectionActions.hidden = true; return; }
     const start = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
     const section = start.closest("section") || main;
     const sectionHeading = section.querySelector(":scope > h1, :scope > h2, :scope > h3, :scope > h4");
@@ -142,12 +226,12 @@
     };
     const rects = [...range.getClientRects()].filter((rect) => rect.width && rect.height);
     const rect = rects[rects.length - 1] || range.getBoundingClientRect();
-    if (!rect.width || rect.bottom < 0 || rect.top > window.innerHeight) { trigger.hidden = true; return; }
-    trigger.hidden = false;
-    const width = trigger.getBoundingClientRect().width;
-    trigger.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, rect.left))}px`;
+    if (!rect.width || rect.bottom < 0 || rect.top > window.innerHeight) { selectionActions.hidden = true; return; }
+    selectionActions.hidden = false;
+    const width = selectionActions.getBoundingClientRect().width;
+    selectionActions.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, rect.left))}px`;
     const below = rect.bottom + 8;
-    trigger.style.top = `${Math.max(8, Math.min(window.innerHeight - 46, below + 40 > window.innerHeight ? rect.top - 46 : below))}px`;
+    selectionActions.style.top = `${Math.max(8, Math.min(window.innerHeight - 46, below + 40 > window.innerHeight ? rect.top - 46 : below))}px`;
   }
 
   function locationURL(sectionId) {
@@ -176,14 +260,14 @@
     find(".book-ask-ai-context pre").textContent = activeSelection.context;
     panel.hidden = false;
     document.body.classList.add("book-ask-ai-open");
-    trigger.hidden = true;
+    selectionActions.hidden = true;
     questionInput.focus({ preventScroll: true });
   }
 
   function closePanel() {
     panel.hidden = true;
     document.body.classList.remove("book-ask-ai-open");
-    trigger.hidden = true;
+    selectionActions.hidden = true;
     if (focusBeforePanel && focusBeforePanel !== trigger && focusBeforePanel.isConnected) focusBeforePanel.focus({ preventScroll: true });
     else {
       const selection = window.getSelection();
@@ -334,7 +418,7 @@
     selectionTimer = setTimeout(captureSelection, 180);
   });
   document.addEventListener("pointerup", (event) => {
-    if (!panel.contains(event.target) && event.target !== trigger) {
+    if (!panel.contains(event.target) && !selectionActions.contains(event.target)) {
       clearTimeout(selectionTimer);
       selectionTimer = setTimeout(captureSelection, 60);
     }
@@ -342,10 +426,11 @@
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !panel.hidden) { event.preventDefault(); closePanel(); }
   });
-  window.addEventListener("scroll", () => { trigger.hidden = true; }, { passive: true });
-  window.addEventListener("resize", () => { trigger.hidden = true; });
-  trigger.addEventListener("pointerdown", (event) => event.preventDefault());
+  window.addEventListener("scroll", () => { selectionActions.hidden = true; }, { passive: true });
+  window.addEventListener("resize", () => { selectionActions.hidden = true; });
+  selectionActions.addEventListener("pointerdown", (event) => event.preventDefault());
   trigger.addEventListener("click", openPanel);
+  if (reporting) reportButton.addEventListener("click", openReport);
   find('[data-action="close"]').addEventListener("click", closePanel);
   find('[data-action="reset"]').addEventListener("click", () => { history = []; messages.replaceChildren(); setStatus(""); questionInput.value = ""; questionInput.focus(); });
   stopButton.addEventListener("click", () => controller?.abort());
