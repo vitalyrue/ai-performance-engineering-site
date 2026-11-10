@@ -85,7 +85,7 @@
       script.async = false;
       script.dataset.repo = reporting.repo;
       script.dataset.button = "false";
-      script.dataset.showIssueLink = "public";
+      script.dataset.showIssueLink = "never";
       script.onload = () => {
         try {
           if (!window.BugDrop?.registerFlow) throw new Error("BugDrop did not initialize");
@@ -94,10 +94,10 @@
             id: "book-reading-problem",
             presentation: { kind: "modal", size: "compact" },
             appearance: { theme: "light", accentColor: "#176c69" },
-            content: { successTitle: "Report sent", successMessage: "Thank you for helping improve the book." },
+            content: { successTitle: "Report submitted", successMessage: "Thank you." },
             forms: [{
               id: "report", title: "Report a problem",
-              description: "Your comment, selected passage, and page address will appear in a public GitHub Issue. No screenshot is taken.",
+              description: "Your comment, selected passage, and page address will be public. No screenshot is taken.",
               fields: [{ id: "problem", type: "shortText", label: "What is wrong?", required: true,
                 minLength: 3, maxLength: 120, placeholder: "For example, this definition seems incorrect" }],
             }],
@@ -140,6 +140,13 @@
       const reportHost = [...document.querySelectorAll("[data-bugdrop-instance]")]
         .find((element) => element.getAttribute("data-bugdrop-instance") === opened.instanceId);
       reportHost?.shadowRoot?.addEventListener("keyup", (event) => event.stopPropagation());
+      // Custom BugDrop flows show a GitHub link even when showIssueLink is "never".
+      // Keep the confirmation to one clear message and one aligned Done button.
+      if (reportHost?.shadowRoot) {
+        const reportStyle = document.createElement("style");
+        reportStyle.textContent = ".bdv-success-link { display: none !important; }";
+        reportHost.shadowRoot.append(reportStyle);
+      }
       reportButton.textContent = "Report a problem";
       reportButton.title = "";
     } catch (error) {
