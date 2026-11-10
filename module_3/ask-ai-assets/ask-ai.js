@@ -97,7 +97,7 @@
             content: { successTitle: "Report submitted", successMessage: "Thank you." },
             forms: [{
               id: "report", title: "Report a problem",
-              description: "Your comment, selected passage, and page address will be public. No screenshot is taken.",
+              description: "The details shown below and your comment will be public. No screenshot is taken.",
               fields: [{ id: "problem", type: "shortText", label: "What is wrong?", required: true,
                 minLength: 3, maxLength: 120, placeholder: "For example, this definition seems incorrect" }],
             }],
@@ -107,6 +107,7 @@
               sections: [
                 { heading: "Problem", answer: "report.problem" },
                 { heading: "Selected passage", context: "selected_passage" },
+                { heading: "Paragraph", context: "paragraph", omitWhenEmpty: true },
                 { heading: "Page", context: "page_url" },
                 { heading: "Book", context: "book" },
                 { heading: "Chapter", context: "chapter" },
@@ -132,7 +133,8 @@
       const flow = await loadReportFlow();
       const opened = flow.open({ context: {
         selected_passage: passage.selection, page_url: passage.url, book: passage.book,
-        chapter: passage.chapter, section: passage.section, version: passage.version,
+        chapter: passage.chapter, section: passage.section, paragraph: passage.paragraph,
+        version: passage.version,
       } });
       // Quarto checks document.activeElement on keyup. Shadow DOM makes the
       // report host look like a non-form element, so its search shortcuts can
@@ -144,8 +146,48 @@
       // Keep the confirmation to one clear message and one aligned Done button.
       if (reportHost?.shadowRoot) {
         const reportStyle = document.createElement("style");
-        reportStyle.textContent = ".bdv-success-link { display: none !important; }";
+        reportStyle.textContent = `.bdv-success-link { display: none !important; }
+          .book-report-preview { grid-column: 1 / -1; box-sizing: border-box; width: 100%;
+            margin: 0 0 12px; padding: 10px 12px; border: 1px solid #bdcdcb;
+            border-radius: 5px; background: #f7faf8; color: #183d42;
+            font: 12px/1.4 system-ui, sans-serif; max-height: 170px; overflow: auto; }
+          .book-report-preview strong { display: block; margin-bottom: 4px; }
+          .book-report-preview p { margin: 4px 0; overflow-wrap: anywhere; }
+          .book-report-preview .book-report-excerpt { max-height: 5.6em; overflow: auto; }`;
         reportHost.shadowRoot.append(reportStyle);
+        const showPreview = () => {
+          const fields = reportHost.shadowRoot.querySelector(".bdv-surface .bdv-fields");
+          if (!fields || reportHost.shadowRoot.querySelector(".book-report-preview")) return false;
+          const preview = document.createElement("div");
+          preview.className = "book-report-preview";
+          preview.setAttribute("aria-label", "Information included with this report");
+          const heading = document.createElement("strong");
+          heading.textContent = "Included with your report";
+          preview.append(heading);
+          for (const [label, value, className] of [
+            ["Selected text", passage.selection.length > 160 ? `${passage.selection.slice(0, 160).trimEnd()}… (full selection sent)` : passage.selection, "book-report-excerpt"],
+            ["Book", passage.book], ["Chapter", passage.chapter],
+            ["Section", passage.section], ["Paragraph", passage.paragraph],
+            ["Page", passage.url], ["Version", passage.version],
+          ]) {
+            if (!value) continue;
+            const line = document.createElement("p");
+            if (className) line.className = className;
+            const name = document.createElement("b");
+            name.textContent = `${label}: `;
+            line.append(name, document.createTextNode(value));
+            preview.append(line);
+          }
+          fields.before(preview);
+          return true;
+        };
+        if (!showPreview()) {
+          const observer = new MutationObserver(() => {
+            if (showPreview()) observer.disconnect();
+          });
+          observer.observe(reportHost.shadowRoot, { childList: true, subtree: true });
+          opened.result.finally(() => observer.disconnect());
+        }
       }
       reportButton.textContent = "Report a problem";
       reportButton.title = "";
@@ -210,6 +252,12 @@
     if (!text || text.length > MAX_SELECTION) { selectionActions.hidden = true; return; }
     const start = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
     const section = start.closest("section") || main;
+    const paragraph = start.closest("p");
+    const paragraphs = [...section.querySelectorAll("p")]
+      .filter((item) => section === main || item.closest("section") === section);
+    const paragraphIndex = paragraph ? paragraphs.indexOf(paragraph) : -1;
+    const paragraphLocation = paragraphIndex < 0 ? "" :
+      `Paragraph ${paragraphIndex + 1} ${section === main ? "on page" : "in section"}`;
     const sectionHeading = section.querySelector(":scope > h1, :scope > h2, :scope > h3, :scope > h4");
     const chapterHeading = document.querySelector("#title-block-header h1, main h1");
     const bookHeading = document.querySelector(".sidebar-title, .navbar-title");
@@ -228,6 +276,7 @@
       book: (config.bookTitle || normalize(bookHeading?.textContent || config.book || "")).slice(0, 200),
       chapter: normalize(chapterHeading?.textContent || document.title).slice(0, 200),
       section: normalize(sectionHeading?.textContent || chapterHeading?.textContent || "").slice(0, 300),
+      paragraph: paragraphLocation,
       version: (config.version || normalize(document.querySelector(".book-release-meta")?.textContent || "")).slice(0, 100),
       url: locationURL(section.id),
     };
@@ -238,7 +287,8 @@
     const width = selectionActions.getBoundingClientRect().width;
     selectionActions.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, rect.left))}px`;
     const below = rect.bottom + 8;
-    selectionActions.style.top = `${Math.max(8, Math.min(window.innerHeight - 46, below + 40 > window.innerHeight ? rect.top - 46 : below))}px`;
+    const height = selectionActions.getBoundingClientRect().height;
+    selectionActions.style.top = `${Math.max(8, Math.min(window.innerHeight - height - 8, below + height > window.innerHeight ? rect.top - height - 8 : below))}px`;
   }
 
   function locationURL(sectionId) {
